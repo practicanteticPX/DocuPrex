@@ -4,7 +4,10 @@
  */
 
 require('dotenv').config();
-process.env.DATABASE_URL = 'postgresql://postgres:postgres123@localhost:5432/firmas_db';
+// Usar la DATABASE_URL del .env si existe, si no, usar la configuración por defecto
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://postgres:postgres123@postgres-db:5432/firmas_db';
+}
 
 const { query, pool } = require('../database/db');
 const ldap = require('ldapjs');
@@ -68,11 +71,11 @@ function searchUsers(client) {
           const name = getAttr('displayName') || getAttr('cn') || getAttr('name') || null;
           const username = getAttr('sAMAccountName') || null;
 
-          // Solo agregar si tiene datos mínimos
-          if (name && username) {
+          // Solo agregar si tiene datos mínimos Y email real
+          if (name && username && email) {
             users.push({
               name: name,
-              email: email ? email.toLowerCase() : `${username}@prexxa.local`,
+              email: email.toLowerCase(),
               username: username
             });
           }
@@ -127,6 +130,7 @@ async function syncUsersToDatabase(users) {
       }
     } catch (error) {
       console.log(`  ✗ Error con ${user.email}: ${error.message}`);
+      console.error(`     Detalle: ${error.stack}`);
       skipped++;
     }
   }
