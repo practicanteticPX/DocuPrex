@@ -1,0 +1,59 @@
+services:
+  # --- Base de Datos PostgreSQL Local ---
+  postgres-db:
+    image: postgres:14-alpine
+    container_name: firmas_db
+    restart: always
+    environment:
+      # Credenciales locales para Docker (BD completamente local)
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: firmas_db
+    ports:
+      # Puerto expuesto para acceso local si es necesario
+      - "5432:5432"
+    volumes:
+      # Volumen local en carpeta bd/ para persistencia
+      - ./bd:/var/lib/postgresql/data
+
+  # --- Servidor Backend (Node.js/GraphQL) ---
+  server:
+    container_name: firmas_server
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # Bind a la IP específica de tu máquina
+      - "192.168.0.30:5001:5001"
+    depends_on:
+      - postgres-db
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    env_file:
+      - ./server/.env
+    command: npm run dev
+    # Configuración DNS para resolver dominios externos
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+
+  # --- Cliente Frontend (React/Vite) ---
+  frontend:
+    container_name: firmas_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # Bind a la IP específica de tu máquina
+      - "192.168.0.30:5173:5173"
+    depends_on:
+      - server
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    # No necesita env_file aquí, Vite lo toma de frontend/.env al construir/ejecutar
+    command: npm run dev # El --host ya está en el Dockerfile CMD
