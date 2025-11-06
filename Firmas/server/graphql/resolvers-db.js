@@ -1120,7 +1120,7 @@ const resolvers = {
               await query(
                 `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
                  VALUES ($1, $2, $3, $4, $5)`,
-                [nextSignerId, 'signature_request', documentId, user.id, doc.title]
+                [nextSignerId, 'signature_request', documentId, doc.uploaded_by, doc.title]
               );
             }
           }

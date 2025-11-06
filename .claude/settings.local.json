@@ -3,7 +3,8 @@
     "allow": [
       "Bash(docker volume:*)",
       "Bash(docker exec:*)",
-      "Bash(docker logs:*)"
+      "Bash(docker logs:*)",
+      "Bash(docker restart:*)"
     ],
     "deny": [],
     "ask": []
