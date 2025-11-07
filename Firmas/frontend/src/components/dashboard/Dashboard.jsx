@@ -3091,7 +3091,7 @@ function Dashboard({ user, onLogout }) {
                             </div>
                           </div>
 
-                          {/* Botones de acción - Deshabilitados si está rechazado */}
+                          {/* Botones de acción */}
                           <div className="doc-actions-clean">
                             <button
                               className="btn-action-clean"
@@ -3105,10 +3105,10 @@ function Dashboard({ user, onLogout }) {
                               </svg>
                             </button>
                             <button
-                              className="btn-action-clean"
-                              onClick={() => handleManageSigners(doc)}
-                              title="Ver firmantes"
-                              style={{marginTop: '-1.5vw'}}
+                              className={`btn-action-clean ${doc.status === 'completed' ? 'disabled' : ''}`}
+                              onClick={() => doc.status !== 'completed' && handleManageSigners(doc)}
+                              title={doc.status === 'completed' ? 'El documento está completado, no se pueden agregar firmantes' : 'Gestionar firmantes'}
+                              style={{marginTop: '-1.5vw', opacity: doc.status === 'completed' ? 0.5 : 1, cursor: doc.status === 'completed' ? 'not-allowed' : 'pointer'}}
                             >
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89317 18.7122 8.75608 18.1676 9.45768C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3729,8 +3729,29 @@ function Dashboard({ user, onLogout }) {
                     ))}
                   </div>
 
-                  {/* Sección para agregar nuevos firmantes - Solo si el documento no está rechazado */}
-                  {managingDocument.status !== 'rejected' && (
+                  {/* Mensaje informativo si el documento está completado */}
+                  {managingDocument.status === 'completed' && (
+                    <div className="info-message-completed" style={{
+                      marginTop: '16px',
+                      padding: '12px 16px',
+                      background: '#F0FDF4',
+                      border: '1.5px solid #86EFAC',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#166534', fontWeight: '500' }}>
+                        Este documento ha sido firmado completamente. No se pueden agregar más firmantes.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Sección para agregar nuevos firmantes - Solo si el documento no está rechazado ni completado */}
+                  {managingDocument.status !== 'rejected' && managingDocument.status !== 'completed' && (
                   <div className="signers-add-section" style={{ marginTop: '16px' }}>
                     <h3 style={{ marginBottom: '8px' }}>Agregar firmantes</h3>
                     {(() => {
@@ -3833,7 +3854,7 @@ function Dashboard({ user, onLogout }) {
               <button className="btn-close-modal" onClick={handleCloseSignersModal}>
                 Cerrar
               </button>
-              {managingDocument.status !== 'rejected' && (
+              {managingDocument.status !== 'rejected' && managingDocument.status !== 'completed' && (
               <button
                 className="action-button primary"
                 onClick={handleAddSignersToDocument}

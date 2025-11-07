@@ -502,6 +502,11 @@ const resolvers = {
         throw new Error('No autorizado');
       }
 
+      // Verificar que el documento no esté completado
+      if (doc.status === 'completed') {
+        throw new Error('No se pueden agregar firmantes a un documento que ya ha sido firmado completamente');
+      }
+
       // Insertar firmantes
       for (let i = 0; i < userIds.length; i++) {
         await query(
