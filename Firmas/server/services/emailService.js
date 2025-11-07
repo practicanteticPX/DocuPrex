@@ -67,7 +67,7 @@ async function notificarAsignacionFirmante({
   documentoId,
   creadorDocumento
 }) {
-  const frontendUrl = process.env.FRONTEND_URL.split(',')[0].trim(); // Tomar la primera URL del frontend
+  const frontendUrl = 'http://192.168.0.19:5173';
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
   const subject = '📝 Has sido asignado como firmante de un documento';
@@ -195,7 +195,7 @@ async function notificarDocumentoFirmadoCompleto({
   documentoId,
   urlDescarga
 }) {
-  const frontendUrl = process.env.FRONTEND_URL.split(',')[0].trim();
+  const frontendUrl = 'http://192.168.0.19:5173';
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
   const subject = '✅ Documento firmado completamente';
@@ -335,7 +335,7 @@ async function notificarDocumentoRechazado({
   rechazadoPor,
   motivoRechazo
 }) {
-  const frontendUrl = process.env.FRONTEND_URL.split(',')[0].trim();
+  const frontendUrl = 'http://192.168.0.19:5173';
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
   const subject = '❌ Documento rechazado';

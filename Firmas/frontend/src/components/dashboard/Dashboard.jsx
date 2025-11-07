@@ -174,7 +174,7 @@ function Dashboard({ user, onLogout }) {
     if (viewingDocument) {
       document.title = viewingDocument.title || 'Visor de Documentos';
     } else {
-      document.title = 'FirmaPRO';
+      document.title = 'DocuPrex';
     }
   }, [viewingDocument]);
 
@@ -1687,7 +1687,7 @@ function Dashboard({ user, onLogout }) {
                   <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="ds-brand-text">FirmaPRO</span>
+              <span className="ds-brand-text">DocuPrex</span>
             </div>
             <nav className="ds-side-nav">
               <button className={`ds-nav-item ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
@@ -1906,7 +1906,7 @@ function Dashboard({ user, onLogout }) {
                           id="document-title"
                           value={documentTitle}
                           onChange={(e) => setDocumentTitle(e.target.value)}
-                          placeholder="Ej: Contrato de servicios 2024"
+                          placeholder="Ej: Solicitud de anticipo..."
                           className="form-input"
                           disabled={uploading}
                           required
@@ -2033,120 +2033,108 @@ function Dashboard({ user, onLogout }) {
                           <span>Cargando firmantes...</span>
                         </div>
                       ) : (
-                        <div className="signers-dual-panel">
-                          {/* Panel izquierdo: Seleccionar firmantes */}
-                          <div className="signers-panel-left">
-                            <div className="panel-header">
-                              <h3>Usuarios disponibles</h3>
-                              <p className="help-text">Haz clic para agregar</p>
-                            </div>
+                        <div className="signers-single-column">
+                          {/* Header de la sección */}
+                          <div className="signers-header">
+                            <h2 className="signers-main-title">Añadir firmantes</h2>
+                            <p className="signers-subtitle">
+                              Selecciona los usuarios que deben firmar este documento. El orden es importante.
+                            </p>
+                          </div>
 
-                            {/* Buscador */}
-                            <div className="signers-search-container">
-                              <div className="search-input-wrapper">
-                                <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                                <input
-                                  type="text"
-                                  className="signers-search-input"
-                                  placeholder="Buscar por nombre o correo..."
-                                  value={searchTermUpload}
-                                  onChange={(e) => setSearchTermUpload(e.target.value)}
-                                  disabled={uploading}
-                                />
-                                {searchTermUpload && (
-                                  <button
-                                    className="search-clear-btn"
-                                    onClick={() => setSearchTermUpload('')}
-                                    type="button"
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                          {/* Sección de usuarios disponibles */}
+                          <div className="available-signers-section">
+                            <h3 className="section-label">Usuarios disponibles</h3>
 
-                            {/* Lista de usuarios disponibles */}
-                            <div className="signers-list">
-                              {(() => {
-                                const filteredSigners = getFilteredSignersForUpload().filter(
-                                  s => !selectedSigners.includes(s.id)
-                                );
-                                if (availableSigners.length === 0) {
-                                  return (
-                                    <div className="signers-empty">
-                                      <p>No hay usuarios disponibles</p>
-                                    </div>
-                                  );
-                                }
-                                if (filteredSigners.length === 0) {
-                                  return (
-                                    <div className="signers-empty">
-                                      <p>
-                                        {searchTermUpload
-                                          ? `No se encontraron resultados para "${searchTermUpload}"`
-                                          : 'Todos los usuarios ya fueron agregados'}
-                                      </p>
-                                    </div>
-                                  );
-                                }
-                                return filteredSigners.map(signer => (
-                                  <div
-                                    key={signer.id}
-                                    className="signer-item-available"
-                                    onClick={() => !uploading && toggleSigner(signer.id)}
-                                    title={`Agregar a ${signer.name} (${signer.email})`}
-                                  >
-                                    <div className="signer-info">
-                                      <div className="signer-avatar" title={signer.name}>
-                                        {signer.name.charAt(0).toUpperCase()}
+                            {/* Buscador con autocomplete */}
+                            <div className="search-wrapper">
+                              <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              <input
+                                type="text"
+                                className="search-input-modern"
+                                placeholder="Buscar por nombre o correo"
+                                value={searchTermUpload}
+                                onChange={(e) => setSearchTermUpload(e.target.value)}
+                                disabled={uploading}
+                              />
+                              {searchTermUpload && (
+                                <button
+                                  className="search-clear-modern"
+                                  onClick={() => setSearchTermUpload('')}
+                                  type="button"
+                                  aria-label="Limpiar búsqueda"
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
+
+                              {/* Dropdown de resultados - solo se muestra cuando hay búsqueda */}
+                              {searchTermUpload && searchTermUpload.trim().length > 0 && (
+                                <div className="autocomplete-dropdown">
+                                  {(() => {
+                                    const filteredSigners = getFilteredSignersForUpload().filter(
+                                      s => !selectedSigners.includes(s.id)
+                                    );
+
+                                    if (filteredSigners.length === 0) {
+                                      return (
+                                        <div className="dropdown-empty">
+                                          <p>No se encontraron resultados para "{searchTermUpload}"</p>
+                                        </div>
+                                      );
+                                    }
+
+                                    return filteredSigners.map(signer => (
+                                      <div
+                                        key={signer.id}
+                                        className="dropdown-item"
+                                        onClick={() => {
+                                          if (!uploading) {
+                                            toggleSigner(signer.id);
+                                            setSearchTermUpload(''); // Limpiar búsqueda después de agregar
+                                          }
+                                        }}
+                                      >
+                                        <div className="signer-avatar-circle">
+                                          {signer.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="signer-info-modern">
+                                          <p className="signer-name-modern">
+                                            {signer.name}
+                                            {user && user.id === signer.id && (
+                                              <span className="you-tag">Tú</span>
+                                            )}
+                                          </p>
+                                          <p className="signer-email-modern">{signer.email}</p>
+                                        </div>
+                                        <div className="add-indicator">
+                                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                          </svg>
+                                        </div>
                                       </div>
-                                      <div className="signer-details">
-                                        <p className="signer-name" title={signer.name}>
-                                          {signer.name}
-                                          {user && user.id === signer.id && (
-                                            <span className="you-badge">Tú</span>
-                                          )}
-                                        </p>
-                                        <p className="signer-email" title={signer.email}>{signer.email}</p>
-                                      </div>
-                                    </div>
-                                    <button className="add-signer-btn" type="button" title="Agregar firmante">
-                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      </svg>
-                                    </button>
-                                  </div>
-                                ));
-                              })()}
+                                    ));
+                                  })()}
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          {/* Panel derecho: Firmantes seleccionados con orden */}
-                          <div className="signers-panel-right">
-                            <div className="panel-header">
-                              <h3>Orden de firmas</h3>
-                              <p className="help-text">
-                                {selectedSigners.length === 0
-                                  ? 'Selecciona firmantes de la izquierda'
-                                  : `${selectedSigners.length} firmante${selectedSigners.length !== 1 ? 's' : ''} • Orden secuencial`
-                                }
-                              </p>
-                            </div>
-
-                            {selectedSigners.length === 0 ? (
-                              <div className="signers-empty-state">
-                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.3503 17.623 3.8507 18.1676 4.55231C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89317 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                                <p>Agrega firmantes para definir el orden de firma</p>
-                                <span className="help-text-small">Arrastra para cambiar el orden</span>
+                          {/* Sección de firmantes seleccionados */}
+                          {selectedSigners.length > 0 && (
+                            <div className="selected-signers-section">
+                              <div className="selected-header">
+                                <h3 className="section-label">Firmantes seleccionados</h3>
+                                <span className="signers-count">
+                                  {selectedSigners.length} {selectedSigners.length === 1 ? 'firmante' : 'firmantes'}
+                                </span>
                               </div>
-                            ) : (
-                              <div className="selected-signers-list">
+
+                              <div className="selected-signers-container">
                                 {selectedSigners.map((signerId, index) => {
                                   const signer = availableSigners.find(s => s.id === signerId);
                                   if (!signer) return null;
@@ -2157,39 +2145,35 @@ function Dashboard({ user, onLogout }) {
                                   return (
                                     <div
                                       key={signerId}
-                                      className={`selected-signer-row ${draggedSignerIndex === index ? 'dragging' : ''} ${isCurrentUser ? 'locked-position' : ''}`}
+                                      className={`selected-signer-card ${draggedSignerIndex === index ? 'dragging' : ''} ${isCurrentUser ? 'locked' : ''}`}
                                       draggable={canDrag}
                                       onDragStart={(e) => handleDragStartSigner(e, index)}
                                       onDragOver={(e) => handleDragOverSigner(e, index)}
                                       onDragEnd={handleDragEndSigner}
-                                      title={isCurrentUser ? "Tu posición está fija en primer lugar" : "Arrastra para reordenar"}
                                     >
-                                      <div className="signer-order-number">
+                                      <div className="signer-order-badge">
                                         {index + 1}
                                       </div>
-                                      <div className="signer-drag-handle">
-                                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                          <path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                        </svg>
-                                      </div>
-                                      <div className="signer-initial">
+
+                                      <div className="signer-avatar-circle">
                                         {signer.name.charAt(0).toUpperCase()}
                                       </div>
-                                      <div className="signer-info-row">
-                                        <p className="signer-name-row">
+
+                                      <div className="signer-info-modern flex-grow">
+                                        <p className="signer-name-modern">
                                           {signer.name}
-                                          {user && user.id === signer.id && (
-                                            <span className="you-badge">Tú</span>
-                                          )}
+                                          {isCurrentUser && <span className="you-tag">Tú</span>}
                                         </p>
-                                        <p className="signer-email-row">{signer.email}</p>
+                                        <p className="signer-email-modern">{signer.email}</p>
                                       </div>
+
                                       <button
                                         type="button"
-                                        className="remove-signer-btn"
+                                        className="remove-btn-modern"
                                         onClick={() => removeSignerFromSelected(signerId)}
                                         disabled={uploading}
                                         title="Quitar firmante"
+                                        aria-label={`Quitar a ${signer.name}`}
                                       >
                                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                           <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2199,19 +2183,15 @@ function Dashboard({ user, onLogout }) {
                                   );
                                 })}
                               </div>
-                            )}
 
-                            {selectedSigners.length > 0 && (
-                              <div className="order-info-box">
+                              <div className="info-box-modern">
                                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                   <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                 </svg>
-                                <p>
-                                  <strong>Firma secuencial:</strong> Cada firmante debe esperar a que el anterior firme el documento.
-                                </p>
+                                <p>Los firmantes deben firmar en orden secuencial según el número asignado.</p>
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </>
@@ -2806,6 +2786,9 @@ function Dashboard({ user, onLogout }) {
                       className={`filter-status-btn ${myDocsStatusFilter === 'all' ? 'active' : ''}`}
                       onClick={() => setMyDocsStatusFilter('all')}
                     >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
                       Todos
                     </button>
                     <button
@@ -3307,6 +3290,17 @@ function Dashboard({ user, onLogout }) {
                   </button>
                 </>
               )}
+              <a
+                href={`${BACKEND_HOST}/api/download/${viewingDocument.id}`}
+                className="pdf-viewer-action-btn download"
+                title="Descargar"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M7 10L12 15M12 15L17 10M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </a>
               <button className="pdf-viewer-action-btn close" onClick={handleCloseViewer} title="Cerrar">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3338,13 +3332,13 @@ function Dashboard({ user, onLogout }) {
           {/* Contenedor del PDF */}
           <div className="pdf-viewer-minimal-body">
             <object
-              data={getDocumentUrl(viewingDocument.filePath)}
+              data={`${BACKEND_HOST}/api/view/${viewingDocument.id}`}
               type="application/pdf"
               className="pdf-viewer-minimal-iframe"
               title={viewingDocument.title}
             >
               <embed
-                src={getDocumentUrl(viewingDocument.filePath)}
+                src={`${BACKEND_HOST}/api/view/${viewingDocument.id}`}
                 type="application/pdf"
                 className="pdf-viewer-minimal-iframe"
                 title={viewingDocument.title}
@@ -3358,7 +3352,7 @@ function Dashboard({ user, onLogout }) {
                 </div>
                 <p className="fallback-title">No se puede mostrar el PDF en este navegador</p>
                 <a
-                  href={getDocumentUrl(viewingDocument.filePath)}
+                  href={`${BACKEND_HOST}/api/download/${viewingDocument.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="fallback-download-btn"

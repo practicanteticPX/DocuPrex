@@ -10,6 +10,7 @@ require('dotenv').config();
 const { typeDefs, resolvers } = require('./graphql');
 const uploadRoutes = require('./routes/upload');
 const { startCleanupService } = require('./services/notificationCleanup');
+const { query } = require('./database/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 const PORT = process.env.PORT || 5001;
@@ -95,6 +96,110 @@ async function startServer() {
 
   // Rutas REST para subida de archivos
   app.use('/api', uploadRoutes);
+
+  // Ruta para visualizar documentos con el nombre correcto
+  app.get('/api/view/:documentId', async (req, res) => {
+    try {
+      const { documentId } = req.params;
+
+      // Buscar el documento en la base de datos
+      const result = await query('SELECT id, title, file_path FROM documents WHERE id = $1', [documentId]);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Documento no encontrado' });
+      }
+
+      const document = result.rows[0];
+      const filePath = document.file_path;
+      const title = document.title || 'documento';
+
+      // Construir la ruta completa del archivo
+      let fullPath;
+      if (filePath.startsWith('/app/uploads/')) {
+        fullPath = path.join(__dirname, 'uploads', filePath.replace('/app/uploads/', ''));
+      } else if (filePath.startsWith('uploads/')) {
+        fullPath = path.join(__dirname, filePath);
+      } else {
+        fullPath = path.join(__dirname, 'uploads', filePath);
+      }
+
+      // Sanitizar el nombre del archivo para evitar caracteres problemáticos
+      const sanitizedTitle = title
+        .replace(/[<>:"/\\|?*]/g, '_') // Reemplazar caracteres inválidos en nombres de archivos
+        .replace(/\s+/g, '_') // Reemplazar espacios con guiones bajos
+        .substring(0, 200); // Limitar longitud del nombre
+
+      // Configurar headers para visualización inline
+      res.setHeader('Content-Disposition', `inline; filename="${sanitizedTitle}.pdf"`);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+
+      // Enviar el archivo
+      res.sendFile(fullPath, (err) => {
+        if (err) {
+          console.error('Error al enviar archivo:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Error al visualizar el documento' });
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error en ruta de visualización:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  });
+
+  // Ruta para descargar documentos con el nombre correcto
+  app.get('/api/download/:documentId', async (req, res) => {
+    try {
+      const { documentId } = req.params;
+
+      // Buscar el documento en la base de datos
+      const result = await query('SELECT id, title, file_path FROM documents WHERE id = $1', [documentId]);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Documento no encontrado' });
+      }
+
+      const document = result.rows[0];
+      const filePath = document.file_path;
+      const title = document.title || 'documento';
+
+      // Construir la ruta completa del archivo
+      let fullPath;
+      if (filePath.startsWith('/app/uploads/')) {
+        fullPath = path.join(__dirname, 'uploads', filePath.replace('/app/uploads/', ''));
+      } else if (filePath.startsWith('uploads/')) {
+        fullPath = path.join(__dirname, filePath);
+      } else {
+        fullPath = path.join(__dirname, 'uploads', filePath);
+      }
+
+      // Sanitizar el nombre del archivo para evitar caracteres problemáticos
+      const sanitizedTitle = title
+        .replace(/[<>:"/\\|?*]/g, '_') // Reemplazar caracteres inválidos en nombres de archivos
+        .replace(/\s+/g, '_') // Reemplazar espacios con guiones bajos
+        .substring(0, 200); // Limitar longitud del nombre
+
+      // Configurar headers para descarga
+      res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}.pdf"`);
+      res.setHeader('Content-Type', 'application/pdf');
+
+      // Enviar el archivo
+      res.sendFile(fullPath, (err) => {
+        if (err) {
+          console.error('Error al enviar archivo:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Error al descargar el documento' });
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error en ruta de descarga:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  });
 
   // Crear servidor Apollo
   const server = new ApolloServer({

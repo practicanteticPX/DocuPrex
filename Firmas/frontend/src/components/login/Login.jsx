@@ -109,7 +109,7 @@ function Login({ onLogin }) {
                 </svg>
               </div>
             </div>
-            <h1>FirmaPRO</h1>
+            <h1>DocuPrex</h1>
             <p className="subtitle">Hecho por Jesús Y Esteban TIC</p>
           </div>
 
