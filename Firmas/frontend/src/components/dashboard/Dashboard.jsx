@@ -1703,6 +1703,79 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  // Eliminar firmante
+  const handleRemoveSigner = async (signerId) => {
+    if (!managingDocument) return;
+
+    // Confirmar eliminación
+    const signature = documentSigners.find(s => s.signer.id === signerId);
+    if (!signature) return;
+
+    const confirmMessage = `¿Estás seguro de eliminar a ${signature.signer.name || signature.signer.email} de la lista de firmantes?`;
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation RemoveSigner($documentId: ID!, $userId: ID!) {
+              removeSigner(documentId: $documentId, userId: $userId)
+            }
+          `,
+          variables: {
+            documentId: managingDocument.id,
+            userId: signerId
+          }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      // Refrescar lista de firmantes del documento
+      setLoadingDocumentSigners(true);
+      const refresh = await axios.post(
+        API_URL,
+        {
+          query: `
+            query GetSignatures($documentId: ID!) {
+              signatures(documentId: $documentId) {
+                id
+                signer { id name email }
+                status
+                signedAt
+                createdAt
+                rejectionReason
+              }
+            }
+          `,
+          variables: { documentId: managingDocument.id }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (refresh.data.errors) {
+        throw new Error(refresh.data.errors[0].message);
+      }
+
+      setDocumentSigners(refresh.data.data.signatures || []);
+      setLoadingDocumentSigners(false);
+
+      // Recargar la lista de documentos
+      await loadMyDocuments();
+
+      alert('Firmante eliminado exitosamente');
+    } catch (err) {
+      console.error('Error al eliminar firmante:', err);
+      alert(err.message || 'Error al eliminar firmante');
+      setLoadingDocumentSigners(false);
+    }
+  };
+
   const getDocumentUrl = (filePath) => {
     if (!filePath) return '';
 
@@ -3725,6 +3798,45 @@ function Dashboard({ user, onLogout }) {
                             </span>
                           )}
                         </div>
+                        {/* Botón de eliminar - Solo para firmantes pendientes */}
+                        {signature.status === 'pending' && managingDocument.status !== 'completed' && (
+                          <button
+                            className="remove-signer-btn"
+                            onClick={() => handleRemoveSigner(signature.signer.id)}
+                            disabled={documentSigners.length <= 1}
+                            title={documentSigners.length <= 1 ? 'No se puede eliminar el único firmante' : 'Eliminar firmante'}
+                            style={{
+                              marginLeft: '8px',
+                              padding: '6px 10px',
+                              background: documentSigners.length <= 1 ? '#f3f4f6' : '#fee2e2',
+                              color: documentSigners.length <= 1 ? '#9ca3af' : '#dc2626',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: documentSigners.length <= 1 ? 'not-allowed' : 'pointer',
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              transition: 'all 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (documentSigners.length > 1) {
+                                e.currentTarget.style.background = '#fecaca';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (documentSigners.length > 1) {
+                                e.currentTarget.style.background = '#fee2e2';
+                              }
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M3 6H5H21M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            Eliminar
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

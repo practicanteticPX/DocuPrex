@@ -684,6 +684,260 @@ const resolvers = {
       return true;
     },
 
+    // Eliminar firmante
+    removeSigner: async (_, { documentId, userId }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      // Verificar que el documento exista
+      const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
+      if (docResult.rows.length === 0) throw new Error('Documento no encontrado');
+
+      const doc = docResult.rows[0];
+
+      // Verificar que el usuario sea el creador o admin
+      if (doc.uploaded_by !== user.id && user.role !== 'admin') {
+        throw new Error('No autorizado para eliminar firmantes de este documento');
+      }
+
+      // Verificar que el documento no esté completado
+      if (doc.status === 'completed') {
+        throw new Error('No se pueden eliminar firmantes de un documento que ya ha sido firmado completamente');
+      }
+
+      // Contar el total de firmantes
+      const countResult = await query(
+        'SELECT COUNT(*) as total FROM document_signers WHERE document_id = $1',
+        [documentId]
+      );
+      const totalSigners = parseInt(countResult.rows[0].total);
+
+      // Restricción: No se puede eliminar si es el único firmante
+      if (totalSigners <= 1) {
+        throw new Error('No se puede eliminar el único firmante del documento. Un documento debe tener al menos un firmante.');
+      }
+
+      // Verificar el estado de la firma del usuario
+      const signatureResult = await query(
+        'SELECT status FROM signatures WHERE document_id = $1 AND signer_id = $2',
+        [documentId, userId]
+      );
+
+      if (signatureResult.rows.length === 0) {
+        throw new Error('El usuario no está asignado como firmante de este documento');
+      }
+
+      const signatureStatus = signatureResult.rows[0].status;
+
+      // Restricción: No se puede eliminar un firmante que ya firmó
+      if (signatureStatus === 'signed') {
+        throw new Error('No se puede eliminar un firmante que ya ha firmado el documento');
+      }
+
+      // Obtener el order_position del firmante a eliminar
+      const positionResult = await query(
+        'SELECT order_position FROM document_signers WHERE document_id = $1 AND user_id = $2',
+        [documentId, userId]
+      );
+
+      if (positionResult.rows.length === 0) {
+        throw new Error('El firmante no está asignado a este documento');
+      }
+
+      const removedPosition = positionResult.rows[0].order_position;
+
+      // Eliminar el firmante de document_signers
+      await query(
+        'DELETE FROM document_signers WHERE document_id = $1 AND user_id = $2',
+        [documentId, userId]
+      );
+
+      // Eliminar la firma pendiente
+      await query(
+        'DELETE FROM signatures WHERE document_id = $1 AND signer_id = $2',
+        [documentId, userId]
+      );
+
+      // Reordenar los order_position de los firmantes restantes
+      await query(
+        `UPDATE document_signers
+         SET order_position = order_position - 1
+         WHERE document_id = $1 AND order_position > $2`,
+        [documentId, removedPosition]
+      );
+
+      // Eliminar notificación de signature_request para este usuario
+      try {
+        await query(
+          `DELETE FROM notifications
+           WHERE document_id = $1 AND user_id = $2 AND type = 'signature_request'`,
+          [documentId, userId]
+        );
+        console.log(`🗑️ Notificación de firma eliminada para el usuario`);
+      } catch (notifError) {
+        console.error('Error al eliminar notificación:', notifError);
+      }
+
+      // Recalcular el estado del documento
+      const statusResult = await query(
+        `SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'signed' THEN 1 ELSE 0 END) as signed,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+          SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+        FROM signatures
+        WHERE document_id = $1`,
+        [documentId]
+      );
+
+      const stats = statusResult.rows[0];
+      const total = parseInt(stats.total);
+      const signed = parseInt(stats.signed);
+      const pending = parseInt(stats.pending);
+      const rejected = parseInt(stats.rejected);
+
+      // Determinar el nuevo estado del documento
+      let newStatus = 'pending';
+
+      if (rejected > 0) {
+        newStatus = 'rejected';
+      } else if (total > 0 && signed === total) {
+        newStatus = 'completed';
+      } else if (signed > 0 && signed < total) {
+        newStatus = 'in_progress';
+      } else if (pending > 0 && signed === 0) {
+        newStatus = 'pending';
+      }
+
+      // Actualizar el estado del documento
+      await query(
+        'UPDATE documents SET status = $1 WHERE id = $2',
+        [newStatus, documentId]
+      );
+
+      // Si el firmante eliminado era el que debía firmar ahora, notificar al siguiente
+      if (signatureStatus === 'pending' && signed > 0) {
+        try {
+          // Obtener el siguiente firmante en orden
+          const nextSignerResult = await query(
+            `SELECT u.id, u.name, u.email, ds.order_position
+             FROM document_signers ds
+             JOIN users u ON ds.user_id = u.id
+             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+             WHERE ds.document_id = $1 AND s.status = 'pending'
+             ORDER BY ds.order_position ASC
+             LIMIT 1`,
+            [documentId]
+          );
+
+          if (nextSignerResult.rows.length > 0) {
+            const nextSigner = nextSignerResult.rows[0];
+            const nextPosition = nextSigner.order_position;
+
+            // Verificar si todos los anteriores han firmado
+            const previousSignedResult = await query(
+              `SELECT COUNT(*) as count
+               FROM document_signers ds
+               LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+               WHERE ds.document_id = $1
+               AND ds.order_position < $2
+               AND s.status = 'signed'`,
+              [documentId, nextPosition]
+            );
+
+            const previousCount = parseInt(previousSignedResult.rows[0].count);
+            const expectedPreviousCount = nextPosition - 1;
+
+            // Si todos los anteriores han firmado, es el turno de este firmante
+            if (previousCount === expectedPreviousCount) {
+              // Crear notificación si no existe
+              const existingNotif = await query(
+                `SELECT id FROM notifications
+                 WHERE document_id = $1 AND user_id = $2 AND type = 'signature_request'`,
+                [documentId, nextSigner.id]
+              );
+
+              if (existingNotif.rows.length === 0) {
+                const docTitle = doc.title;
+                await query(
+                  `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+                   VALUES ($1, $2, $3, $4, $5)`,
+                  [nextSigner.id, 'signature_request', documentId, user.id, docTitle]
+                );
+
+                // Enviar email al siguiente firmante
+                try {
+                  await notificarAsignacionFirmante({
+                    email: nextSigner.email,
+                    nombreFirmante: nextSigner.name,
+                    nombreDocumento: docTitle,
+                    documentoId: documentId,
+                    creadorDocumento: user.name
+                  });
+                  console.log(`📧 Correo enviado al siguiente firmante: ${nextSigner.email}`);
+                } catch (emailError) {
+                  console.error('Error al enviar correo al siguiente firmante:', emailError);
+                }
+              }
+            }
+          }
+        } catch (notifError) {
+          console.error('Error al notificar al siguiente firmante:', notifError);
+        }
+      }
+
+      // Actualizar la página de portada del PDF
+      try {
+        console.log(`📋 Actualizando página de portada del documento ${documentId}...`);
+
+        // Obtener información completa del documento
+        const docInfoResult = await query(
+          `SELECT d.*, u.name as uploader_name
+          FROM documents d
+          LEFT JOIN users u ON d.uploaded_by = u.id
+          WHERE d.id = $1`,
+          [documentId]
+        );
+
+        if (docInfoResult.rows.length > 0) {
+          const docInfo = docInfoResult.rows[0];
+
+          // Obtener lista actualizada de firmantes
+          const signersResult = await query(
+            `SELECT u.id, u.name, u.email, ds.order_position,
+                    COALESCE(s.status, 'pending') as status,
+                    s.signed_at,
+                    s.rejected_at
+            FROM document_signers ds
+            JOIN users u ON ds.user_id = u.id
+            LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+            WHERE ds.document_id = $1
+            ORDER BY ds.order_position ASC`,
+            [documentId]
+          );
+
+          const signers = signersResult.rows;
+
+          if (signers.length > 0) {
+            const pdfPath = path.join(__dirname, '..', docInfo.file_path);
+
+            const documentInfo = {
+              title: docInfo.title,
+              createdAt: docInfo.created_at,
+              uploadedBy: docInfo.uploader_name || 'Sistema'
+            };
+
+            // Actualizar la página de portada
+            await updateSignersPage(pdfPath, signers, documentInfo);
+            console.log('✅ Página de portada actualizada exitosamente');
+          }
+        }
+      } catch (coverError) {
+        console.error('❌ Error al actualizar página de portada:', coverError);
+      }
+
+      return true;
+    },
+
     // Eliminar documento
     deleteDocument: async (_, { id }, { user }) => {
       if (!user) throw new Error('No autenticado');

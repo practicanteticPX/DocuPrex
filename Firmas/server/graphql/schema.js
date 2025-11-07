@@ -132,6 +132,7 @@ const typeDefs = gql`
     updateDocument(id: ID!, title: String, description: String, status: String): Document!
     deleteDocument(id: ID!): Boolean!
     assignSigners(documentId: ID!, userIds: [ID!]!): Boolean!
+    removeSigner(documentId: ID!, userId: ID!): Boolean!
 
     # Firmas
     signDocument(documentId: ID!, signatureData: String!): Signature!

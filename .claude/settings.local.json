@@ -4,7 +4,14 @@
       "Bash(docker volume:*)",
       "Bash(docker exec:*)",
       "Bash(docker logs:*)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "Bash(node -c:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker inspect:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(docker-compose up:*)"
     ],
     "deny": [],
     "ask": []
