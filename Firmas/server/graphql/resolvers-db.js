@@ -507,22 +507,117 @@ const resolvers = {
         throw new Error('No se pueden agregar firmantes a un documento que ya ha sido firmado completamente');
       }
 
-      // Insertar firmantes
-      for (let i = 0; i < userIds.length; i++) {
+      // Verificar si hay firmantes existentes
+      const existingSignersResult = await query(
+        'SELECT user_id, order_position FROM document_signers WHERE document_id = $1 ORDER BY order_position ASC',
+        [documentId]
+      );
+      const hasExistingSigners = existingSignersResult.rows.length > 0;
+      const isOwner = doc.uploaded_by === user.id;
+      const ownerInNewSigners = userIds.includes(user.id);
+
+      // Si el propietario se está agregando y hay firmantes existentes, reorganizar
+      if (hasExistingSigners && isOwner && ownerInNewSigners) {
+        console.log(`👤 Propietario agregándose como firmante - reorganizando posiciones...`);
+
+        // Mover todos los firmantes existentes una posición hacia abajo
         await query(
-          `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (document_id, user_id) DO NOTHING`,
-          [documentId, userIds[i], i + 1, true]
+          `UPDATE document_signers
+           SET order_position = order_position + 1
+           WHERE document_id = $1`,
+          [documentId]
         );
 
-        // Crear firma pendiente
+        // Insertar al propietario en posición 1
+        await query(
+          `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
+           VALUES ($1, $2, 1, $3)
+           ON CONFLICT (document_id, user_id) DO NOTHING`,
+          [documentId, user.id, true]
+        );
+
+        // Crear firma pendiente para el propietario
         await query(
           `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (document_id, signer_id) DO NOTHING`,
-          [documentId, userIds[i], 'pending', 'digital']
+           VALUES ($1, $2, 'pending', 'digital')
+           ON CONFLICT (document_id, signer_id) DO NOTHING`,
+          [documentId, user.id]
         );
+
+        // Insertar los demás firmantes (sin el propietario) al final
+        const otherUserIds = userIds.filter(id => id !== user.id);
+        const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
+
+        for (let i = 0; i < otherUserIds.length; i++) {
+          await query(
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (document_id, user_id) DO NOTHING`,
+            [documentId, otherUserIds[i], maxPosition + i, true]
+          );
+
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+             VALUES ($1, $2, 'pending', 'digital')
+             ON CONFLICT (document_id, signer_id) DO NOTHING`,
+            [documentId, otherUserIds[i]]
+          );
+        }
+      } else if (hasExistingSigners) {
+        // Hay firmantes existentes pero el propietario no está en la lista
+        const maxPosition = Math.max(...existingSignersResult.rows.map(r => r.order_position));
+
+        for (let i = 0; i < userIds.length; i++) {
+          await query(
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (document_id, user_id) DO NOTHING`,
+            [documentId, userIds[i], maxPosition + i + 1, true]
+          );
+
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+             VALUES ($1, $2, 'pending', 'digital')
+             ON CONFLICT (document_id, signer_id) DO NOTHING`,
+            [documentId, userIds[i]]
+          );
+        }
+      } else {
+        // No hay firmantes existentes - primera asignación
+        // Si el propietario está en la lista, va primero
+        let startPosition = 1;
+
+        if (isOwner && ownerInNewSigners) {
+          await query(
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
+             VALUES ($1, $2, 1, $3)`,
+            [documentId, user.id, true]
+          );
+
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+             VALUES ($1, $2, 'pending', 'digital')`,
+            [documentId, user.id]
+          );
+
+          startPosition = 2;
+        }
+
+        // Insertar los demás firmantes
+        const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
+        for (let i = 0; i < otherUserIds.length; i++) {
+          await query(
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
+             VALUES ($1, $2, $3, $4)`,
+            [documentId, otherUserIds[i], startPosition + i, true]
+          );
+
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+             VALUES ($1, $2, 'pending', 'digital')`,
+            [documentId, otherUserIds[i]]
+          );
+        }
       }
 
       // Recalcular el estado del documento basado en todas las firmas
@@ -618,9 +713,13 @@ const resolvers = {
         // No lanzamos el error para que no falle la asignación
       }
 
-      // ========== GENERAR PÁGINA DE PORTADA ==========
+      // ========== GENERAR O ACTUALIZAR PÁGINA DE PORTADA ==========
       try {
-        console.log(`📋 Generando página de portada para documento ${documentId}...`);
+        if (hasExistingSigners) {
+          console.log(`🔄 Actualizando página de portada para documento ${documentId}...`);
+        } else {
+          console.log(`📋 Generando página de portada para documento ${documentId}...`);
+        }
 
         // Obtener información completa del documento y uploader
         const docInfoResult = await query(
@@ -671,12 +770,16 @@ const resolvers = {
           uploadedBy: docInfo.uploader_name || 'Sistema'
         };
 
-        // Generar la página de portada
-        await addCoverPageWithSigners(pdfPath, signers, documentInfo);
-
-        console.log('✅ Página de portada generada exitosamente');
+        // Si ya existían firmantes, actualizar la página; si no, crear nueva
+        if (hasExistingSigners) {
+          await updateSignersPage(pdfPath, signers, documentInfo);
+          console.log('✅ Página de portada actualizada exitosamente');
+        } else {
+          await addCoverPageWithSigners(pdfPath, signers, documentInfo);
+          console.log('✅ Página de portada generada exitosamente');
+        }
       } catch (coverError) {
-        console.error('❌ Error al generar página de portada:', coverError);
+        console.error('❌ Error al generar/actualizar página de portada:', coverError);
         // No lanzamos el error para que no falle la asignación de firmantes
         // Solo registramos el error en los logs
       }
@@ -1215,6 +1318,18 @@ const resolvers = {
     signDocument: async (_, { documentId, signatureData }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
+      // Verificar si el usuario es el propietario del documento
+      const docOwnerCheck = await query(
+        'SELECT uploaded_by FROM documents WHERE id = $1',
+        [documentId]
+      );
+
+      if (docOwnerCheck.rows.length === 0) {
+        throw new Error('Documento no encontrado');
+      }
+
+      const isOwner = docOwnerCheck.rows[0].uploaded_by === user.id;
+
       // Validar orden secuencial de firma
       const orderCheck = await query(
         `SELECT ds.order_position, ds.user_id
@@ -1230,7 +1345,8 @@ const resolvers = {
       const currentOrder = orderCheck.rows[0].order_position;
 
       // Si no es el primer firmante (order_position > 1), validar que el anterior haya firmado
-      if (currentOrder > 1) {
+      // EXCEPCIÓN: Si el usuario es el propietario del documento, puede firmar sin importar el orden
+      if (currentOrder > 1 && !isOwner) {
         const previousSignerCheck = await query(
           `SELECT s.status, u.name as signer_name
           FROM document_signers ds
