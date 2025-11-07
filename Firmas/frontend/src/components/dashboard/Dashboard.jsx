@@ -169,6 +169,88 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  /**
+   * Abrir el visor de PDF con el documento seleccionado
+   */
+  const handleViewDocument = (doc, isPending = false) => {
+    setViewingDocument(doc);
+    setIsViewingPending(isPending);
+  };
+
+  /**
+   * Cargar un documento específico desde la URL
+   */
+  const loadDocumentFromUrl = async (documentId) => {
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            query {
+              document(id: "${documentId}") {
+                id
+                title
+                description
+                fileName
+                filePath
+                fileSize
+                status
+                createdAt
+                uploadedBy {
+                  id
+                  name
+                  email
+                }
+                totalSigners
+                signedCount
+                pendingCount
+                signatures {
+                  id
+                  signer {
+                    id
+                    name
+                    email
+                  }
+                  status
+                  signedAt
+                  rejectionReason
+                  rejectedAt
+                }
+              }
+            }
+          `
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.data && response.data.data.document) {
+        const doc = response.data.data.document;
+
+        // Determinar si el documento está pendiente para el usuario actual
+        const isPending = doc.signatures?.some(
+          sig => sig.signer.id === user.id && sig.status === 'pending'
+        );
+
+        // Abrir el documento
+        handleViewDocument(doc, isPending);
+        console.log('✅ Documento abierto desde URL');
+      } else {
+        console.error('❌ Documento no encontrado');
+        setError('El documento solicitado no existe o no tienes acceso a él');
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar documento desde URL:', error);
+      setError('Error al cargar el documento');
+    }
+  };
+
   // Cambiar el título de la página cuando se abre el visor de PDF
   useEffect(() => {
     if (viewingDocument) {
@@ -239,6 +321,57 @@ function Dashboard({ user, onLogout }) {
       loadRejectedDocuments();
     }
   }, [activeTab]);
+
+  // Detectar si hay un documento en la URL al cargar (formato: /documento/{id})
+  useEffect(() => {
+    const checkAndLoadDocument = (path) => {
+      // Capturar UUID o cualquier ID (alfanumérico con guiones)
+      const match = path.match(/\/documento\/([a-zA-Z0-9\-]+)/);
+
+      if (match && match[1]) {
+        const documentId = match[1];
+        console.log(`📄 Documento detectado en URL: ${documentId}`);
+
+        // Cargar el documento específico desde el backend
+        loadDocumentFromUrl(documentId);
+
+        // Limpiar la URL sin recargar la página
+        window.history.replaceState({}, '', '/');
+      }
+    };
+
+    // 1. Verificar si hay una URL guardada después del login
+    const savedPath = sessionStorage.getItem('redirectAfterLogin');
+    if (savedPath) {
+      console.log('🔓 Restaurando URL guardada después del login:', savedPath);
+      sessionStorage.removeItem('redirectAfterLogin');
+      checkAndLoadDocument(savedPath);
+    } else {
+      // 2. Verificar la URL actual al montar
+      const currentPath = window.location.pathname;
+      checkAndLoadDocument(currentPath);
+    }
+
+    // 3. Escuchar cambios en la URL (para cuando el usuario hace clic en enlaces)
+    const handlePopState = () => {
+      checkAndLoadDocument(window.location.pathname);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    // 4. Polling para detectar cambios en pathname (método de respaldo)
+    const intervalId = setInterval(() => {
+      const path = window.location.pathname;
+      if (path.includes('/documento/')) {
+        checkAndLoadDocument(path);
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      clearInterval(intervalId);
+    };
+  }, []); // Solo configurar listeners una vez
 
   /**
    * Cargar documentos pendientes de firma desde GraphQL
@@ -1132,12 +1265,6 @@ function Dashboard({ user, onLogout }) {
       setOrderErrorMessage(err.message || 'Error al rechazar el documento');
       setShowOrderError(true);
     }
-  };
-
-  const handleViewDocument = (doc, isPending = false) => {
-    // Abrir el visor de PDF con el documento seleccionado
-    setViewingDocument(doc);
-    setIsViewingPending(isPending);
   };
 
   const handleNotificationClick = async (notification) => {

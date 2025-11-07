@@ -9,6 +9,13 @@ function App() {
 
   // Verificar si hay una sesión guardada al cargar la app
   useEffect(() => {
+    // Guardar la URL actual si contiene /documento/
+    const currentPath = window.location.pathname;
+    if (currentPath.includes('/documento/')) {
+      sessionStorage.setItem('redirectAfterLogin', currentPath);
+      console.log('🔗 URL de documento guardada para después del login:', currentPath);
+    }
+
     const token = localStorage.getItem('token')
     const savedUser = localStorage.getItem('user')
 

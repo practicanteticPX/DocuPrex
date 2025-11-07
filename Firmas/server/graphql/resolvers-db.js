@@ -583,11 +583,13 @@ const resolvers = {
             );
           }
 
-          // EMAILS: Enviar a TODOS los firmantes asignados (excepto al creador si es firmante)
-          for (const userId of userIds) {
-            if (userId !== user.id) {
+          // EMAILS: Enviar SOLO al PRIMER firmante (respetar orden secuencial)
+          if (userIds.length > 0) {
+            const firstSignerId = userIds[0];
+            // Solo enviar si el primer firmante no es el creador
+            if (firstSignerId !== user.id) {
               try {
-                const signerResult = await query('SELECT name, email FROM users WHERE id = $1', [userId]);
+                const signerResult = await query('SELECT name, email FROM users WHERE id = $1', [firstSignerId]);
                 if (signerResult.rows.length > 0) {
                   const signer = signerResult.rows[0];
                   await notificarAsignacionFirmante({
@@ -597,10 +599,10 @@ const resolvers = {
                     documentoId: documentId,
                     creadorDocumento: creatorName
                   });
-                  console.log(`📧 Correo enviado a ${signer.email} sobre asignación de firmante`);
+                  console.log(`📧 Correo enviado al primer firmante: ${signer.email}`);
                 }
               } catch (emailError) {
-                console.error(`Error al enviar correo a firmante ${userId}:`, emailError);
+                console.error(`Error al enviar correo al primer firmante:`, emailError);
                 // No lanzamos el error para que no falle la asignación
               }
             }
@@ -1104,8 +1106,9 @@ const resolvers = {
           // 3. Si el documento NO está completado, notificar al siguiente firmante en la fila
           if (newStatus !== 'completed') {
             const nextSignerResult = await query(
-              `SELECT ds.user_id
+              `SELECT ds.user_id, u.name, u.email
                FROM document_signers ds
+               JOIN users u ON ds.user_id = u.id
                LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
                WHERE ds.document_id = $1
                AND ds.order_position = $2
@@ -1113,15 +1116,33 @@ const resolvers = {
               [documentId, currentOrder + 1]
             );
 
-            // Si hay un siguiente firmante, crear notificación de signature_request
+            // Si hay un siguiente firmante, crear notificación de signature_request y enviar email
             if (nextSignerResult.rows.length > 0) {
-              const nextSignerId = nextSignerResult.rows[0].user_id;
+              const nextSigner = nextSignerResult.rows[0];
 
+              // Crear notificación interna
               await query(
                 `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
                  VALUES ($1, $2, $3, $4, $5)`,
-                [nextSignerId, 'signature_request', documentId, doc.uploaded_by, doc.title]
+                [nextSigner.user_id, 'signature_request', documentId, doc.uploaded_by, doc.title]
               );
+
+              // Enviar email al siguiente firmante
+              try {
+                const creatorResult = await query('SELECT name FROM users WHERE id = $1', [doc.uploaded_by]);
+                const creatorName = creatorResult.rows.length > 0 ? creatorResult.rows[0].name : 'Administrador';
+
+                await notificarAsignacionFirmante({
+                  email: nextSigner.email,
+                  nombreFirmante: nextSigner.name,
+                  nombreDocumento: doc.title,
+                  documentoId: documentId,
+                  creadorDocumento: creatorName
+                });
+                console.log(`📧 Correo enviado al siguiente firmante: ${nextSigner.email}`);
+              } catch (emailError) {
+                console.error(`Error al enviar correo al siguiente firmante:`, emailError);
+              }
             }
           }
 
@@ -1145,41 +1166,35 @@ const resolvers = {
             );
           }
 
-          // ========== ENVIAR CORREOS SI DOCUMENTO COMPLETADO ==========
+          // ========== ENVIAR CORREO AL CREADOR SI DOCUMENTO COMPLETADO ==========
           if (newStatus === 'completed') {
             try {
-              console.log('📧 Documento completamente firmado, enviando correos de notificación...');
+              console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
-              // Obtener emails de todos los involucrados (creador + firmantes)
-              const involvedResult = await query(
-                `SELECT DISTINCT u.email, u.name
-                 FROM users u
-                 WHERE u.id = $1
-                 UNION
-                 SELECT DISTINCT u.email, u.name
-                 FROM document_signers ds
-                 JOIN users u ON ds.user_id = u.id
-                 WHERE ds.document_id = $2`,
-                [doc.uploaded_by, documentId]
+              // Obtener información del creador
+              const creatorResult = await query(
+                `SELECT email, name FROM users WHERE id = $1`,
+                [doc.uploaded_by]
               );
 
-              const emails = involvedResult.rows.map(row => row.email);
+              if (creatorResult.rows.length > 0) {
+                const creator = creatorResult.rows[0];
 
-              // Construir URL de descarga
-              const frontendUrl = process.env.FRONTEND_URL.split(',')[0].trim();
-              const urlDescarga = `${frontendUrl}/${doc.file_path}`;
+                // Construir URL de descarga usando la ruta de la API
+                const urlDescarga = `http://192.168.0.19:5001/api/download/${documentId}`;
 
-              // Enviar correos a todos
-              await notificarDocumentoFirmadoCompleto({
-                emails,
-                nombreDocumento: doc.title,
-                documentoId: documentId,
-                urlDescarga
-              });
+                // Enviar correo solo al creador
+                await notificarDocumentoFirmadoCompleto({
+                  emails: [creator.email],
+                  nombreDocumento: doc.title,
+                  documentoId: documentId,
+                  urlDescarga
+                });
 
-              console.log(`✅ Correos de documento completado enviados a ${emails.length} personas`);
+                console.log(`✅ Correo de documento completado enviado al creador: ${creator.email}`);
+              }
             } catch (emailError) {
-              console.error('Error al enviar correos de documento completado:', emailError);
+              console.error('Error al enviar correo de documento completado:', emailError);
               // No lanzamos el error para que no falle la firma
             }
           }
