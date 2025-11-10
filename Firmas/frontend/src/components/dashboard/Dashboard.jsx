@@ -24,6 +24,16 @@ const API_UPLOAD_UNIFIED_URL = `${BACKEND_HOST}/api/upload-unified`;
 // Log para debug
 console.log('🔗 Backend URL:', API_URL);
 
+/**
+ * Helper function para manejar errores de autenticación en GraphQL
+ * Retorna true si es un error de autenticación que debe ser silenciado
+ */
+const isAuthError = (error) => {
+  if (!error) return false;
+  const message = error.message || '';
+  return message.includes('autenticado') || message.includes('authenticated') || message.includes('No autenticado');
+};
+
 function Dashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -56,6 +66,8 @@ function Dashboard({ user, onLogout }) {
   const [showSignSuccess, setShowSignSuccess] = useState(false);
   const [showOrderError, setShowOrderError] = useState(false);
   const [orderErrorMessage, setOrderErrorMessage] = useState('');
+  const [signing, setSigning] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   // Estados para confirmación de firma rápida (desde la tarjeta)
   const [showQuickSignConfirm, setShowQuickSignConfirm] = useState(false);
@@ -565,6 +577,12 @@ function Dashboard({ user, onLogout }) {
     try {
       const token = localStorage.getItem('token');
 
+      // Si no hay token, no intentar cargar
+      if (!token) {
+        console.warn('No hay token disponible para cargar firmantes');
+        return;
+      }
+
       const response = await axios.post(
         API_URL,
         {
@@ -587,13 +605,25 @@ function Dashboard({ user, onLogout }) {
       );
 
       if (response.data.errors) {
-        throw new Error(response.data.errors[0].message);
+        const error = response.data.errors[0];
+        // Si el error es de autenticación, silenciar el error pero no cargar datos
+        if (isAuthError(error)) {
+          console.warn('Token inválido o expirado al cargar firmantes');
+          setAvailableSigners([]);
+          return;
+        }
+        throw new Error(error.message);
       }
 
       setAvailableSigners(response.data.data.availableSigners || []);
     } catch (err) {
       console.error('Error al cargar firmantes:', err);
-      setError('Error al cargar firmantes disponibles');
+      // Silenciar errores de autenticación para evitar mostrar errores al usuario
+      if (isAuthError(err)) {
+        setAvailableSigners([]);
+      } else {
+        setError('Error al cargar firmantes disponibles');
+      }
     } finally {
       setLoadingSigners(false);
     }
@@ -1178,7 +1208,14 @@ function Dashboard({ user, onLogout }) {
    * Firmar documento REAL usando GraphQL
    */
   const handleSignDocument = async (docId) => {
+    // Prevenir múltiples clicks
+    if (signing) {
+      console.warn('Ya se está procesando una firma');
+      return;
+    }
+
     try {
+      setSigning(true);
       const token = localStorage.getItem('token');
 
       const response = await axios.post(
@@ -1220,6 +1257,8 @@ function Dashboard({ user, onLogout }) {
       // Mostrar modal de error
       setOrderErrorMessage(err.message || 'Error al firmar el documento');
       setShowOrderError(true);
+    } finally {
+      setSigning(false);
     }
   };
 
@@ -1227,7 +1266,14 @@ function Dashboard({ user, onLogout }) {
    * Rechazar documento con razón
    */
   const handleRejectDocument = async (docId, reason) => {
+    // Prevenir múltiples clicks
+    if (rejecting) {
+      console.warn('Ya se está procesando un rechazo');
+      return;
+    }
+
     try {
+      setRejecting(true);
       const token = localStorage.getItem('token');
 
       const response = await axios.post(
@@ -1264,6 +1310,8 @@ function Dashboard({ user, onLogout }) {
       // Mostrar modal de error
       setOrderErrorMessage(err.message || 'Error al rechazar el documento');
       setShowOrderError(true);
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -3580,11 +3628,19 @@ function Dashboard({ user, onLogout }) {
                   ¿Estás seguro de que deseas firmar este documento? Esta acción no se puede deshacer.
                 </p>
                 <div className="sign-confirm-actions">
-                  <button className="sign-confirm-btn cancel" onClick={handleCancelSign}>
+                  <button
+                    className="sign-confirm-btn cancel"
+                    onClick={handleCancelSign}
+                    disabled={signing}
+                  >
                     Cancelar
                   </button>
-                  <button className="sign-confirm-btn confirm" onClick={handleConfirmSign}>
-                    Firmar
+                  <button
+                    className="sign-confirm-btn confirm"
+                    onClick={handleConfirmSign}
+                    disabled={signing}
+                  >
+                    {signing ? 'Firmando...' : 'Firmar'}
                   </button>
                 </div>
               </div>
@@ -3628,15 +3684,19 @@ function Dashboard({ user, onLogout }) {
                   )}
                 </div>
                 <div className="reject-confirm-actions">
-                  <button className="reject-confirm-btn cancel" onClick={handleCancelReject}>
+                  <button
+                    className="reject-confirm-btn cancel"
+                    onClick={handleCancelReject}
+                    disabled={rejecting}
+                  >
                     Cancelar
                   </button>
                   <button
                     className="reject-confirm-btn confirm"
                     onClick={handleConfirmReject}
-                    disabled={rejectReason.trim().length < 5}
+                    disabled={rejectReason.trim().length < 5 || rejecting}
                   >
-                    Rechazar
+                    {rejecting ? 'Rechazando...' : 'Rechazar'}
                   </button>
                 </div>
               </div>
@@ -4080,11 +4140,19 @@ function Dashboard({ user, onLogout }) {
               Esta acción no se puede deshacer.
             </p>
             <div className="sign-confirm-actions">
-              <button className="sign-confirm-btn cancel" onClick={handleCancelQuickSign}>
+              <button
+                className="sign-confirm-btn cancel"
+                onClick={handleCancelQuickSign}
+                disabled={signing}
+              >
                 Cancelar
               </button>
-              <button className="sign-confirm-btn confirm" onClick={handleConfirmQuickSign}>
-                Firmar
+              <button
+                className="sign-confirm-btn confirm"
+                onClick={handleConfirmQuickSign}
+                disabled={signing}
+              >
+                {signing ? 'Firmando...' : 'Firmar'}
               </button>
             </div>
           </div>

@@ -11,7 +11,11 @@
       "Bash(docker rm:*)",
       "Bash(docker inspect:*)",
       "Bash(python -m json.tool:*)",
-      "Bash(docker-compose up:*)"
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(dir:*)",
+      "Bash(ren bd bd_backup_%date:~-4,4%%date:~-10,2%%date:~-7,2%)",
+      "Bash(docker-compose restart:*)"
     ],
     "deny": [],
     "ask": []

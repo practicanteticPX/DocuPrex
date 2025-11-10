@@ -119,6 +119,34 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC);
 
 -- ==================================================
+-- Tabla: notifications
+-- Notificaciones del sistema para usuarios
+-- ==================================================
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL, -- 'signature_request', 'document_signed', 'document_completed', 'document_rejected'
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+    actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    document_title VARCHAR(500),
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para notifications
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_document_id ON notifications(document_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+
+-- Trigger para actualizar updated_at en notifications
+CREATE TRIGGER update_notifications_updated_at
+    BEFORE UPDATE ON notifications
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ==================================================
 -- Función: update_updated_at_column
 -- Actualiza automáticamente el campo updated_at
 -- ==================================================
@@ -201,3 +229,4 @@ COMMENT ON TABLE documents IS 'Documentos subidos para firma digital';
 COMMENT ON TABLE signatures IS 'Firmas digitales realizadas en los documentos';
 COMMENT ON TABLE document_signers IS 'Usuarios asignados para firmar cada documento';
 COMMENT ON TABLE audit_log IS 'Registro de auditoría de todas las acciones del sistema';
+COMMENT ON TABLE notifications IS 'Notificaciones del sistema para usuarios';

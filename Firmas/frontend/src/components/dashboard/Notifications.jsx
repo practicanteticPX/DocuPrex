@@ -11,6 +11,16 @@ const getBackendHost = () => {
 
 const API_URL = `${getBackendHost()}/graphql`;
 
+/**
+ * Helper function para manejar errores de autenticación en GraphQL
+ * Retorna true si es un error de autenticación que debe ser silenciado
+ */
+const isAuthError = (error) => {
+  if (!error) return false;
+  const message = error.message || '';
+  return message.includes('autenticado') || message.includes('authenticated') || message.includes('No autenticado');
+};
+
 // Función para calcular el tiempo relativo
 const getRelativeTime = (dateString) => {
   if (!dateString) return 'Ahora';
@@ -121,6 +131,13 @@ const Notifications = ({ onNotificationClick }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
+
+      // Si no hay token, no intentar cargar
+      if (!token) {
+        console.warn('No hay token disponible para cargar notificaciones');
+        return;
+      }
+
       const response = await axios.post(
         API_URL,
         {
@@ -151,13 +168,26 @@ const Notifications = ({ onNotificationClick }) => {
       );
 
       if (response.data.errors) {
-        throw new Error(response.data.errors[0].message);
+        const error = response.data.errors[0];
+        // Si el error es de autenticación, silenciar el error pero no cargar datos
+        if (isAuthError(error)) {
+          console.warn('Token inválido o expirado al cargar notificaciones');
+          setNotifications([]);
+          setUnreadCount(0);
+          return;
+        }
+        throw new Error(error.message);
       }
 
       setNotifications(response.data.data.notifications || []);
       setUnreadCount(response.data.data.unreadNotificationsCount || 0);
     } catch (err) {
       console.error('Error al cargar notificaciones:', err);
+      // Silenciar errores de autenticación para evitar mostrar errores al usuario
+      if (isAuthError(err)) {
+        setNotifications([]);
+        setUnreadCount(0);
+      }
     } finally {
       setLoading(false);
     }
