@@ -1236,23 +1236,46 @@ const resolvers = {
         );
 
         const expectedPreviousCount = signer.order_position - 1;
+        const actualPreviousCount = parseInt(previousSignedCount.rows[0].count);
 
-        if (parseInt(previousSignedCount.rows[0].count) === expectedPreviousCount) {
+        console.log(`🔍 Verificando turno para ${signer.name} (posición ${signer.order_position}): ${actualPreviousCount} de ${expectedPreviousCount} anteriores firmados`);
+
+        if (actualPreviousCount === expectedPreviousCount) {
           newInTurn.push(signer.user_id);
+          console.log(`✅ ${signer.name} está en turno de firmar`);
+        } else {
+          console.log(`⏸️ ${signer.name} debe esperar a que firmen ${expectedPreviousCount - actualPreviousCount} firmante(s) anterior(es)`);
         }
       }
 
       // Eliminar notificaciones de los que YA NO están en turno
       const usersToRemoveNotifications = previousInTurn.filter(userId => !newInTurn.includes(userId));
 
+      console.log(`📊 Resumen de cambios de turno:`);
+      console.log(`   - Usuarios que estaban en turno ANTES: [${previousInTurn.join(', ')}]`);
+      console.log(`   - Usuarios que están en turno AHORA: [${newInTurn.join(', ')}]`);
+      console.log(`   - Notificaciones a eliminar: [${usersToRemoveNotifications.join(', ')}]`);
+
       for (const userId of usersToRemoveNotifications) {
+        // Obtener nombre del usuario para el log
+        const userInfo = await query('SELECT name FROM users WHERE id = $1', [userId]);
+        const userName = userInfo.rows.length > 0 ? userInfo.rows[0].name : userId;
+
         await query(
           `DELETE FROM notifications
            WHERE document_id = $1 AND user_id = $2 AND type = 'signature_request'`,
           [documentId, userId]
         );
-        console.log(`🗑️ Notificación de firma eliminada para usuario ${userId} (ya no está en turno)`);
+        console.log(`🗑️ Notificación eliminada para ${userName} (ya no está en turno)`);
       }
+
+      // Obtener información del documento para las notificaciones
+      const docInfoForNotif = await query(
+        'SELECT title, uploaded_by FROM documents WHERE id = $1',
+        [documentId]
+      );
+      const docTitle = docInfoForNotif.rows.length > 0 ? docInfoForNotif.rows[0].title : 'Documento';
+      const docCreatorId = docInfoForNotif.rows.length > 0 ? docInfoForNotif.rows[0].uploaded_by : user.id;
 
       // Crear/verificar notificaciones para TODOS los que ahora están en turno
       // (no solo los nuevos, sino también los que vuelven a estar en turno)
@@ -1267,27 +1290,41 @@ const resolvers = {
         );
 
         if (existingNotif.rows.length === 0) {
-          // Crear notificación
+          // Crear notificación con toda la información necesaria
           await query(
-            `INSERT INTO notifications (user_id, document_id, type, created_at)
-             VALUES ($1, $2, 'signature_request', NOW())`,
-            [userId, documentId]
+            `INSERT INTO notifications (user_id, document_id, type, actor_id, document_title, created_at)
+             VALUES ($1, $2, 'signature_request', $3, $4, NOW())`,
+            [userId, documentId, docCreatorId, docTitle]
           );
 
-          console.log(`✅ Notificación de firma creada para usuario ${userId} (ahora está en turno)`);
+          const signerName = signerInfo ? signerInfo.name : userId;
+          console.log(`✅ Notificación creada para ${signerName} (posición ${signerInfo ? signerInfo.order_position : '?'}) - ahora está en turno`);
 
           // Enviar correo si tiene habilitadas las notificaciones
-          if (signerInfo.email_notifications) {
+          if (signerInfo && signerInfo.email_notifications) {
             try {
-              const { sendSignatureRequestEmail } = require('../services/emailService');
-              await sendSignatureRequestEmail(signerInfo.email, signerInfo.name, doc.title);
-              console.log(`📧 Email de firma enviado a ${signerInfo.email}`);
+              // Obtener nombre del creador del documento
+              const creatorResult = await query('SELECT name FROM users WHERE id = $1', [docCreatorId]);
+              const creatorName = creatorResult.rows.length > 0 ? creatorResult.rows[0].name : 'Administrador';
+
+              await notificarAsignacionFirmante({
+                email: signerInfo.email,
+                nombreFirmante: signerInfo.name,
+                nombreDocumento: docTitle,
+                documentoId: documentId,
+                creadorDocumento: creatorName
+              });
+              console.log(`📧 Email enviado a ${signerInfo.name} (${signerInfo.email})`);
             } catch (emailError) {
-              console.error('Error al enviar email:', emailError);
+              console.error(`❌ Error al enviar email a ${signerInfo.name}:`, emailError.message);
             }
+          } else {
+            const reason = signerInfo && !signerInfo.email_notifications ? 'notificaciones desactivadas' : 'sin info de firmante';
+            console.log(`⏭️ Email NO enviado a ${signerName} (${reason})`);
           }
         } else {
-          console.log(`ℹ️ Notificación ya existe para usuario ${userId} (continúa en turno)`);
+          const signerName = signerInfo ? signerInfo.name : userId;
+          console.log(`ℹ️ ${signerName} ya tiene notificación (continúa en turno sin cambios)`);
         }
       }
 
@@ -1842,7 +1879,7 @@ const resolvers = {
                   console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
                   // Construir URL de descarga usando la ruta de la API
-                  const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
+                  const urlDescarga = `http://192.168.0.19:5001/api/download/${documentId}`;
 
                   // Enviar correo solo al creador
                   await notificarDocumentoFirmadoCompleto({

@@ -4,7 +4,9 @@ import './Dashboard.css';
 import './Dashboard.overrides.css';
 import './Rejected.css';
 import './SignersOrder.css';
+import './WaitingTurn.css';
 import Notifications from './Notifications';
+import clockImage from '../../assets/clock.png';
 
 // Determinar el host del backend basándose en el hostname actual
 const getBackendHost = () => {
@@ -57,6 +59,8 @@ function Dashboard({ user, onLogout }) {
   const [loadingRejected, setLoadingRejected] = useState(false);
   const [viewingDocument, setViewingDocument] = useState(null);
   const [isViewingPending, setIsViewingPending] = useState(false);
+  const [documentLoadedFromUrl, setDocumentLoadedFromUrl] = useState(false);
+  const [showWaitingTurnScreen, setShowWaitingTurnScreen] = useState(false);
   const [showSignConfirm, setShowSignConfirm] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -212,8 +216,8 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query {
-              document(id: "${documentId}") {
+            query GetDocumentForUrl($documentId: ID!) {
+              document(id: $documentId) {
                 id
                 title
                 description
@@ -243,8 +247,26 @@ function Dashboard({ user, onLogout }) {
                   rejectedAt
                 }
               }
+              documentSigners(documentId: $documentId) {
+                userId
+                orderPosition
+                user {
+                  id
+                  name
+                  email
+                }
+                signature {
+                  id
+                  status
+                  signedAt
+                  rejectedAt
+                }
+              }
             }
-          `
+          `,
+          variables: {
+            documentId: documentId
+          }
         },
         {
           headers: {
@@ -256,15 +278,74 @@ function Dashboard({ user, onLogout }) {
 
       if (response.data.data && response.data.data.document) {
         const doc = response.data.data.document;
+        const signers = response.data.data.documentSigners || [];
 
-        // Determinar si el documento está pendiente para el usuario actual
-        const isPending = doc.signatures?.some(
-          sig => sig.signer.id === user.id && sig.status === 'pending'
-        );
+        // Verificar que el usuario esté cargado
+        if (!user || !user.id) {
+          console.error('❌ Usuario no está autenticado');
+          setError('Debes iniciar sesión para ver este documento');
+          return;
+        }
 
-        // Abrir el documento
-        handleViewDocument(doc, isPending);
-        console.log('✅ Documento abierto desde URL');
+        // Buscar la información del firmante actual
+        const currentUserSigner = signers.find(s => s.userId === user.id);
+
+        // Determinar el estado del documento respecto al usuario
+        let documentState = 'viewer'; // Por defecto, solo visor
+        let canSignOrReject = false;
+
+        if (currentUserSigner && currentUserSigner.signature) {
+          const sigStatus = currentUserSigner.signature.status;
+
+          if (sigStatus === 'pending') {
+            // Verificar si es el turno del usuario
+            // El usuario puede firmar si todos los anteriores ya firmaron
+            const previousSigners = signers.filter(
+              s => s.orderPosition < currentUserSigner.orderPosition
+            );
+
+            const allPreviousSigned = previousSigners.every(
+              s => s.signature && s.signature.status === 'signed'
+            );
+
+            if (allPreviousSigned) {
+              documentState = 'pending';
+              canSignOrReject = true;
+            } else {
+              documentState = 'waiting'; // Esperando turno
+              canSignOrReject = false;
+            }
+          } else if (sigStatus === 'signed') {
+            documentState = 'signed';
+            canSignOrReject = false;
+          } else if (sigStatus === 'rejected') {
+            documentState = 'rejected';
+            canSignOrReject = false;
+          }
+        }
+
+        console.log(`📄 Estado del documento para ${user.name}: ${documentState}`);
+        console.log(`   - Usuario: ${user.name} (${user.id})`);
+        console.log(`   - Documento: ${doc.title} (${doc.id})`);
+        console.log(`   - Posición de firma: ${currentUserSigner ? currentUserSigner.orderPosition : 'N/A'}`);
+        console.log(`   - Estado de firma: ${currentUserSigner?.signature?.status || 'Sin firma asignada'}`);
+        console.log(`   - Puede firmar/rechazar: ${canSignOrReject ? 'SÍ' : 'NO'}`);
+
+        // Si el documento se abrió desde URL y el usuario está esperando su turno,
+        // mostrar la pantalla de "Aún no es tu turno"
+        if (documentState === 'waiting') {
+          console.log('⏸️ Mostrando pantalla de espera - No es el turno del usuario');
+          setShowWaitingTurnScreen(true);
+          // NO limpiar la URL aquí - se limpiará cuando el usuario cierre el modal
+        } else {
+          // Abrir el documento con el estado determinado
+          handleViewDocument(doc, canSignOrReject);
+          console.log('✅ Documento abierto desde URL');
+          // Limpiar la URL después de abrir el documento
+          setTimeout(() => {
+            window.history.replaceState({}, '', '/');
+          }, 100);
+        }
       } else {
         console.error('❌ Documento no encontrado');
         setError('El documento solicitado no existe o no tienes acceso a él');
@@ -295,7 +376,8 @@ function Dashboard({ user, onLogout }) {
                         showQuickSignConfirm ||
                         managingDocument ||
                         confirmDeleteOpen ||
-                        rejectionReasonPopup;
+                        rejectionReasonPopup ||
+                        showWaitingTurnScreen;
 
     if (hasModalOpen) {
       // Bloquear scroll simplemente con overflow hidden
@@ -348,19 +430,33 @@ function Dashboard({ user, onLogout }) {
 
   // Detectar si hay un documento en la URL al cargar (formato: /documento/{id})
   useEffect(() => {
+    // Esperar a que el usuario esté cargado antes de intentar cargar el documento
+    if (!user) {
+      console.log('⏳ Esperando a que el usuario se cargue...');
+      return;
+    }
+
     const checkAndLoadDocument = (path) => {
+      // Evitar cargas duplicadas
+      if (documentLoadedFromUrl) {
+        return;
+      }
+
       // Capturar UUID o cualquier ID (alfanumérico con guiones)
       const match = path.match(/\/documento\/([a-zA-Z0-9\-]+)/);
 
       if (match && match[1]) {
         const documentId = match[1];
         console.log(`📄 Documento detectado en URL: ${documentId}`);
+        console.log(`👤 Usuario cargado: ${user.name} (${user.id})`);
+
+        // Marcar que ya se cargó un documento para evitar duplicados
+        setDocumentLoadedFromUrl(true);
 
         // Cargar el documento específico desde el backend
         loadDocumentFromUrl(documentId);
 
-        // Limpiar la URL sin recargar la página
-        window.history.replaceState({}, '', '/');
+        // NO limpiar la URL aquí - se limpiará después de abrir el documento o modal
       }
     };
 
@@ -378,6 +474,8 @@ function Dashboard({ user, onLogout }) {
 
     // 3. Escuchar cambios en la URL (para cuando el usuario hace clic en enlaces)
     const handlePopState = () => {
+      // Resetear la bandera cuando el usuario navega manualmente
+      setDocumentLoadedFromUrl(false);
       checkAndLoadDocument(window.location.pathname);
     };
 
@@ -386,7 +484,7 @@ function Dashboard({ user, onLogout }) {
     // 4. Polling para detectar cambios en pathname (método de respaldo)
     const intervalId = setInterval(() => {
       const path = window.location.pathname;
-      if (path.includes('/documento/')) {
+      if (path.includes('/documento/') && !documentLoadedFromUrl) {
         checkAndLoadDocument(path);
       }
     }, 500);
@@ -395,7 +493,7 @@ function Dashboard({ user, onLogout }) {
       window.removeEventListener('popstate', handlePopState);
       clearInterval(intervalId);
     };
-  }, []); // Solo configurar listeners una vez
+  }, [user, documentLoadedFromUrl]); // Ejecutar cuando el usuario o la bandera cambien
 
   /**
    * Cargar documentos pendientes de firma desde GraphQL
@@ -4150,6 +4248,7 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
           )}
+
         </div>
       )}
 
@@ -4577,6 +4676,57 @@ function Dashboard({ user, onLogout }) {
               >
                 {signing ? 'Firmando...' : 'Firmar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pantalla de "Aún no es tu turno de firmar" - NIVEL RAÍZ */}
+      {showWaitingTurnScreen && (
+        <div className="sign-confirm-overlay" style={{position: 'fixed', zIndex: 99999}} onClick={() => {
+          console.log('🚪 Cerrando pantalla de espera');
+          setShowWaitingTurnScreen(false);
+          setActiveTab('pending');
+          window.history.replaceState({}, '', '/');
+        }}>
+          <div className="sign-confirm-modal waiting-turn-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="waiting-turn-close-btn"
+              onClick={() => {
+                console.log('🚪 Cerrando pantalla de espera (botón X)');
+                setShowWaitingTurnScreen(false);
+                setActiveTab('pending');
+                window.history.replaceState({}, '', '/');
+              }}
+              title="Cerrar"
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+
+            <div className="waiting-turn-content">
+              <img src={clockImage} alt="Reloj de espera" className="waiting-turn-icon" />
+              <h2 className="waiting-turn-title">Aún no es tu turno de firmar.</h2>
+              <p className="waiting-turn-message">
+                El documento no esta disponible para que lo firmes porque hay otras personas que deben firmarlo antes que tu.
+              </p>
+              <p className="waiting-turn-submessage">
+                No te preocupes, te notificaremos cuando sea tu turno.
+              </p>
+              <div className="sign-confirm-actions">
+                <button
+                  className="sign-confirm-btn confirm full-width"
+                  onClick={() => {
+                    console.log('🚪 Cerrando pantalla de espera (botón Entendido)');
+                    setShowWaitingTurnScreen(false);
+                    setActiveTab('pending');
+                    window.history.replaceState({}, '', '/');
+                  }}
+                >
+                  Entendido
+                </button>
+              </div>
             </div>
           </div>
         </div>
