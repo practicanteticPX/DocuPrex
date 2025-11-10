@@ -1,0 +1,238 @@
+/* Contenedor de notificaciones */
+.notifications-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* Botón de campana */
+.notifications-bell-button {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  color: #6B7280;
+}
+
+.notifications-bell-button:hover {
+  background-color: #F3F4F6;
+}
+
+.notifications-bell-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Badge de punto */
+.notifications-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background-color: #EF4444;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
+/* Dropdown de notificaciones */
+.notifications-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-height: 600px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+/* Header del dropdown */
+.notifications-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.notifications-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.mark-all-read-button {
+  background: transparent;
+  border: none;
+  color: #3B82F6;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.mark-all-read-button:hover {
+  background-color: #EFF6FF;
+}
+
+/* Lista de notificaciones */
+.notifications-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+/* Loading state */
+.notifications-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #6B7280;
+}
+
+.notifications-loading p {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+/* Empty state */
+.notifications-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #9CA3AF;
+  font-size: 14px;
+}
+
+/* Item de notificación */
+.notification-item {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #F3F4F6;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.notification-item:hover {
+  background-color: #F9FAFB;
+}
+
+.notification-item.unread {
+  background-color: #EFF6FF;
+}
+
+.notification-item.unread:hover {
+  background-color: #DBEAFE;
+}
+
+/* Punto de no leído */
+.notification-unread-dot {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background-color: #3B82F6;
+  border-radius: 50%;
+}
+
+/* Contenido de la notificación */
+.notification-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 8px;
+}
+
+.notification-type {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.notification-message {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.notification-document-title {
+  font-size: 13px;
+  color: #6B7280;
+  line-height: 1.4;
+}
+
+/* Tiempo de la notificación */
+.notification-time {
+  font-size: 12px;
+  color: #9CA3AF;
+  white-space: nowrap;
+  align-self: flex-start;
+}
+
+/* Footer del dropdown */
+.notifications-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #E5E7EB;
+}
+
+.view-all-notifications-button {
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: #3B82F6;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.view-all-notifications-button:hover {
+  background-color: #EFF6FF;
+}
+
+/* Spinner */
+.spinner-minimal {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #E5E7EB;
+  border-top-color: #3B82F6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .notifications-dropdown {
+    width: calc(100vw - 32px);
+    right: -8px;
+  }
+}

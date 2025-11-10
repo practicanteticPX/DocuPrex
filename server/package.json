@@ -1,0 +1,40 @@
+{
+  "name": "firmas-server",
+  "version": "1.0.0",
+  "description": "Backend GraphQL para sistema de firmas digitales",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "db:init": "node database/init.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "graphql",
+    "apollo",
+    "firmas",
+    "digitales"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "apollo-server-express": "^3.13.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-rate-limit": "^8.1.0",
+    "graphql": "^16.9.0",
+    "graphql-upload": "^13.0.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "ldapjs": "^3.0.7",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^7.0.10",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}

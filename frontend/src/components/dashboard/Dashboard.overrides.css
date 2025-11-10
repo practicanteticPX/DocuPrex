@@ -1,0 +1,1537 @@
+/* Pixel-perfect overrides for reference UI */
+:root { --ds-container-max: 768px; }
+
+.ds-shell .dashboard-main { max-width: var(--ds-container-max); margin: 0 auto; }
+.section, .upload-section-zapsign, .my-documents-section-clean { max-width: var(--ds-container-max); margin-left: auto; margin-right: auto; }
+
+/* Hide top tabs bar; use sidebar only */
+.tabs-container { display: none !important; }
+
+/* Dropzone sizing and texts */
+.zapsign-upload-area { min-height: 280px; }
+.upload-instruction-1 { margin: 0 0 2px; font-weight: 600; }
+.upload-instruction-2 { margin: 0 0 16px; opacity: .9; }
+
+/* Header refinements */
+.dashboard-header { box-shadow: none; border-bottom: 1px solid #F3F4F6; background: #fff; }
+
+/* Título y subtítulo */
+.zapsign-title {
+  color: #111827 !important;
+}
+
+.zapsign-subtitle {
+  color: #6B7280 !important;
+}
+
+/* ========================================
+   OVERRIDES PARA DISEÑO EXACTO FIRMAPRO
+   ======================================== */
+
+/* Asegurar que el contenedor principal tenga el ancho correcto */
+.upload-section-zapsign {
+  max-width: 1024px !important;
+  width: 100% !important;
+  padding: 48px 16px !important;
+}
+
+/* Card centrado y del tamaño correcto */
+.zapsign-content-card {
+  max-width: 672px !important;
+  margin: 0 auto !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+  border: 1px solid #E5E7EB !important;
+  overflow: hidden !important;
+}
+
+/* Asegurar que el área de upload no tenga altura mínima excesiva */
+.zapsign-upload-area {
+  min-height: auto !important;
+  padding: 40px 24px !important;
+  background-color: #FAFAFA !important;
+  border: 2px dashed #D1D5DB !important;
+  border-radius: 12px !important;
+}
+
+.zapsign-upload-area:hover {
+  border-color: #6366F1 !important;
+  background-color: #F9FAFB !important;
+}
+
+.zapsign-upload-area.dragging {
+  background-color: #EEF2FF !important;
+  border-color: #6366F1 !important;
+  border-style: solid !important;
+}
+
+.zapsign-upload-area.has-files {
+  padding: 24px !important;
+  background: white !important;
+  border-color: #E5E7EB !important;
+}
+
+/* Iconos y textos del área de upload */
+.upload-icon-minimal {
+  width: 48px !important;
+  height: 48px !important;
+  margin: 0 auto 16px !important;
+  color: #9CA3AF !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.upload-icon-minimal svg {
+  width: 48px !important;
+  height: 48px !important;
+  color: #9CA3AF !important;
+}
+
+.zapsign-upload-label {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  width: 100% !important;
+  padding: 48px 24px !important;
+}
+
+.upload-text-container {
+  text-align: center !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
+.upload-text-main {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  color: #374151 !important;
+  margin: 0 !important;
+}
+
+.upload-link {
+  color: #6366F1 !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+}
+
+.upload-link:hover {
+  color: #4F46E5 !important;
+  text-decoration: underline !important;
+}
+
+.upload-text-normal {
+  color: #6B7280 !important;
+  font-weight: 400 !important;
+}
+
+.upload-text-hint {
+  font-size: 12px !important;
+  color: #9CA3AF !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+}
+
+/* Eliminar estilos viejos */
+.upload-icon-circle {
+  display: none !important;
+}
+
+.upload-text-primary,
+.upload-text-secondary {
+  display: none !important;
+}
+
+/* Form inputs con el estilo correcto */
+.form-input,
+.form-input textarea {
+  padding: 10px 14px !important;
+  border: 1px solid #D1D5DB !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  background-color: white !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.form-input:focus,
+textarea.form-input:focus {
+  border-color: #6366F1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+  outline: none !important;
+}
+
+/* Asegurar que los form-groups no se salgan */
+.form-group {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.form-group label {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #374151 !important;
+  margin-bottom: 6px !important;
+}
+
+.form-group label span {
+  color: #9CA3AF !important;
+  font-weight: 400 !important;
+}
+
+/* Sección de formulario con padding correcto */
+.zapsign-upload-form {
+  padding: 0 32px 32px 32px !important;
+  box-sizing: border-box !important;
+}
+
+/* Mensajes de error y éxito */
+.success-message,
+.error-message {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+}
+
+.success-message {
+  background-color: #D1FAE5 !important;
+  border: 1px solid #A7F3D0 !important;
+  color: #065F46 !important;
+}
+
+.error-message {
+  background-color: #FEE2E2 !important;
+  border: 1px solid #FCA5A5 !important;
+  color: #DC2626 !important;
+}
+
+/* Header del card */
+.zapsign-header {
+  padding: 24px 32px !important;
+  box-sizing: border-box !important;
+}
+
+/* Sección de carpeta */
+.folder-section {
+  padding: 16px 32px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  background-color: #F9FAFB !important;
+}
+
+.folder-info {
+  color: #374151 !important;
+}
+
+.folder-change-btn {
+  color: #6366F1 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  transition: all 0.2s !important;
+}
+
+.folder-change-btn:hover {
+  background-color: #EEF2FF !important;
+}
+
+/* Footer del formulario */
+.form-footer {
+  padding: 16px 32px !important;
+  background-color: #F9FAFB !important;
+  border-top: 1px solid #E5E7EB !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Botones del footer */
+.footer-btn-continue {
+  background-color: #6366F1 !important;
+  padding: 10px 24px !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+}
+
+.footer-btn-continue:hover:not(:disabled) {
+  background-color: #4F46E5 !important;
+}
+
+/* Stepper personalizado */
+.firmapro-stepper {
+  margin-bottom: 32px !important;
+}
+
+.stepper-number.active {
+  background-color: #6366F1 !important;
+}
+
+.stepper-label.active {
+  color: #6366F1 !important;
+}
+
+/* Lista de archivos minimalista */
+.file-list-minimal {
+  gap: 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+}
+
+.file-item-minimal {
+  padding: 12px 16px !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 8px !important;
+  background-color: white !important;
+  transition: all 0.2s ease !important;
+  cursor: grab !important;
+}
+
+.file-item-minimal:hover {
+  border-color: #D1D5DB !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+.file-item-minimal:active {
+  cursor: grabbing !important;
+}
+
+.file-item-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.file-icon-minimal {
+  width: 40px !important;
+  height: 40px !important;
+  background-color: #EEF2FF !important;
+  color: #6366F1 !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.file-icon-minimal svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.file-info-minimal {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.file-name-minimal {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #111827 !important;
+  margin: 0 0 2px 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.file-size-minimal {
+  font-size: 12px !important;
+  color: #6B7280 !important;
+  margin: 0 !important;
+}
+
+.file-delete-minimal {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  color: #9CA3AF !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.file-delete-minimal:hover:not(:disabled) {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+.file-delete-minimal svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Botón agregar archivos */
+.add-more-files-container {
+  margin-top: 12px !important;
+}
+
+.add-more-files-btn {
+  width: 100% !important;
+  border: 1px dashed #D1D5DB !important;
+  color: #6366F1 !important;
+  padding: 10px 16px !important;
+  background: white !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.add-more-files-btn:hover:not(:disabled) {
+  border-color: #6366F1 !important;
+  background-color: #F5F3FF !important;
+}
+
+.add-more-files-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.add-more-files-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* ========================================
+   VISOR DE PDF MINIMALISTA
+   ======================================== */
+
+/* Overlay de pantalla completa */
+.pdf-viewer-minimal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: #F9FAFB !important;
+  z-index: 10000 !important;
+}
+
+/* Header del visor */
+.pdf-viewer-minimal-header {
+  background-color: white !important;
+  border-bottom: 1px solid #E5E7EB !important;
+  padding: 16px 24px !important;
+}
+
+.pdf-viewer-header-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+}
+
+.pdf-viewer-title h2 {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  margin: 0 !important;
+}
+
+.pdf-viewer-description-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  color: #6B7280 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.pdf-viewer-description-btn:hover {
+  background-color: #F3F4F6 !important;
+  color: #6366F1 !important;
+}
+
+.pdf-viewer-description-btn svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Popup de descripción */
+.pdf-description-popup {
+  position: absolute !important;
+  top: 80px !important;
+  left: 24px !important;
+  z-index: 10001 !important;
+  animation: slideDown 0.2s ease !important;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pdf-description-content {
+  background: white !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  padding: 16px !important;
+  max-width: 400px !important;
+  min-width: 300px !important;
+}
+
+.pdf-description-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 12px !important;
+}
+
+.pdf-description-header h4 {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  margin: 0 !important;
+}
+
+.pdf-description-close {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  border: none !important;
+  color: #9CA3AF !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.pdf-description-close:hover {
+  background-color: #F3F4F6 !important;
+  color: #6B7280 !important;
+}
+
+.pdf-description-close svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.pdf-description-text {
+  font-size: 14px !important;
+  color: #6B7280 !important;
+  line-height: 1.6 !important;
+  margin: 0 !important;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+}
+
+.pdf-viewer-back-btn {
+  color: #374151 !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+}
+
+.pdf-viewer-back-btn:hover {
+  background-color: #F3F4F6 !important;
+  color: #111827 !important;
+}
+
+.pdf-viewer-action-btn.download {
+  color: #6366F1 !important;
+  border-color: #6366F1 !important;
+}
+
+.pdf-viewer-action-btn.download:hover {
+  background-color: #EEF2FF !important;
+}
+
+.pdf-viewer-action-btn.close:hover {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+/* Iframe del PDF */
+.pdf-viewer-minimal-iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: 12px !important;
+  background-color: white !important;
+}
+
+/* Fallback */
+.fallback-download-btn {
+  background-color: #6366F1 !important;
+  color: white !important;
+  padding: 12px 24px !important;
+  border-radius: 8px !important;
+}
+
+.fallback-download-btn:hover {
+  background-color: #4F46E5 !important;
+}
+
+/* Botón de firmar */
+.pdf-viewer-action-btn.sign {
+  color: white !important;
+  background-color: #10B981 !important;
+  border-color: #10B981 !important;
+}
+
+.pdf-viewer-action-btn.sign:hover {
+  background-color: #059669 !important;
+  border-color: #059669 !important;
+}
+
+/* ========================================
+   POPUP DE CONFIRMACIÓN DE FIRMA
+   ======================================== */
+
+.sign-confirm-overlay {
+  position: fixed !important;
+  z-index: 10001 !important;
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.sign-confirm-modal {
+  background-color: white !important;
+  border-radius: 16px !important;
+  padding: 32px !important;
+  max-width: 440px !important;
+}
+
+.sign-confirm-icon {
+  background-color: #D1FAE5 !important;
+  color: #10B981 !important;
+}
+
+.sign-confirm-icon.error {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+.error-modal .sign-confirm-icon {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+.success-modal.reject-success .sign-confirm-icon {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+.sign-confirm-btn.cancel {
+  background-color: white !important;
+  border: 1px solid #E5E7EB !important;
+  color: #374151 !important;
+}
+
+.sign-confirm-btn.cancel:hover {
+  background-color: #F9FAFB !important;
+  border-color: #D1D5DB !important;
+}
+
+.sign-confirm-btn.confirm {
+  background-color: #10B981 !important;
+  color: white !important;
+}
+
+/* Botones de modales de error y rechazo en rojo */
+.error-modal .sign-confirm-btn.confirm,
+.success-modal.reject-success .sign-confirm-btn.confirm {
+  background-color: #DC2626 !important;
+  color: white !important;
+}
+
+.error-modal .sign-confirm-btn.confirm:hover,
+.success-modal.reject-success .sign-confirm-btn.confirm:hover {
+  background-color: #B91C1C !important;
+}
+
+.sign-confirm-btn.confirm:hover {
+  background-color: #059669 !important;
+}
+
+/* ========================================
+   BOTÓN RECHAZAR Y POPUP DE RECHAZO
+   ======================================== */
+
+/* Botón de rechazar */
+.pdf-viewer-action-btn.reject {
+  color: #DC2626 !important;
+  border-color: #DC2626 !important;
+}
+
+.pdf-viewer-action-btn.reject:hover {
+  background-color: #FEE2E2 !important;
+  border-color: #DC2626 !important;
+}
+
+/* Modal de rechazo */
+.reject-confirm-modal {
+  background-color: white !important;
+  border-radius: 16px !important;
+  padding: 32px !important;
+  max-width: 520px !important;
+}
+
+.reject-confirm-icon {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+.reject-reason-input {
+  width: 100% !important;
+  border: 1px solid #D1D5DB !important;
+  border-radius: 8px !important;
+}
+
+.reject-reason-input:focus {
+  border-color: #DC2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+}
+
+.char-count.insufficient {
+  color: #DC2626 !important;
+}
+
+.char-count.sufficient {
+  color: #10B981 !important;
+}
+
+.reject-error-message {
+  background-color: #FEE2E2 !important;
+  border: 1px solid #FCA5A5 !important;
+  color: #DC2626 !important;
+}
+
+.reject-confirm-btn.cancel {
+  background-color: white !important;
+  border: 1px solid #E5E7EB !important;
+  color: #374151 !important;
+}
+
+.reject-confirm-btn.cancel:hover {
+  background-color: #F9FAFB !important;
+  border-color: #D1D5DB !important;
+}
+
+.reject-confirm-btn.confirm {
+  background-color: #DC2626 !important;
+  color: white !important;
+}
+
+.reject-confirm-btn.confirm:hover:not(:disabled) {
+  background-color: #B91C1C !important;
+}
+
+.reject-confirm-btn.confirm:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* ========================================
+   SECCIÓN PENDIENTES DE FIRMA - MINIMAL
+   ======================================== */
+
+.pending-section-minimal {
+  max-width: 1200px !important;
+  margin: 0 auto !important;
+  padding: 32px 24px !important;
+}
+
+.section-header-minimal {
+  margin-bottom: 24px !important;
+}
+
+.section-title-minimal {
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  color: #111827 !important;
+  margin: 0 0 4px 0 !important;
+  letter-spacing: -0.5px !important;
+}
+
+.section-subtitle-minimal {
+  font-size: 14px !important;
+  color: #6B7280 !important;
+  margin: 0 !important;
+}
+
+/* Loading state */
+.loading-state-minimal {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 64px 24px !important;
+  gap: 16px !important;
+}
+
+.loading-state-minimal p {
+  font-size: 14px !important;
+  color: #6B7280 !important;
+  margin: 0 !important;
+}
+
+.spinner-minimal {
+  width: 40px !important;
+  height: 40px !important;
+  border: 3px solid #E5E7EB !important;
+  border-top-color: #6366F1 !important;
+  border-radius: 50% !important;
+  animation: spin 0.8s linear infinite !important;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Empty state */
+.empty-state-minimal {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 64px 24px !important;
+  text-align: center !important;
+}
+
+.empty-icon-minimal {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50% !important;
+  background-color: #F3F4F6 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-bottom: 16px !important;
+  color: #9CA3AF !important;
+}
+
+.empty-icon-minimal svg {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.empty-title-minimal {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  margin: 0 0 8px 0 !important;
+}
+
+.empty-text-minimal {
+  font-size: 14px !important;
+  color: #6B7280 !important;
+  margin: 0 !important;
+}
+
+/* Grid de documentos */
+.documents-grid-minimal {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  align-items: flex-start !important;
+}
+
+/* Card de documento */
+.doc-card-minimal {
+  background: white !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 12px !important;
+  padding: 20px !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 20px !important;
+  width: 100% !important;
+  max-width: 900px !important;
+}
+
+.doc-card-minimal:hover {
+  border-color: #D1D5DB !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Header del card */
+.doc-card-header-minimal {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-shrink: 0 !important;
+}
+
+.doc-icon-minimal {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 8px !important;
+  background-color: #EEF2FF !important;
+  color: #6366F1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.doc-icon-minimal svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.doc-badge-minimal {
+  padding: 4px 12px !important;
+  border-radius: 12px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.doc-badge-minimal.pending {
+  background-color: #FEF3C7 !important;
+  color: #92400E !important;
+}
+
+/* Body del card */
+.doc-card-body-minimal {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  flex: 1 !important;
+}
+
+.doc-card-title-minimal {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  margin: 0 !important;
+  line-height: 1.4 !important;
+}
+
+.doc-card-description-minimal {
+  font-size: 13px !important;
+  color: #6B7280 !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+.doc-card-meta-minimal {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  margin-top: 4px !important;
+}
+
+.doc-meta-item-minimal {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 13px !important;
+  color: #6B7280 !important;
+}
+
+.doc-meta-item-minimal svg {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0 !important;
+  color: #9CA3AF !important;
+}
+
+/* Acciones del card */
+.doc-card-actions-minimal {
+  display: flex !important;
+  gap: 8px !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+  align-items: center !important;
+}
+
+.btn-minimal-secondary,
+.btn-minimal-primary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 10px 20px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  border: none !important;
+  white-space: nowrap !important;
+}
+
+.btn-minimal-secondary {
+  background: white !important;
+  color: #6B7280 !important;
+  border: 1px solid #E5E7EB !important;
+}
+
+.btn-minimal-secondary:hover {
+  background: #F9FAFB !important;
+  color: #374151 !important;
+  border-color: #D1D5DB !important;
+}
+
+.btn-minimal-secondary svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.btn-minimal-primary {
+  background: #6366F1 !important;
+  color: white !important;
+}
+
+.btn-minimal-primary:hover {
+  background: #4F46E5 !important;
+}
+
+.btn-minimal-primary svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Responsive para móviles */
+@media (max-width: 640px) {
+  .zapsign-header,
+  .zapsign-upload-form,
+  .folder-section,
+  .form-footer {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  .upload-section-zapsign {
+    padding: 24px 12px !important;
+  }
+
+  .zapsign-content-card {
+    border-radius: 8px !important;
+  }
+
+  .pending-section-minimal {
+    padding: 24px 16px !important;
+  }
+
+  .doc-card-minimal {
+    flex-direction: column !important;
+    max-width: 100% !important;
+  }
+
+  .doc-card-header-minimal {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+  }
+
+  .doc-card-actions-minimal {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  .btn-minimal-secondary,
+  .btn-minimal-primary {
+    flex: 1 !important;
+  }
+}
+
+/* ========================================
+   DISEÑO LIMPIO PARA "MIS DOCUMENTOS"
+   ======================================== */
+
+/* Contenedor principal */
+.my-documents-section-clean {
+  max-width: 1200px !important;
+  min-width: 750px !important;
+  margin: 0 auto !important;
+  padding: 32px 24px !important;
+}
+
+/* Grid de documentos */
+.my-docs-grid-clean {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+/* Card de documento - Diseño de referencia */
+.my-doc-card-reference {
+  background: white !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 12px !important;
+  padding: 20px 24px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  transition: all 0.2s ease !important;
+  gap: 20px !important;
+  min-height: 100px !important;
+  min-width: 700px !important;
+}
+
+.my-doc-card-reference:hover {
+  border-color: #D1D5DB !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Wrapper del contenido */
+.doc-content-wrapper {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+/* Fila del header: título y badge */
+.doc-header-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+}
+
+.doc-title-reference {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  margin: 0 !important;
+  line-height: 1.4 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  flex: 1 !important;
+}
+
+/* Fila de metadata: "Creado el..." */
+.doc-meta-row {
+  display: flex !important;
+  align-items: center !important;
+}
+
+.doc-created-text {
+  font-size: 13px !important;
+  color: #6B7280 !important;
+  font-weight: 400 !important;
+}
+
+/* Fila de firmantes */
+.doc-signers-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+/* Icono PDF eliminado del diseño de referencia */
+
+/* Información del documento */
+.doc-info-clean {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+  padding: 4px 0 !important;
+}
+
+.doc-title-clean {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  margin: 0 !important;
+  line-height: 1.4 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.doc-meta-clean {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 13px !important;
+  color: #6B7280 !important;
+}
+
+.doc-meta-clean .meta-dot {
+  color: #D1D5DB !important;
+}
+
+.doc-description-clean {
+  font-size: 13px !important;
+  color: #9CA3AF !important;
+  margin: 4px 0 0 0 !important;
+  line-height: 1.4 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Sección de Firmas */
+.signatures-section-clean {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  min-width: 150px !important;
+}
+
+.signatures-header-clean {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 4px !important;
+}
+
+.signatures-label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #6B7280 !important;
+  letter-spacing: 0.5px !important;
+}
+
+.signatures-count {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+}
+
+/* Lista de firmantes - Horizontal */
+.signers-list-horizontal {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+.signer-item-horizontal {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+/* Botón "ver todos" */
+.btn-ver-todos {
+  background: none !important;
+  border: none !important;
+  color: #6B7280 !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  transition: color 0.2s ease !important;
+  white-space: nowrap !important;
+}
+
+.btn-ver-todos:hover {
+  color: #111827 !important;
+  text-decoration: underline !important;
+}
+
+.signer-dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  flex-shrink: 0 !important;
+}
+
+.signer-name {
+  font-size: 13px !important;
+  color: #374151 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Badge de estado */
+.status-badge-clean {
+  padding: 6px 12px !important;
+  border-radius: 16px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+/* Botones de acción */
+.doc-actions-clean {
+  display: flex !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.btn-action-clean {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+  background: white !important;
+  border: 1px solid #E5E7EB !important;
+  color: #6B7280 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.btn-action-clean:hover {
+  background: #F9FAFB !important;
+  color: #111827 !important;
+  border-color: #D1D5DB !important;
+}
+
+.btn-action-clean svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .my-doc-card-reference {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .doc-actions-clean {
+    width: 100% !important;
+    justify-content: flex-end !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .my-documents-section-clean {
+    padding: 24px 16px !important;
+  }
+
+  .my-doc-card-reference {
+    padding: 16px !important;
+  }
+
+  .doc-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .doc-actions-clean {
+    flex-wrap: wrap !important;
+  }
+
+  .btn-action-clean {
+    flex: 1 !important;
+  }
+}
+
+/* Badge rojo para documentos rechazados */
+.rejected-badge-red {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+}
+
+/* Razón de rechazo compacta */
+.rejection-reason-compact {
+  background-color: #F9FAFB !important;
+  border-left: 3px solid #9CA3AF !important;
+  padding: 8px 12px !important;
+  margin-top: 8px !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+  color: #78350F !important;
+  line-height: 1.5 !important;
+}
+
+.rejection-reason-compact strong {
+  color: #92400E !important;
+}
+
+/* ========================================
+   MODAL DE ELIMINACIÓN MINIMALISTA
+   ======================================== */
+
+.delete-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 10000 !important;
+  padding: 20px !important;
+}
+
+.delete-modal-minimal {
+  background: white !important;
+  border-radius: 16px !important;
+  padding: 32px !important;
+  max-width: 400px !important;
+  width: 100% !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  animation: modalFadeIn 0.2s ease !important;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Icono circular de basura */
+.delete-icon-circle {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50% !important;
+  background: #FEE2E2 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-bottom: 20px !important;
+}
+
+.delete-icon-circle svg {
+  width: 28px !important;
+  height: 28px !important;
+  color: #DC2626 !important;
+}
+
+/* Título del modal */
+.delete-modal-title {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: #111827 !important;
+  margin: 0 0 12px 0 !important;
+  line-height: 1.3 !important;
+}
+
+/* Descripción del modal */
+.delete-modal-description {
+  font-size: 14px !important;
+  color: #6B7280 !important;
+  line-height: 1.6 !important;
+  margin: 0 0 24px 0 !important;
+}
+
+/* Contenedor de botones */
+.delete-modal-buttons {
+  display: flex !important;
+  gap: 12px !important;
+  width: 100% !important;
+}
+
+/* Botón Cancelar */
+.delete-btn-cancel {
+  flex: 1 !important;
+  padding: 12px 20px !important;
+  border-radius: 8px !important;
+  border: 1px solid #E5E7EB !important;
+  background: white !important;
+  color: #374151 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.delete-btn-cancel:hover:not(:disabled) {
+  background: #F9FAFB !important;
+  border-color: #D1D5DB !important;
+}
+
+.delete-btn-cancel:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Botón Eliminar */
+.delete-btn-confirm {
+  flex: 1 !important;
+  padding: 12px 20px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  background: #DC2626 !important;
+  color: white !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.delete-btn-confirm:hover:not(:disabled) {
+  background: #B91C1C !important;
+}
+
+.delete-btn-confirm:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Responsive para modal */
+@media (max-width: 640px) {
+  .delete-modal-minimal {
+    padding: 24px !important;
+    max-width: 90% !important;
+  }
+
+  .delete-modal-title {
+    font-size: 18px !important;
+  }
+
+  .delete-modal-description {
+    font-size: 13px !important;
+  }
+
+  .delete-modal-buttons {
+    flex-direction: column !important;
+  }
+}
