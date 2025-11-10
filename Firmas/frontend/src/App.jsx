@@ -1,7 +1,18 @@
 import { useState, useEffect } from 'react'
+import axios from 'axios'
 import Login from './components/login/Login.jsx'
 import Dashboard from './components/dashboard/Dashboard.jsx'
 import './App.css'
+
+// Determinar el host del backend
+const getBackendHost = () => {
+  const hostname = window.location.hostname;
+  const protocol = window.location.protocol;
+  return `${protocol}//${hostname}:5001`;
+};
+
+const BACKEND_HOST = getBackendHost();
+const API_URL = `${BACKEND_HOST}/graphql`;
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -21,7 +32,44 @@ function App() {
 
     if (token && savedUser) {
       setIsAuthenticated(true)
-      setUser(JSON.parse(savedUser))
+
+      // Obtener datos actualizados del usuario desde la BD
+      const fetchUserData = async () => {
+        try {
+          const response = await axios.post(
+            API_URL,
+            {
+              query: `
+                query Me {
+                  me {
+                    id
+                    name
+                    email
+                    role
+                    emailNotifications
+                  }
+                }
+              `
+            },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (response.data.data?.me) {
+            const updatedUser = response.data.data.me;
+            setUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+          } else {
+            // Si falla la query, usar datos guardados
+            setUser(JSON.parse(savedUser));
+          }
+        } catch (error) {
+          console.error('Error al obtener datos del usuario:', error);
+          // Si falla, usar datos guardados
+          setUser(JSON.parse(savedUser));
+        }
+      };
+
+      fetchUserData();
     }
   }, [])
 

@@ -51,6 +51,7 @@ function Login({ onLogin }) {
               name
               email
               role
+              emailNotifications
             }
           }
         }

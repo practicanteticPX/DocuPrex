@@ -452,6 +452,18 @@ const resolvers = {
       return true;
     },
 
+    // Actualizar preferencias de notificaciones por correo
+    updateEmailNotifications: async (_, { enabled }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(
+        'UPDATE users SET email_notifications = $1 WHERE id = $2 RETURNING *',
+        [enabled, user.id]
+      );
+
+      return result.rows[0];
+    },
+
     // Subir documento (metadata, el archivo se sube por REST)
     uploadDocument: async (_, { title, description }, { user }) => {
       if (!user) throw new Error('No autenticado');
@@ -689,17 +701,22 @@ const resolvers = {
             // Solo enviar si el primer firmante no es el creador
             if (firstSignerId !== user.id) {
               try {
-                const signerResult = await query('SELECT name, email FROM users WHERE id = $1', [firstSignerId]);
+                const signerResult = await query('SELECT name, email, email_notifications FROM users WHERE id = $1', [firstSignerId]);
                 if (signerResult.rows.length > 0) {
                   const signer = signerResult.rows[0];
-                  await notificarAsignacionFirmante({
-                    email: signer.email,
-                    nombreFirmante: signer.name,
-                    nombreDocumento: docTitle,
-                    documentoId: documentId,
-                    creadorDocumento: creatorName
-                  });
-                  console.log(`📧 Correo enviado al primer firmante: ${signer.email}`);
+                  // Solo enviar si el usuario tiene notificaciones activadas
+                  if (signer.email_notifications) {
+                    await notificarAsignacionFirmante({
+                      email: signer.email,
+                      nombreFirmante: signer.name,
+                      nombreDocumento: docTitle,
+                      documentoId: documentId,
+                      creadorDocumento: creatorName
+                    });
+                    console.log(`📧 Correo enviado al primer firmante: ${signer.email}`);
+                  } else {
+                    console.log(`⏭️ Notificaciones desactivadas para: ${signer.email}`);
+                  }
                 }
               } catch (emailError) {
                 console.error(`Error al enviar correo al primer firmante:`, emailError);
@@ -922,7 +939,7 @@ const resolvers = {
         try {
           // Obtener el siguiente firmante en orden
           const nextSignerResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position
+            `SELECT u.id, u.name, u.email, u.email_notifications, ds.order_position
              FROM document_signers ds
              JOIN users u ON ds.user_id = u.id
              LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -967,18 +984,22 @@ const resolvers = {
                   [nextSigner.id, 'signature_request', documentId, user.id, docTitle]
                 );
 
-                // Enviar email al siguiente firmante
-                try {
-                  await notificarAsignacionFirmante({
-                    email: nextSigner.email,
-                    nombreFirmante: nextSigner.name,
-                    nombreDocumento: docTitle,
-                    documentoId: documentId,
-                    creadorDocumento: user.name
-                  });
-                  console.log(`📧 Correo enviado al siguiente firmante: ${nextSigner.email}`);
-                } catch (emailError) {
-                  console.error('Error al enviar correo al siguiente firmante:', emailError);
+                // Enviar email al siguiente firmante solo si tiene notificaciones activadas
+                if (nextSigner.email_notifications) {
+                  try {
+                    await notificarAsignacionFirmante({
+                      email: nextSigner.email,
+                      nombreFirmante: nextSigner.name,
+                      nombreDocumento: docTitle,
+                      documentoId: documentId,
+                      creadorDocumento: user.name
+                    });
+                    console.log(`📧 Correo enviado al siguiente firmante: ${nextSigner.email}`);
+                  } catch (emailError) {
+                    console.error('Error al enviar correo al siguiente firmante:', emailError);
+                  }
+                } else {
+                  console.log(`⏭️ Notificaciones desactivadas para: ${nextSigner.email}`);
                 }
               }
             }
@@ -1205,48 +1226,33 @@ const resolvers = {
             );
           }
 
-          // 3. Recopilar todos los emails para enviar notificación de rechazo
-          const emailsToNotify = [];
-
-          // Agregar email del creador (si no es quien rechazó)
+          // 3. Enviar correo de rechazo SOLO al creador del documento (si no es quien rechazó)
           if (doc.uploaded_by !== user.id) {
-            const creatorResult = await query('SELECT email FROM users WHERE id = $1', [doc.uploaded_by]);
-            if (creatorResult.rows.length > 0) {
-              emailsToNotify.push(creatorResult.rows[0].email);
-            }
-          }
-
-          // Agregar emails de otros firmantes
-          const otherSignersResult = await query(
-            `SELECT DISTINCT u.email
-             FROM document_signers ds
-             JOIN users u ON ds.user_id = u.id
-             WHERE ds.document_id = $1 AND ds.user_id != $2 AND ds.user_id != $3`,
-            [documentId, user.id, doc.uploaded_by]
-          );
-
-          for (const signer of otherSignersResult.rows) {
-            if (signer.email) {
-              emailsToNotify.push(signer.email);
-            }
-          }
-
-          // ========== ENVIAR CORREOS DE RECHAZO ==========
-          if (emailsToNotify.length > 0) {
             try {
-              console.log('📧 Documento rechazado, enviando correos de notificación...');
+              const creatorResult = await query('SELECT email, name, email_notifications FROM users WHERE id = $1', [doc.uploaded_by]);
 
-              await notificarDocumentoRechazado({
-                emails: emailsToNotify,
-                nombreDocumento: doc.title,
-                documentoId: documentId,
-                rechazadoPor: rejectorName,
-                motivoRechazo: reason || 'Sin motivo especificado'
-              });
+              if (creatorResult.rows.length > 0) {
+                const creator = creatorResult.rows[0];
 
-              console.log(`✅ Correos de rechazo enviados a ${emailsToNotify.length} personas`);
+                // Solo enviar si el creador tiene notificaciones activadas
+                if (creator.email_notifications) {
+                  console.log('📧 Documento rechazado, enviando correo al creador...');
+
+                  await notificarDocumentoRechazado({
+                    emails: [creator.email],
+                    nombreDocumento: doc.title,
+                    documentoId: documentId,
+                    rechazadoPor: rejectorName,
+                    motivoRechazo: reason || 'Sin motivo especificado'
+                  });
+
+                  console.log(`✅ Correo de rechazo enviado al creador: ${creator.email}`);
+                } else {
+                  console.log(`⏭️ Notificaciones desactivadas para el creador: ${creator.email}`);
+                }
+              }
             } catch (emailError) {
-              console.error('Error al enviar correos de rechazo:', emailError);
+              console.error('Error al enviar correo de rechazo:', emailError);
               // No lanzamos el error para que no falle el rechazo
             }
           }
@@ -1481,7 +1487,7 @@ const resolvers = {
           // 3. Si el documento NO está completado, notificar al siguiente firmante en la fila
           if (newStatus !== 'completed') {
             const nextSignerResult = await query(
-              `SELECT ds.user_id, u.name, u.email
+              `SELECT ds.user_id, u.name, u.email, u.email_notifications
                FROM document_signers ds
                JOIN users u ON ds.user_id = u.id
                LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1502,21 +1508,25 @@ const resolvers = {
                 [nextSigner.user_id, 'signature_request', documentId, doc.uploaded_by, doc.title]
               );
 
-              // Enviar email al siguiente firmante
-              try {
-                const creatorResult = await query('SELECT name FROM users WHERE id = $1', [doc.uploaded_by]);
-                const creatorName = creatorResult.rows.length > 0 ? creatorResult.rows[0].name : 'Administrador';
+              // Enviar email al siguiente firmante solo si tiene notificaciones activadas
+              if (nextSigner.email_notifications) {
+                try {
+                  const creatorResult = await query('SELECT name FROM users WHERE id = $1', [doc.uploaded_by]);
+                  const creatorName = creatorResult.rows.length > 0 ? creatorResult.rows[0].name : 'Administrador';
 
-                await notificarAsignacionFirmante({
-                  email: nextSigner.email,
-                  nombreFirmante: nextSigner.name,
-                  nombreDocumento: doc.title,
-                  documentoId: documentId,
-                  creadorDocumento: creatorName
-                });
-                console.log(`📧 Correo enviado al siguiente firmante: ${nextSigner.email}`);
-              } catch (emailError) {
-                console.error(`Error al enviar correo al siguiente firmante:`, emailError);
+                  await notificarAsignacionFirmante({
+                    email: nextSigner.email,
+                    nombreFirmante: nextSigner.name,
+                    nombreDocumento: doc.title,
+                    documentoId: documentId,
+                    creadorDocumento: creatorName
+                  });
+                  console.log(`📧 Correo enviado al siguiente firmante: ${nextSigner.email}`);
+                } catch (emailError) {
+                  console.error(`Error al enviar correo al siguiente firmante:`, emailError);
+                }
+              } else {
+                console.log(`⏭️ Notificaciones desactivadas para: ${nextSigner.email}`);
               }
             }
           }
@@ -1544,29 +1554,34 @@ const resolvers = {
           // ========== ENVIAR CORREO AL CREADOR SI DOCUMENTO COMPLETADO ==========
           if (newStatus === 'completed') {
             try {
-              console.log('📧 Documento completamente firmado, enviando correo al creador...');
-
               // Obtener información del creador
               const creatorResult = await query(
-                `SELECT email, name FROM users WHERE id = $1`,
+                `SELECT email, name, email_notifications FROM users WHERE id = $1`,
                 [doc.uploaded_by]
               );
 
               if (creatorResult.rows.length > 0) {
                 const creator = creatorResult.rows[0];
 
-                // Construir URL de descarga usando la ruta de la API
-                const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
+                // Solo enviar si el creador tiene notificaciones activadas
+                if (creator.email_notifications) {
+                  console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
-                // Enviar correo solo al creador
-                await notificarDocumentoFirmadoCompleto({
-                  emails: [creator.email],
-                  nombreDocumento: doc.title,
-                  documentoId: documentId,
-                  urlDescarga
-                });
+                  // Construir URL de descarga usando la ruta de la API
+                  const urlDescarga = `http://192.168.0.19:5001/api/download/${documentId}`;
 
-                console.log(`✅ Correo de documento completado enviado al creador: ${creator.email}`);
+                  // Enviar correo solo al creador
+                  await notificarDocumentoFirmadoCompleto({
+                    emails: [creator.email],
+                    nombreDocumento: doc.title,
+                    documentoId: documentId,
+                    urlDescarga
+                  });
+
+                  console.log(`✅ Correo de documento completado enviado al creador: ${creator.email}`);
+                } else {
+                  console.log(`⏭️ Notificaciones desactivadas para el creador: ${creator.email}`);
+                }
               }
             } catch (emailError) {
               console.error('Error al enviar correo de documento completado:', emailError);
@@ -1737,6 +1752,7 @@ const resolvers = {
     // Mapeo de snake_case (BD) a camelCase (GraphQL)
     adUsername: (parent) => parent.ad_username || null,
     isActive: (parent) => parent.is_active !== undefined ? parent.is_active : true,
+    emailNotifications: (parent) => parent.email_notifications !== undefined ? parent.email_notifications : true,
     createdAt: (parent) => parent.created_at,
     updatedAt: (parent) => parent.updated_at,
   },

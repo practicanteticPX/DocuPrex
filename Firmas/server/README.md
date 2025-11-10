@@ -31,7 +31,7 @@ El archivo `.env` contiene las variables de entorno:
 PORT=5001
 JWT_SECRET=tu-secreto-super-seguro-cambiar-en-produccion
 JWT_EXPIRES=8h
-FRONTEND_URL=http://192.168.0.30:5173
+FRONTEND_URL=http://192.168.0.19:5173
 
 # Base de Datos PostgreSQL Local (Docker)
 DATABASE_URL=postgresql://postgres:postgres123@postgres-db:5432/firmas_db
@@ -76,8 +76,8 @@ npm start
 ```
 
 El servidor estará disponible en:
-- **API GraphQL**: http://192.168.0.30:5001/graphql
-- **Health Check**: http://192.168.0.30:5001/health
+- **API GraphQL**: http://192.168.0.19:5001/graphql
+- **Health Check**: http://192.168.0.19:5001/health
 
 ## Schema GraphQL
 

@@ -10,7 +10,7 @@ export default defineConfig({
     allowedHosts: [
       'firmapro.com',
       'www.firmapro.com',
-      '192.168.0.30',
+      '192.168.0.19',
       'localhost'
     ]
   }

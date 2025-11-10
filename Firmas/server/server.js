@@ -49,7 +49,7 @@ async function startServer() {
     : [
         'http://firmapro.com:5173',
         'http://www.firmapro.com:5173',
-        'http://192.168.0.30:5173',
+        'http://192.168.0.19:5173',
         'http://localhost:5173'
       ];
 
@@ -248,8 +248,8 @@ async function startServer() {
 
   // Iniciar servidor
   app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://192.168.0.30:${PORT}`);
-    console.log(`📊 GraphQL disponible en http://192.168.0.30:${PORT}${server.graphqlPath}`);
+    console.log(`🚀 Servidor corriendo en http://192.168.0.19:${PORT}`);
+    console.log(`📊 GraphQL disponible en http://192.168.0.19:${PORT}${server.graphqlPath}`);
     console.log(`🔐 Autenticación Active Directory configurada`);
     console.log(`   - Host: ${process.env.AD_HOSTNAME || 'No configurado'}`);
     console.log(`   - Protocol: ${process.env.AD_PROTOCOL || 'ldap'}`);

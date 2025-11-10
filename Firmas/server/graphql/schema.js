@@ -10,6 +10,7 @@ const typeDefs = gql`
     role: String!
     adUsername: String
     isActive: Boolean!
+    emailNotifications: Boolean!
     createdAt: String!
     updatedAt: String!
   }
@@ -126,6 +127,7 @@ const typeDefs = gql`
     # Usuarios
     updateUser(id: ID!, name: String, email: String): User!
     deleteUser(id: ID!): Boolean!
+    updateEmailNotifications(enabled: Boolean!): User!
 
     # Documentos
     uploadDocument(title: String!, description: String): UploadResponse!
