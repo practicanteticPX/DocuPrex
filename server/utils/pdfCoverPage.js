@@ -18,15 +18,17 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     const existingPdfBytes = await fs.readFile(pdfPath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
 
-    // Crear una nueva página AL FINAL del documento
-    const coverPage = pdfDoc.addPage([595.28, 841.89]); // A4 en puntos
-
     // Cargar fuentes
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    const { width, height } = coverPage.getSize();
+    // Constantes de página
+    const width = 595.28;
+    const height = 841.89;
     const margin = 60;
+
+    // Crear la primera página de firmantes
+    let coverPage = pdfDoc.addPage([width, height]); // A4 en puntos
     let yPosition = height - 70;
 
     // ========== FONDO GRIS CLARO PARA TODO ==========
@@ -246,17 +248,21 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     // Variable para la página actual
     let currentPage = coverPage;
+    let signersInCurrentPage = 0; // Contador de firmantes en la página actual
+    const MAX_SIGNERS_PER_PAGE = 5; // Máximo 5 firmantes por página
+    let totalSignerPages = 1; // Contador de páginas de firmantes creadas
 
     // Dibujar cada firmante en cajas individuales
     for (let i = 0; i < sortedSigners.length; i++) {
       const signer = sortedSigners[i];
 
-      // Si no hay espacio suficiente, agregar nueva página
-      // 180 = altura de tarjeta (65) + espaciado (12) + margen de seguridad para footer (103)
-      if (yPosition < 180) {
-        const newPage = pdfDoc.addPage([595.28, 841.89]);
+      // Crear nueva página si ya hay 5 firmantes en la página actual
+      if (signersInCurrentPage >= MAX_SIGNERS_PER_PAGE) {
+        const newPage = pdfDoc.addPage([width, height]);
         currentPage = newPage;
-        yPosition = newPage.getSize().height - margin;
+        yPosition = height - margin;
+        signersInCurrentPage = 0;
+        totalSignerPages++; // Incrementar el contador de páginas
 
         // Aplicar fondo gris a la nueva página
         newPage.drawRectangle({
@@ -556,6 +562,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       }
 
       yPosition -= cardHeight + 12; // Espaciado entre tarjetas
+      signersInCurrentPage++; // Incrementar el contador de firmantes en la página
     }
 
     // ========== NOTA IMPORTANTE (FOOTER) ==========
@@ -651,11 +658,21 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       color: rgb(0.55, 0.55, 0.55),
     });
 
+    // Guardar en metadatos el número de páginas de firmantes para futuras actualizaciones
+    try {
+      const currentTitle = pdfDoc.getTitle() || '';
+      // Remover cualquier SignerPages anterior y agregar el nuevo
+      const cleanTitle = currentTitle.replace(/\s*SignerPages:\d+/g, '');
+      pdfDoc.setTitle(`${cleanTitle} SignerPages:${totalSignerPages}`.trim());
+    } catch (err) {
+      console.log('⚠️  No se pudieron guardar metadatos (no crítico)');
+    }
+
     // Guardar el PDF modificado
     const pdfBytes = await pdfDoc.save();
     await fs.writeFile(pdfPath, pdfBytes);
 
-    console.log(`✅ Página de firmantes agregada exitosamente`);
+    console.log(`✅ ${totalSignerPages} página(s) de firmantes agregada(s) exitosamente`);
 
     return pdfBytes;
   } catch (error) {
@@ -665,37 +682,66 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 }
 
 /**
- * Actualiza la última página del PDF con los estados actualizados de firmantes
+ * Actualiza las páginas de firmantes del PDF con los estados actualizados
+ * Elimina TODAS las páginas de firmantes anteriores y genera nuevas
  * @param {string} pdfPath - Ruta al PDF
  * @param {Array} signers - Array de firmantes con {name, email, order_position, status}
  * @param {Object} documentInfo - Información del documento
  */
 async function updateSignersPage(pdfPath, signers, documentInfo) {
   try {
-    console.log(`🔄 Actualizando página de firmantes en: ${path.basename(pdfPath)}`);
+    console.log(`🔄 Actualizando páginas de firmantes en: ${path.basename(pdfPath)}`);
 
     // Leer el PDF existente
     const existingPdfBytes = await fs.readFile(pdfPath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
 
-    const pageCount = pdfDoc.getPageCount();
+    let pageCount = pdfDoc.getPageCount();
 
-    // Eliminar la última página (la hoja de firmantes anterior)
-    if (pageCount > 1) {
-      pdfDoc.removePage(pageCount - 1);
-      console.log(`🗑️  Página anterior eliminada`);
+    // Leer metadatos para saber cuántas páginas de firmantes hay
+    // Si no existen metadatos, asumimos que hay 1 página de firmantes
+    let signerPagesToRemove = 1;
+
+    try {
+      const metadata = pdfDoc.getTitle();
+      // Buscamos un patrón como "SignerPages:N" en los metadatos
+      if (metadata && metadata.includes('SignerPages:')) {
+        const match = metadata.match(/SignerPages:(\d+)/);
+        if (match && match[1]) {
+          signerPagesToRemove = parseInt(match[1], 10);
+        }
+      }
+    } catch (err) {
+      console.log('⚠️  No se pudieron leer metadatos, asumiendo 1 página de firmantes');
     }
 
-    // Guardar el PDF sin la última página
-    const pdfBytesWithoutLast = await pdfDoc.save();
-    await fs.writeFile(pdfPath, pdfBytesWithoutLast);
+    // Eliminar las páginas de firmantes al final del documento
+    let pagesToRemove = 0;
+    for (let i = 0; i < signerPagesToRemove && pageCount > 1; i++) {
+      try {
+        pdfDoc.removePage(pageCount - 1);
+        pageCount--;
+        pagesToRemove++;
+      } catch (err) {
+        console.log(`⚠️  No se pudo eliminar la página ${i + 1}`);
+        break;
+      }
+    }
 
-    // Ahora agregar la nueva página con estados actualizados
+    if (pagesToRemove > 0) {
+      console.log(`🗑️  ${pagesToRemove} página(s) de firmantes eliminada(s)`);
+    }
+
+    // Guardar el PDF sin las páginas de firmantes
+    const pdfBytesWithoutSigners = await pdfDoc.save();
+    await fs.writeFile(pdfPath, pdfBytesWithoutSigners);
+
+    // Ahora agregar las nuevas páginas con estados actualizados
     await addCoverPageWithSigners(pdfPath, signers, documentInfo);
 
-    console.log(`✅ Página de firmantes actualizada exitosamente`);
+    console.log(`✅ Páginas de firmantes actualizadas exitosamente`);
   } catch (error) {
-    console.error('❌ Error al actualizar página de firmantes:', error);
+    console.error('❌ Error al actualizar páginas de firmantes:', error);
     throw error;
   }
 }
