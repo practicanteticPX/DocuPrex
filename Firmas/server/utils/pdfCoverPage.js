@@ -244,6 +244,9 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     // Ordenar firmantes por order_position
     const sortedSigners = [...signers].sort((a, b) => a.order_position - b.order_position);
 
+    // Variable para la página actual
+    let currentPage = coverPage;
+
     // Dibujar cada firmante en cajas individuales
     for (let i = 0; i < sortedSigners.length; i++) {
       const signer = sortedSigners[i];
@@ -251,6 +254,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       // Si no hay espacio suficiente, agregar nueva página
       if (yPosition < 130) {
         const newPage = pdfDoc.addPage([595.28, 841.89]);
+        currentPage = newPage;
         yPosition = newPage.getSize().height - margin;
 
         // Aplicar fondo gris a la nueva página
@@ -270,7 +274,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       // Fondo de la tarjeta del firmante con bordes redondeados
       // Rectángulo principal horizontal
-      coverPage.drawRectangle({
+      currentPage.drawRectangle({
         x: margin + cardRadius,
         y: cardY,
         width: cardWidth - (cardRadius * 2),
@@ -279,7 +283,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       });
 
       // Rectángulo principal vertical
-      coverPage.drawRectangle({
+      currentPage.drawRectangle({
         x: margin,
         y: cardY + cardRadius,
         width: cardWidth,
@@ -296,7 +300,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       ];
 
       cardCorners.forEach(corner => {
-        coverPage.drawCircle({
+        currentPage.drawCircle({
           x: corner.x,
           y: corner.y,
           size: cardRadius,
@@ -305,7 +309,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       });
 
       // Borde de la tarjeta
-      coverPage.drawRectangle({
+      currentPage.drawRectangle({
         x: margin,
         y: cardY,
         width: cardWidth,
@@ -321,7 +325,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       const avatarY = yPosition - (cardHeight / 2);
 
       // Círculo de fondo del avatar
-      coverPage.drawCircle({
+      currentPage.drawCircle({
         x: avatarX,
         y: avatarY,
         size: avatarSize / 2,
@@ -331,7 +335,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       // Número del firmante
       const orderNum = signer.order_position.toString();
       const numWidth = fontBold.widthOfTextAtSize(orderNum, 16);
-      coverPage.drawText(orderNum, {
+      currentPage.drawText(orderNum, {
         x: avatarX - (numWidth / 2),
         y: avatarY - 6,
         size: 16,
@@ -350,7 +354,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         ? signerName.substring(0, maxNameLength) + '...'
         : signerName;
 
-      coverPage.drawText(displayName, {
+      currentPage.drawText(displayName, {
         x: infoX,
         y: infoY,
         size: 11,
@@ -365,7 +369,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         ? signerEmail.substring(0, maxEmailLength) + '...'
         : signerEmail;
 
-      coverPage.drawText(displayEmail, {
+      currentPage.drawText(displayEmail, {
         x: infoX,
         y: infoY - 16,
         size: 9,
@@ -432,7 +436,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       const badgeRadius = badgeHeight / 2; // Radio = mitad de la altura para forma de píldora
 
       // Rectángulo central del badge
-      coverPage.drawRectangle({
+      currentPage.drawRectangle({
         x: badgeX + badgeRadius,
         y: badgeY - badgeHeight / 2,
         width: badgeWidth - (badgeRadius * 2),
@@ -441,7 +445,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       });
 
       // Círculo izquierdo del badge (forma de píldora)
-      coverPage.drawCircle({
+      currentPage.drawCircle({
         x: badgeX + badgeRadius,
         y: badgeY,
         size: badgeRadius,
@@ -449,7 +453,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       });
 
       // Círculo derecho del badge (forma de píldora)
-      coverPage.drawCircle({
+      currentPage.drawCircle({
         x: badgeX + badgeWidth - badgeRadius,
         y: badgeY,
         size: badgeRadius,
@@ -462,7 +466,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       if (showCheckCircle) {
         // Círculo verde con check
-        coverPage.drawCircle({
+        currentPage.drawCircle({
           x: iconX,
           y: iconY,
           size: 5,
@@ -470,13 +474,13 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
           borderWidth: 1.6,
         });
         // Check mark
-        coverPage.drawLine({
+        currentPage.drawLine({
           start: { x: iconX - 2, y: iconY - 0.2 },
           end: { x: iconX - 0.7, y: iconY - 1.8 },
           thickness: 1.6,
           color: statusTextColor,
         });
-        coverPage.drawLine({
+        currentPage.drawLine({
           start: { x: iconX - 0.7, y: iconY - 1.8 },
           end: { x: iconX + 2.3, y: iconY + 2 },
           thickness: 1.6,
@@ -484,7 +488,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         });
       } else if (showXCircle) {
         // Círculo rojo con X
-        coverPage.drawCircle({
+        currentPage.drawCircle({
           x: iconX,
           y: iconY,
           size: 5,
@@ -492,13 +496,13 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
           borderWidth: 1.6,
         });
         // X
-        coverPage.drawLine({
+        currentPage.drawLine({
           start: { x: iconX - 2.5, y: iconY - 2.5 },
           end: { x: iconX + 2.5, y: iconY + 2.5 },
           thickness: 1.6,
           color: statusTextColor,
         });
-        coverPage.drawLine({
+        currentPage.drawLine({
           start: { x: iconX + 2.5, y: iconY - 2.5 },
           end: { x: iconX - 2.5, y: iconY + 2.5 },
           thickness: 1.6,
@@ -506,7 +510,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         });
       } else if (showClockCircle) {
         // Círculo amarillo con reloj
-        coverPage.drawCircle({
+        currentPage.drawCircle({
           x: iconX,
           y: iconY,
           size: 5,
@@ -514,13 +518,13 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
           borderWidth: 1.6,
         });
         // Manecillas del reloj
-        coverPage.drawLine({
+        currentPage.drawLine({
           start: { x: iconX, y: iconY },
           end: { x: iconX, y: iconY + 3 },
           thickness: 1.3,
           color: statusTextColor,
         });
-        coverPage.drawLine({
+        currentPage.drawLine({
           start: { x: iconX, y: iconY },
           end: { x: iconX + 2.1, y: iconY + 1.1 },
           thickness: 1.3,
@@ -530,7 +534,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       // Texto del estado (a la derecha del icono)
       const textX = iconX + 12;
-      coverPage.drawText(statusText, {
+      currentPage.drawText(statusText, {
         x: textX,
         y: badgeY - 3,
         size: 9,
@@ -541,7 +545,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       // Fecha/hora debajo del badge (alineado a la derecha)
       if (dateTimeText) {
         const dateWidth = fontRegular.widthOfTextAtSize(dateTimeText, 7.5);
-        coverPage.drawText(dateTimeText, {
+        currentPage.drawText(dateTimeText, {
           x: badgeX + badgeWidth - dateWidth,
           y: badgeY - 20,
           size: 7.5,

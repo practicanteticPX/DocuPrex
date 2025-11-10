@@ -2018,15 +2018,7 @@ function Dashboard({ user, onLogout }) {
         <header className="dashboard-header">
           <div className="header-right">
             <Notifications onNotificationClick={handleNotificationClick} />
-            <div className="user-info">
-              <div className="user-avatar">
-                {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <div className="user-details">
-                <span className="user-name">{user?.name || user?.email}</span>
-                <span className="user-role">{user?.role || 'Usuario'}</span>
-              </div>
-            </div>
+
             <div style={{ position: 'relative' }}>
               <button
                 className="settings-button"
@@ -2161,6 +2153,17 @@ function Dashboard({ user, onLogout }) {
                 </>
               )}
             </div>
+
+            <div className="user-info">
+              <div className="user-avatar">
+                {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <div className="user-details">
+                <span className="user-name">{user?.name || user?.email}</span>
+                <span className="user-role">{user?.role || 'Usuario'}</span>
+              </div>
+            </div>
+
             <button className="logout-button" onClick={onLogout}>
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9M16 17L21 12M21 12L16 7M21 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
