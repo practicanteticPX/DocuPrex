@@ -1896,15 +1896,14 @@ function Dashboard({ user, onLogout }) {
     const draggedSigner = documentSigners[draggedSignerIndex];
     const targetSigner = documentSigners[dropIndex];
 
-    // Validar: no se puede mover un firmante que ya firmó o rechazó antes de su posición actual
-    if ((draggedSigner.status === 'signed' || draggedSigner.status === 'rejected') && dropIndex < draggedSignerIndex) {
-      alert(`No se puede mover a ${draggedSigner.signer.name || draggedSigner.signer.email} antes de su posición actual porque ya ha ${draggedSigner.status === 'signed' ? 'firmado' : 'rechazado'}`);
+    // REGLA 1: Los firmantes que ya firmaron o rechazaron NO se pueden mover EN ABSOLUTO
+    if (draggedSigner.status === 'signed' || draggedSigner.status === 'rejected') {
+      alert(`No se puede mover a ${draggedSigner.signer.name || draggedSigner.signer.email} porque ya ha ${draggedSigner.status === 'signed' ? 'firmado' : 'rechazado'}. Solo los firmantes pendientes pueden reordenarse.`);
       setDraggedSignerIndex(null);
       return;
     }
 
-    // Validar: nadie puede moverse ANTES de firmantes que ya firmaron o rechazaron
-    // (excepto los que ya están en esa zona)
+    // REGLA 2: Los firmantes PENDIENTES solo pueden moverse DESPUÉS de todos los que ya firmaron/rechazaron
     // Encontrar el índice del último firmante firmado/rechazado
     let lastSignedOrRejectedIndex = -1;
     for (let i = 0; i < documentSigners.length; i++) {
@@ -1913,16 +1912,12 @@ function Dashboard({ user, onLogout }) {
       }
     }
 
-    // Si hay firmantes firmados/rechazados
-    if (lastSignedOrRejectedIndex >= 0) {
-      // Si intentamos mover algo a una posición ANTES o IGUAL al último firmado/rechazado
-      // Y el firmante arrastrado viene de DESPUÉS de esa zona
-      if (dropIndex <= lastSignedOrRejectedIndex && draggedSignerIndex > lastSignedOrRejectedIndex) {
-        const minAllowedPosition = lastSignedOrRejectedIndex + 2; // +2 porque empiezan en 1 y queremos la siguiente
-        alert(`No puedes mover este firmante antes de la posición ${minAllowedPosition}. Los firmantes en las posiciones 1 a ${lastSignedOrRejectedIndex + 1} ya han firmado o rechazado. Solo puedes reordenar firmantes pendientes entre sí después de los que ya firmaron.`);
-        setDraggedSignerIndex(null);
-        return;
-      }
+    // Si hay firmantes firmados/rechazados y intentamos mover antes o en su zona
+    if (lastSignedOrRejectedIndex >= 0 && dropIndex <= lastSignedOrRejectedIndex) {
+      const minAllowedPosition = lastSignedOrRejectedIndex + 2; // +2 porque las posiciones empiezan en 1
+      alert(`No puedes mover este firmante a la posición ${dropIndex + 1}. Debe estar después de la posición ${lastSignedOrRejectedIndex + 1}, ya que los primeros ${lastSignedOrRejectedIndex + 1} firmantes ya han firmado o rechazado. Solo puedes reordenar firmantes pendientes entre sí.`);
+      setDraggedSignerIndex(null);
+      return;
     }
 
     // Crear nueva lista reordenada
