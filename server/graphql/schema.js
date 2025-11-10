@@ -46,30 +46,28 @@ const typeDefs = gql`
 
   type Signature {
     id: ID!
-    document: Document!
-    documentId: ID!
-    signer: User!
-    signerId: ID!
+    document: Document
+    documentId: ID
+    signer: User
+    signerId: ID
     signatureData: String
-    signatureType: String!
+    signatureType: String
     ipAddress: String
     userAgent: String
     status: String!
     rejectionReason: String
     rejectedAt: String
     signedAt: String
-    createdAt: String!
-    updatedAt: String!
+    createdAt: String
+    updatedAt: String
   }
 
   type DocumentSigner {
-    id: ID!
-    document: Document!
-    user: User!
+    userId: ID!
     orderPosition: Int!
     isRequired: Boolean!
-    notifiedAt: String
-    createdAt: String!
+    user: User!
+    signature: Signature
   }
 
   type Notification {
@@ -112,6 +110,7 @@ const typeDefs = gql`
 
     # Firmas
     signatures(documentId: ID!): [Signature!]!
+    documentSigners(documentId: ID!): [DocumentSigner!]!
     mySignatures: [Signature!]!
 
     # Notificaciones
@@ -135,6 +134,7 @@ const typeDefs = gql`
     deleteDocument(id: ID!): Boolean!
     assignSigners(documentId: ID!, userIds: [ID!]!): Boolean!
     removeSigner(documentId: ID!, userId: ID!): Boolean!
+    reorderSigners(documentId: ID!, newOrder: [ID!]!): Boolean!
 
     # Firmas
     signDocument(documentId: ID!, signatureData: String!): Signature!

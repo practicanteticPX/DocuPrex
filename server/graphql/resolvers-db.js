@@ -261,6 +261,51 @@ const resolvers = {
       return result.rows;
     },
 
+    // Obtener firmantes de un documento con orden y estado
+    documentSigners: async (_, { documentId }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT
+          ds.user_id as "userId",
+          ds.order_position as "orderPosition",
+          ds.is_required as "isRequired",
+          u.id as user_id,
+          u.name as user_name,
+          u.email as user_email,
+          s.id as signature_id,
+          s.status as signature_status,
+          s.signed_at as signature_signed_at,
+          s.rejected_at as signature_rejected_at,
+          s.rejection_reason as signature_rejection_reason,
+          s.created_at as signature_created_at
+        FROM document_signers ds
+        LEFT JOIN users u ON ds.user_id = u.id
+        LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+        WHERE ds.document_id = $1
+        ORDER BY ds.order_position ASC
+      `, [documentId]);
+
+      return result.rows.map(row => ({
+        userId: row.userId,
+        orderPosition: row.orderPosition,
+        isRequired: row.isRequired,
+        user: {
+          id: row.user_id,
+          name: row.user_name,
+          email: row.user_email
+        },
+        signature: (row.signature_id && row.signature_status) ? {
+          id: row.signature_id,
+          status: row.signature_status,
+          signedAt: row.signature_signed_at || null,
+          rejectedAt: row.signature_rejected_at || null,
+          rejectionReason: row.signature_rejection_reason || null,
+          createdAt: row.signature_created_at || null
+        } : null
+      }));
+    },
+
     // Obtener firmas del usuario
     mySignatures: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
@@ -1053,6 +1098,234 @@ const resolvers = {
             // Actualizar la página de portada
             await updateSignersPage(pdfPath, signers, documentInfo);
             console.log('✅ Página de portada actualizada exitosamente');
+          }
+        }
+      } catch (coverError) {
+        console.error('❌ Error al actualizar página de portada:', coverError);
+      }
+
+      return true;
+    },
+
+    // Reordenar firmantes
+    reorderSigners: async (_, { documentId, newOrder }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      // Verificar que el documento exista
+      const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
+      if (docResult.rows.length === 0) throw new Error('Documento no encontrado');
+
+      const doc = docResult.rows[0];
+
+      // Verificar que el usuario sea el creador o admin
+      if (doc.uploaded_by !== user.id && user.role !== 'admin') {
+        throw new Error('No autorizado para reordenar firmantes de este documento');
+      }
+
+      // Verificar que el documento no esté completado
+      if (doc.status === 'completed') {
+        throw new Error('No se pueden reordenar firmantes de un documento completado');
+      }
+
+      // Obtener los firmantes actuales con su estado
+      const signersResult = await query(
+        `SELECT ds.user_id, ds.order_position, s.status, u.name, u.email, u.email_notifications
+         FROM document_signers ds
+         LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+         LEFT JOIN users u ON u.id = ds.user_id
+         WHERE ds.document_id = $1
+         ORDER BY ds.order_position ASC`,
+        [documentId]
+      );
+
+      const currentSigners = signersResult.rows;
+
+      // Validar que el newOrder contenga exactamente los mismos user_ids
+      const currentUserIds = new Set(currentSigners.map(s => s.user_id));
+      const newOrderUserIds = new Set(newOrder);
+
+      if (currentUserIds.size !== newOrderUserIds.size ||
+          ![...currentUserIds].every(id => newOrderUserIds.has(id))) {
+        throw new Error('El nuevo orden debe contener exactamente los mismos firmantes');
+      }
+
+      // Validar que no se muevan firmantes que ya firmaron o rechazaron antes de sus posiciones actuales
+      const signersMap = new Map(currentSigners.map(s => [s.user_id, s]));
+
+      for (let i = 0; i < newOrder.length; i++) {
+        const userId = newOrder[i];
+        const signer = signersMap.get(userId);
+        const oldPosition = signer.order_position;
+        const newPosition = i + 1; // Las posiciones empiezan en 1
+
+        // Si el firmante ya firmó o rechazó, no se puede mover antes de su posición actual
+        if ((signer.status === 'signed' || signer.status === 'rejected') && newPosition < oldPosition) {
+          throw new Error(`No se puede mover a ${signer.name || signer.email} antes de su posición actual porque ya ha ${signer.status === 'signed' ? 'firmado' : 'rechazado'}`);
+        }
+      }
+
+      // Obtener firmantes que estaban en turno de firmar ANTES del reordenamiento
+      const previousInTurnResult = await query(
+        `SELECT ds.user_id, u.name, u.email, u.email_notifications
+         FROM document_signers ds
+         LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+         LEFT JOIN users u ON u.id = ds.user_id
+         WHERE ds.document_id = $1 AND s.status = 'pending'
+         ORDER BY ds.order_position ASC`,
+        [documentId]
+      );
+
+      const previousInTurn = [];
+      for (const signer of previousInTurnResult.rows) {
+        // Verificar si es su turno (todos los anteriores han firmado)
+        const previousSignedCount = await query(
+          `SELECT COUNT(*) as count
+           FROM document_signers ds
+           LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+           WHERE ds.document_id = $1
+           AND ds.order_position < (SELECT order_position FROM document_signers WHERE document_id = $1 AND user_id = $2)
+           AND s.status = 'signed'`,
+          [documentId, signer.user_id]
+        );
+
+        const expectedPreviousCount = (await query(
+          'SELECT order_position FROM document_signers WHERE document_id = $1 AND user_id = $2',
+          [documentId, signer.user_id]
+        )).rows[0].order_position - 1;
+
+        if (parseInt(previousSignedCount.rows[0].count) === expectedPreviousCount) {
+          previousInTurn.push(signer.user_id);
+        }
+      }
+
+      // Actualizar las posiciones de los firmantes
+      for (let i = 0; i < newOrder.length; i++) {
+        const userId = newOrder[i];
+        const newPosition = i + 1;
+
+        await query(
+          `UPDATE document_signers
+           SET order_position = $1
+           WHERE document_id = $2 AND user_id = $3`,
+          [newPosition, documentId, userId]
+        );
+      }
+
+      // Obtener firmantes que están en turno DESPUÉS del reordenamiento
+      const newInTurnResult = await query(
+        `SELECT ds.user_id, u.name, u.email, u.email_notifications, ds.order_position
+         FROM document_signers ds
+         LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+         LEFT JOIN users u ON u.id = ds.user_id
+         WHERE ds.document_id = $1 AND s.status = 'pending'
+         ORDER BY ds.order_position ASC`,
+        [documentId]
+      );
+
+      const newInTurn = [];
+      for (const signer of newInTurnResult.rows) {
+        // Verificar si es su turno (todos los anteriores han firmado)
+        const previousSignedCount = await query(
+          `SELECT COUNT(*) as count
+           FROM document_signers ds
+           LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+           WHERE ds.document_id = $1
+           AND ds.order_position < $2
+           AND s.status = 'signed'`,
+          [documentId, signer.order_position]
+        );
+
+        const expectedPreviousCount = signer.order_position - 1;
+
+        if (parseInt(previousSignedCount.rows[0].count) === expectedPreviousCount) {
+          newInTurn.push(signer.user_id);
+        }
+      }
+
+      // Eliminar notificaciones de los que YA NO están en turno
+      const usersToRemoveNotifications = previousInTurn.filter(userId => !newInTurn.includes(userId));
+
+      for (const userId of usersToRemoveNotifications) {
+        await query(
+          `DELETE FROM notifications
+           WHERE document_id = $1 AND user_id = $2 AND type = 'signature_request'`,
+          [documentId, userId]
+        );
+        console.log(`🗑️ Notificación de firma eliminada para usuario ${userId} (ya no está en turno)`);
+      }
+
+      // Agregar notificaciones para los que AHORA están en turno
+      const usersToAddNotifications = newInTurn.filter(userId => !previousInTurn.includes(userId));
+
+      for (const userId of usersToAddNotifications) {
+        const signerInfo = newInTurnResult.rows.find(s => s.user_id === userId);
+
+        // Verificar si ya existe una notificación
+        const existingNotif = await query(
+          `SELECT id FROM notifications
+           WHERE document_id = $1 AND user_id = $2 AND type = 'signature_request'`,
+          [documentId, userId]
+        );
+
+        if (existingNotif.rows.length === 0) {
+          // Crear notificación
+          await query(
+            `INSERT INTO notifications (user_id, document_id, type, created_at)
+             VALUES ($1, $2, 'signature_request', NOW())`,
+            [userId, documentId]
+          );
+
+          console.log(`✅ Notificación de firma creada para usuario ${userId} (ahora está en turno)`);
+
+          // Enviar correo si tiene habilitadas las notificaciones
+          if (signerInfo.email_notifications) {
+            try {
+              const { sendSignatureRequestEmail } = require('../services/emailService');
+              await sendSignatureRequestEmail(signerInfo.email, signerInfo.name, doc.title);
+              console.log(`📧 Email de firma enviado a ${signerInfo.email}`);
+            } catch (emailError) {
+              console.error('Error al enviar email:', emailError);
+            }
+          }
+        }
+      }
+
+      // Actualizar la hoja de informe de firmas en el PDF
+      try {
+        const { updateSignersPage } = require('../utils/pdfCoverPage');
+
+        const docInfo = await query(
+          `SELECT d.*, u.name as uploader_name
+           FROM documents d
+           LEFT JOIN users u ON d.uploaded_by = u.id
+           WHERE d.id = $1`,
+          [documentId]
+        );
+
+        if (docInfo.rows.length > 0) {
+          const signersResult = await query(
+            `SELECT u.id, u.name, u.email, ds.order_position, s.status, s.signed_at, s.rejected_at
+             FROM document_signers ds
+             JOIN users u ON ds.user_id = u.id
+             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+             WHERE ds.document_id = $1
+             ORDER BY ds.order_position ASC`,
+            [documentId]
+          );
+
+          const signers = signersResult.rows;
+
+          if (signers.length > 0) {
+            const pdfPath = path.join(__dirname, '..', docInfo.rows[0].file_path);
+
+            const documentInfo = {
+              title: docInfo.rows[0].title,
+              createdAt: docInfo.rows[0].created_at,
+              uploadedBy: docInfo.rows[0].uploader_name || 'Sistema'
+            };
+
+            await updateSignersPage(pdfPath, signers, documentInfo);
+            console.log('✅ Página de informe actualizada después de reordenar');
           }
         }
       } catch (coverError) {

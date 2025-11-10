@@ -113,6 +113,7 @@ function Dashboard({ user, onLogout }) {
   const [documentSigners, setDocumentSigners] = useState([]);
   const [loadingDocumentSigners, setLoadingDocumentSigners] = useState(false);
   const [modalSelectedSigners, setModalSelectedSigners] = useState([]);
+  const [searchNewSigner, setSearchNewSigner] = useState('');
   // Estado para confirmación de eliminación
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteDocId, setDeleteDocId] = useState(null);
@@ -1609,18 +1610,23 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetSignatures($documentId: ID!) {
-              signatures(documentId: $documentId) {
-                id
-                signer {
+            query GetDocumentSigners($documentId: ID!) {
+              documentSigners(documentId: $documentId) {
+                userId
+                orderPosition
+                user {
                   id
                   name
                   email
                 }
-                status
-                signedAt
-                createdAt
-                rejectionReason
+                signature {
+                  id
+                  status
+                  signedAt
+                  rejectedAt
+                  rejectionReason
+                  createdAt
+                }
               }
             }
           `,
@@ -1639,7 +1645,19 @@ function Dashboard({ user, onLogout }) {
         throw new Error(response.data.errors[0].message);
       }
 
-      setDocumentSigners(response.data.data.signatures || []);
+      // Transformar los datos para que sea compatible con el resto del código
+      const signers = (response.data.data.documentSigners || []).map(ds => ({
+        id: ds.signature?.id || `temp-${ds.userId}`,
+        signer: ds.user,
+        orderPosition: ds.orderPosition,
+        status: ds.signature?.status || 'pending',
+        signedAt: ds.signature?.signedAt,
+        rejectedAt: ds.signature?.rejectedAt,
+        rejectionReason: ds.signature?.rejectionReason,
+        createdAt: ds.signature?.createdAt || new Date().toISOString()
+      })).sort((a, b) => a.orderPosition - b.orderPosition);
+
+      setDocumentSigners(signers);
     } catch (err) {
       console.error('Error al cargar firmantes:', err);
       alert('Error al cargar la información de firmantes');
@@ -1801,14 +1819,23 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetSignatures($documentId: ID!) {
-              signatures(documentId: $documentId) {
-                id
-                signer { id name email }
-                status
-                signedAt
-                createdAt
-                rejectionReason
+            query GetDocumentSigners($documentId: ID!) {
+              documentSigners(documentId: $documentId) {
+                userId
+                orderPosition
+                user {
+                  id
+                  name
+                  email
+                }
+                signature {
+                  id
+                  status
+                  signedAt
+                  rejectedAt
+                  rejectionReason
+                  createdAt
+                }
               }
             }
           `,
@@ -1821,7 +1848,19 @@ function Dashboard({ user, onLogout }) {
         throw new Error(refresh.data.errors[0].message);
       }
 
-      setDocumentSigners(refresh.data.data.signatures || []);
+      // Transformar los datos
+      const signers = (refresh.data.data.documentSigners || []).map(ds => ({
+        id: ds.signature?.id || `temp-${ds.userId}`,
+        signer: ds.user,
+        orderPosition: ds.orderPosition,
+        status: ds.signature?.status || 'pending',
+        signedAt: ds.signature?.signedAt,
+        rejectedAt: ds.signature?.rejectedAt,
+        rejectionReason: ds.signature?.rejectionReason,
+        createdAt: ds.signature?.createdAt || new Date().toISOString()
+      })).sort((a, b) => a.orderPosition - b.orderPosition);
+
+      setDocumentSigners(signers);
       setLoadingDocumentSigners(false);
 
       // Recargar la lista de documentos
@@ -1832,6 +1871,153 @@ function Dashboard({ user, onLogout }) {
       console.error('Error al eliminar firmante:', err);
       alert(err.message || 'Error al eliminar firmante');
       setLoadingDocumentSigners(false);
+    }
+  };
+
+  // Drag and Drop handlers para modal de firmantes
+  const handleSignerDragStart = (e, index) => {
+    setDraggedSignerIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleSignerDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleSignerDrop = (e, dropIndex) => {
+    e.preventDefault();
+
+    if (draggedSignerIndex === null || draggedSignerIndex === dropIndex) {
+      setDraggedSignerIndex(null);
+      return;
+    }
+
+    const draggedSigner = documentSigners[draggedSignerIndex];
+    const targetSigner = documentSigners[dropIndex];
+
+    // Validar: no se puede mover un firmante que ya firmó o rechazó antes de su posición actual
+    if ((draggedSigner.status === 'signed' || draggedSigner.status === 'rejected') && dropIndex < draggedSignerIndex) {
+      alert(`No se puede mover a ${draggedSigner.signer.name || draggedSigner.signer.email} antes de su posición actual porque ya ha ${draggedSigner.status === 'signed' ? 'firmado' : 'rechazado'}`);
+      setDraggedSignerIndex(null);
+      return;
+    }
+
+    // Validar: nadie puede moverse ANTES de firmantes que ya firmaron o rechazaron
+    // (excepto los que ya están en esa zona)
+    // Encontrar el índice del último firmante firmado/rechazado
+    let lastSignedOrRejectedIndex = -1;
+    for (let i = 0; i < documentSigners.length; i++) {
+      if (documentSigners[i].status === 'signed' || documentSigners[i].status === 'rejected') {
+        lastSignedOrRejectedIndex = i;
+      }
+    }
+
+    // Si hay firmantes firmados/rechazados
+    if (lastSignedOrRejectedIndex >= 0) {
+      // Si intentamos mover algo a una posición ANTES o IGUAL al último firmado/rechazado
+      // Y el firmante arrastrado viene de DESPUÉS de esa zona
+      if (dropIndex <= lastSignedOrRejectedIndex && draggedSignerIndex > lastSignedOrRejectedIndex) {
+        const minAllowedPosition = lastSignedOrRejectedIndex + 2; // +2 porque empiezan en 1 y queremos la siguiente
+        alert(`No puedes mover este firmante antes de la posición ${minAllowedPosition}. Los firmantes en las posiciones 1 a ${lastSignedOrRejectedIndex + 1} ya han firmado o rechazado. Solo puedes reordenar firmantes pendientes entre sí después de los que ya firmaron.`);
+        setDraggedSignerIndex(null);
+        return;
+      }
+    }
+
+    // Crear nueva lista reordenada
+    const newSigners = [...documentSigners];
+    newSigners.splice(draggedSignerIndex, 1);
+    newSigners.splice(dropIndex, 0, draggedSigner);
+
+    // Actualizar los orderPosition para reflejar el nuevo orden
+    const updatedSigners = newSigners.map((signer, index) => ({
+      ...signer,
+      orderPosition: index + 1
+    }));
+
+    setDocumentSigners(updatedSigners);
+    setDraggedSignerIndex(null);
+  };
+
+  const handleSignerDragEnd = () => {
+    setDraggedSignerIndex(null);
+  };
+
+  // Guardar el nuevo orden en el servidor
+  const handleSaveOrder = async () => {
+    if (!managingDocument) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const newOrder = documentSigners.map(signer => signer.signer.id);
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation ReorderSigners($documentId: ID!, $newOrder: [ID!]!) {
+              reorderSigners(documentId: $documentId, newOrder: $newOrder)
+            }
+          `,
+          variables: {
+            documentId: managingDocument.id,
+            newOrder
+          }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      // Refrescar los datos
+      await handleManageSigners(managingDocument);
+      await loadMyDocuments();
+
+      alert('Orden de firmantes actualizado exitosamente');
+    } catch (err) {
+      console.error('Error al reordenar firmantes:', err);
+      alert(err.message || 'Error al reordenar firmantes');
+    }
+  };
+
+  // Función para agregar un nuevo firmante
+  const handleAddSingleSigner = async (userId) => {
+    if (!managingDocument) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation AssignSigners($documentId: ID!, $userIds: [ID!]!) {
+              assignSigners(documentId: $documentId, userIds: $userIds)
+            }
+          `,
+          variables: {
+            documentId: managingDocument.id,
+            userIds: [userId]
+          }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      // Refrescar los datos
+      await handleManageSigners(managingDocument);
+      await loadMyDocuments();
+      setSearchNewSigner('');
+
+      alert('Firmante agregado exitosamente');
+    } catch (err) {
+      console.error('Error al agregar firmante:', err);
+      alert(err.message || 'Error al agregar firmante');
     }
   };
 
@@ -4000,9 +4186,150 @@ function Dashboard({ user, onLogout }) {
                 </div>
               ) : (
                 <>
+                  {/* Buscador para agregar firmantes - Solo si el documento no está completado */}
+                  {managingDocument.status !== 'completed' && managingDocument.status !== 'rejected' && (
+                    <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
+                      <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#374151' }}>
+                        Agregar nuevo firmante
+                      </h3>
+                      <div className="signers-search-container" style={{ marginBottom: '8px' }}>
+                        <div className="search-input-wrapper">
+                          <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <input
+                            type="text"
+                            className="signers-search-input"
+                            placeholder="Buscar por nombre o correo..."
+                            value={searchNewSigner}
+                            onChange={(e) => setSearchNewSigner(e.target.value)}
+                          />
+                          {searchNewSigner && (
+                            <button
+                              className="search-clear-btn"
+                              onClick={() => setSearchNewSigner('')}
+                              type="button"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {searchNewSigner && (() => {
+                        const existingIds = new Set(documentSigners.map(s => s.signer?.id).filter(Boolean));
+                        const filtered = availableSigners.filter(s =>
+                          !existingIds.has(s.id) &&
+                          (s.name?.toLowerCase().includes(searchNewSigner.toLowerCase()) ||
+                           s.email?.toLowerCase().includes(searchNewSigner.toLowerCase()))
+                        );
+                        return filtered.length > 0 ? (
+                          <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px', marginTop: '8px' }}>
+                            {filtered.map(signer => (
+                              <div
+                                key={signer.id}
+                                onClick={() => handleAddSingleSigner(signer.id)}
+                                style={{
+                                  padding: '10px 12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  cursor: 'pointer',
+                                  borderBottom: '1px solid #f3f4f6',
+                                  transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                              >
+                                <div style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '50%',
+                                  background: '#E0E7FF',
+                                  color: '#4F46E5',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 'bold',
+                                  fontSize: '14px'
+                                }}>
+                                  {(signer.name || signer.email || 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <p style={{ margin: 0, fontSize: '14px', fontWeight: '500', color: '#111827' }}>
+                                    {signer.name || 'Usuario'}
+                                  </p>
+                                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280' }}>
+                                    {signer.email}
+                                  </p>
+                                </div>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M12 5V19M5 12H19" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
+                            No se encontraron usuarios disponibles
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#374151' }}>
+                    Firmantes del documento {managingDocument.status !== 'completed' && '(Arrastra para reordenar)'}
+                  </h3>
+
                   <div className="signers-list-modal">
-                    {documentSigners.map((signature) => (
-                      <div key={signature.id} className="signer-item-modal">
+                    {documentSigners.map((signature, index) => (
+                      <div
+                        key={signature.id}
+                        className="signer-item-modal"
+                        draggable={managingDocument.status !== 'completed' && (signature.status === 'pending' || signature.status === 'signed')}
+                        onDragStart={(e) => handleSignerDragStart(e, index)}
+                        onDragOver={(e) => handleSignerDragOver(e, index)}
+                        onDrop={(e) => handleSignerDrop(e, index)}
+                        onDragEnd={handleSignerDragEnd}
+                        style={{
+                          cursor: managingDocument.status !== 'completed' && (signature.status === 'pending' || signature.status === 'signed') ? 'move' : 'default',
+                          opacity: draggedSignerIndex === index ? 0.5 : 1,
+                          transition: 'opacity 0.2s'
+                        }}
+                      >
+                        {/* Drag handle - Solo si se puede mover */}
+                        {managingDocument.status !== 'completed' && (signature.status === 'pending' || signature.status === 'signed') && (
+                          <div style={{
+                            marginRight: '8px',
+                            color: '#9ca3af',
+                            cursor: 'grab',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px'
+                          }}>
+                            <div style={{ width: '4px', height: '4px', background: 'currentColor', borderRadius: '50%' }}></div>
+                            <div style={{ width: '4px', height: '4px', background: 'currentColor', borderRadius: '50%' }}></div>
+                            <div style={{ width: '4px', height: '4px', background: 'currentColor', borderRadius: '50%' }}></div>
+                          </div>
+                        )}
+                        <div className="signer-order-badge" style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          background: '#4F78F6',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 'bold',
+                          fontSize: '14px',
+                          marginRight: '12px',
+                          flexShrink: 0
+                        }}>
+                          {signature.orderPosition || (index + 1)}
+                        </div>
                         <div className="signer-avatar-modal">
                           {(signature.signer?.name || signature.signer?.email || 'U').charAt(0).toUpperCase()}
                         </div>
@@ -4100,102 +4427,6 @@ function Dashboard({ user, onLogout }) {
                     </div>
                   )}
 
-                  {/* Sección para agregar nuevos firmantes - Solo si el documento no está rechazado ni completado */}
-                  {managingDocument.status !== 'rejected' && managingDocument.status !== 'completed' && (
-                  <div className="signers-add-section" style={{ marginTop: '16px' }}>
-                    <h3 style={{ marginBottom: '8px' }}>Agregar firmantes</h3>
-                    {(() => {
-                      const existingIds = new Set((documentSigners || []).map(s => s?.signer?.id).filter(Boolean));
-                      const candidates = (availableSigners || []).filter(s => !existingIds.has(s.id));
-                      const filteredCandidates = getFilteredSignersForModal(candidates);
-
-                      return (
-                        <>
-                          {/* Buscador de firmantes para modal */}
-                          <div className="signers-search-container" style={{ marginBottom: '12px' }}>
-                            <div className="search-input-wrapper">
-                              <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                              <input
-                                type="text"
-                                className="signers-search-input"
-                                placeholder="Buscar por nombre o correo..."
-                                value={searchTermModal}
-                                onChange={(e) => setSearchTermModal(e.target.value)}
-                              />
-                              {searchTermModal && (
-                                <button
-                                  className="search-clear-btn"
-                                  onClick={() => setSearchTermModal('')}
-                                  type="button"
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="signers-actions" style={{ marginBottom: '8px' }}>
-                            <button
-                              type="button"
-                              className="signers-action-btn"
-                              onClick={() => selectAllModalSigners(candidates)}
-                              disabled={candidates.length === 0}
-                            >
-                              Seleccionar todos
-                            </button>
-                            <button
-                              type="button"
-                              className="signers-action-btn"
-                              onClick={clearModalSelectedSigners}
-                              disabled={modalSelectedSigners.length === 0}
-                            >
-                              Limpiar selección
-                            </button>
-                            <span className="signers-count">
-                              {modalSelectedSigners.length} de {candidates.length} seleccionados
-                            </span>
-                          </div>
-
-                          <div className="signers-list">
-                            {candidates.length === 0 ? (
-                              <div className="signers-empty">No hay más usuarios disponibles para agregar</div>
-                            ) : filteredCandidates.length === 0 ? (
-                              <div className="signers-empty">No se encontraron firmantes que coincidan con "{searchTermModal}"</div>
-                            ) : (
-                              filteredCandidates.map(signer => (
-                                <div
-                                  key={signer.id}
-                                  className={`signer-item ${modalSelectedSigners.includes(signer.id) ? 'selected' : ''}`}
-                                  onClick={() => toggleModalSigner(signer.id)}
-                                >
-                                  <div className="signer-avatar">
-                                    {(signer.name || signer.email || 'U').charAt(0).toUpperCase()}
-                                  </div>
-                                  <div className="signer-details">
-                                    <div className="signer-name">
-                                      {signer.name || 'Usuario'}
-                                      {user && user.id === signer.id && (
-                                        <span className="you-badge">Tú</span>
-                                      )}
-                                    </div>
-                                    <div className="signer-email">{signer.email}</div>
-                                  </div>
-                                  {modalSelectedSigners.includes(signer.id) && (
-                                    <div className="signer-selected">✓</div>
-                                  )}
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                  )}
                 </>
               )}
             </div>
@@ -4204,15 +4435,34 @@ function Dashboard({ user, onLogout }) {
               <button className="btn-close-modal" onClick={handleCloseSignersModal}>
                 Cerrar
               </button>
-              {managingDocument.status !== 'rejected' && managingDocument.status !== 'completed' && (
-              <button
-                className="action-button primary"
-                onClick={handleAddSignersToDocument}
-                disabled={modalSelectedSigners.length === 0}
-                style={{ marginLeft: '8px' }}
-              >
-                Agregar firmantes
-              </button>
+              {managingDocument.status !== 'completed' && managingDocument.status !== 'rejected' && documentSigners.length > 0 && (
+                <button
+                  className="action-button primary"
+                  onClick={handleSaveOrder}
+                  style={{
+                    marginLeft: '8px',
+                    padding: '10px 20px',
+                    background: '#4F78F6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#3b5fd9'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#4F78F6'}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M17 21V13H7V21M7 3V8H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Guardar Orden
+                </button>
               )}
             </div>
           </div>
