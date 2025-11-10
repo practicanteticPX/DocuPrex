@@ -1254,10 +1254,9 @@ const resolvers = {
         console.log(`🗑️ Notificación de firma eliminada para usuario ${userId} (ya no está en turno)`);
       }
 
-      // Agregar notificaciones para los que AHORA están en turno
-      const usersToAddNotifications = newInTurn.filter(userId => !previousInTurn.includes(userId));
-
-      for (const userId of usersToAddNotifications) {
+      // Crear/verificar notificaciones para TODOS los que ahora están en turno
+      // (no solo los nuevos, sino también los que vuelven a estar en turno)
+      for (const userId of newInTurn) {
         const signerInfo = newInTurnResult.rows.find(s => s.user_id === userId);
 
         // Verificar si ya existe una notificación
@@ -1287,6 +1286,8 @@ const resolvers = {
               console.error('Error al enviar email:', emailError);
             }
           }
+        } else {
+          console.log(`ℹ️ Notificación ya existe para usuario ${userId} (continúa en turno)`);
         }
       }
 
