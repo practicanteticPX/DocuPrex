@@ -195,7 +195,6 @@
 .logout-button:hover {
   background: rgba(102, 126, 234, 0.2);
   border-color: #667eea;
-  transform: translateY(-2px);
 }
 
 .logout-button svg {
@@ -407,7 +406,6 @@
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-  transform: translateY(-2px);
 }
 
 .form-textarea {
