@@ -76,6 +76,10 @@ function Dashboard({ user, onLogout }) {
   const [signing, setSigning] = useState(false);
   const [rejecting, setRejecting] = useState(false);
 
+  // Estado para modal de notificación elegante
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationData, setNotificationData] = useState({ title: '', message: '', type: 'info' });
+
   // Estados para confirmación de firma rápida (desde la tarjeta)
   const [showQuickSignConfirm, setShowQuickSignConfirm] = useState(false);
   const [documentToSign, setDocumentToSign] = useState(null);
@@ -205,6 +209,12 @@ function Dashboard({ user, onLogout }) {
       [activeStep]: true,
     });
     handleNext();
+  };
+
+  // Función helper para mostrar notificaciones elegantes
+  const showNotif = (title, message, type = 'info') => {
+    setNotificationData({ title, message, type });
+    setShowNotification(true);
   };
 
   const handleReset = () => {
@@ -366,18 +376,21 @@ function Dashboard({ user, onLogout }) {
         console.log(`   - Posición de firma: ${currentUserSigner ? currentUserSigner.orderPosition : 'N/A'}`);
         console.log(`   - Estado de firma: ${currentUserSigner?.signature?.status || 'Sin firma asignada'}`);
         console.log(`   - Puede firmar/rechazar: ${canSignOrReject ? 'SÍ' : 'NO'}`);
+        console.log(`   - Firmantes anteriores:`, signers.filter(s => s.orderPosition < (currentUserSigner?.orderPosition || 0)).map(s => ({ name: s.user.name, status: s.signature?.status })));
 
         // Si el documento se abrió desde URL y el usuario está esperando su turno,
         // mostrar la pantalla de "Aún no es tu turno"
         if (documentState === 'waiting') {
-          console.log('⏸️ Mostrando pantalla de espera - No es el turno del usuario');
+          console.log('⏸️ MOSTRANDO PANTALLA DE ESPERA - No es el turno del usuario');
+          console.log('⏸️ setShowWaitingTurnScreen(true)');
           setShowWaitingTurnScreen(true);
           setIsCheckingDocumentFromUrl(false);
+          setActiveTab('pending'); // Asegurar que esté en pending
           // NO limpiar la URL aquí - se limpiará cuando el usuario cierre el modal
         } else {
           // Abrir el documento con el estado determinado
+          console.log('✅ Abriendo documento desde URL con estado:', documentState);
           handleViewDocument(doc, canSignOrReject);
-          console.log('✅ Documento abierto desde URL');
           setIsCheckingDocumentFromUrl(false);
           // Limpiar la URL después de abrir el documento
           setTimeout(() => {
@@ -4531,40 +4544,14 @@ function Dashboard({ user, onLogout }) {
                         {/* Botón de eliminar - Solo para firmantes pendientes */}
                         {signature.status === 'pending' && managingDocument.status !== 'completed' && (
                           <button
-                            className="remove-signer-btn"
+                            className="btn-remove-signer"
                             onClick={() => handleRemoveSigner(signature.signer.id)}
                             disabled={documentSigners.length <= 1}
                             title={documentSigners.length <= 1 ? 'No se puede eliminar el único firmante' : 'Eliminar firmante'}
-                            style={{
-                              marginLeft: '8px',
-                              padding: '6px 10px',
-                              background: documentSigners.length <= 1 ? '#f3f4f6' : '#fee2e2',
-                              color: documentSigners.length <= 1 ? '#9ca3af' : '#dc2626',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: documentSigners.length <= 1 ? 'not-allowed' : 'pointer',
-                              fontSize: '13px',
-                              fontWeight: '500',
-                              transition: 'all 0.2s',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            onMouseEnter={(e) => {
-                              if (documentSigners.length > 1) {
-                                e.currentTarget.style.background = '#fecaca';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (documentSigners.length > 1) {
-                                e.currentTarget.style.background = '#fee2e2';
-                              }
-                            }}
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M3 6H5H21M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
-                            Eliminar
                           </button>
                         )}
                       </div>
@@ -4762,6 +4749,41 @@ function Dashboard({ user, onLogout }) {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de notificación elegante */}
+      {showNotification && (
+        <div className="notification-modal-overlay" onClick={() => setShowNotification(false)}>
+          <div className="notification-modal" onClick={(e) => e.stopPropagation()}>
+            <div className={`notification-icon ${notificationData.type}`}>
+              {notificationData.type === 'info' && (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13 16H12V12H11M12 8H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+              {notificationData.type === 'success' && (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+              {notificationData.type === 'warning' && (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 9V13M12 17H12.01M10.29 3.86L1.82 18C1.64537 18.3024 1.55295 18.6453 1.55199 18.9945C1.55103 19.3437 1.64156 19.6871 1.81443 19.9905C1.98731 20.2939 2.23676 20.5467 2.53789 20.7239C2.83903 20.9011 3.18167 20.9962 3.53 21H20.47C20.8183 20.9962 21.161 20.9011 21.4621 20.7239C21.7632 20.5467 22.0127 20.2939 22.1856 19.9905C22.3584 19.6871 22.449 19.3437 22.448 18.9945C22.447 18.6453 22.3546 18.3024 22.18 18L13.71 3.86C13.5317 3.56611 13.2807 3.32312 12.9812 3.15448C12.6817 2.98585 12.3437 2.89725 12 2.89725C11.6563 2.89725 11.3183 2.98585 11.0188 3.15448C10.7193 3.32312 10.4683 3.56611 10.29 3.86Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+              {notificationData.type === 'error' && (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            <h3 className="notification-title">{notificationData.title}</h3>
+            <p className="notification-message">{notificationData.message}</p>
+            <button className="notification-button" onClick={() => setShowNotification(false)}>
+              Entendido
+            </button>
           </div>
         </div>
       )}
