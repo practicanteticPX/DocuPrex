@@ -999,14 +999,28 @@ function Dashboard({ user, onLogout }) {
    */
   const handleDragOverSigner = (e, index) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
 
     // Establecer el índice sobre el que estamos arrastrando para el efecto visual
     setDragOverSignerIndex(index);
+  };
 
-    if (draggedSignerIndex === null || draggedSignerIndex === index) return;
+  /**
+   * Manejar drop de firmante
+   */
+  const handleDropSigner = (e, dropIndex) => {
+    e.preventDefault();
+
+    if (draggedSignerIndex === null || draggedSignerIndex === dropIndex) {
+      setDraggedSignerIndex(null);
+      setDragOverSignerIndex(null);
+      return;
+    }
 
     // Prevenir que cualquier firmante sea arrastrado a la posición 0 si el usuario actual está ahí
-    if (user && selectedSigners[0] === user.id && index === 0) {
+    if (user && selectedSigners[0] === user.id && dropIndex === 0) {
+      setDraggedSignerIndex(null);
+      setDragOverSignerIndex(null);
       return;
     }
 
@@ -1022,16 +1036,17 @@ function Dashboard({ user, onLogout }) {
       newOrder.splice(draggedSignerIndex, 1);
 
       // Si el usuario está en posición 0, no permitir que nadie vaya antes
-      if (user && newOrder[0] === user.id && index === 0) {
+      if (user && newOrder[0] === user.id && dropIndex === 0) {
         newOrder.splice(1, 0, draggedItem);
-        setDraggedSignerIndex(1);
       } else {
-        newOrder.splice(index, 0, draggedItem);
-        setDraggedSignerIndex(index);
+        newOrder.splice(dropIndex, 0, draggedItem);
       }
 
       return newOrder;
     });
+
+    setDraggedSignerIndex(null);
+    setDragOverSignerIndex(null);
   };
 
   /**
@@ -2958,6 +2973,7 @@ function Dashboard({ user, onLogout }) {
                                       draggable={canDrag}
                                       onDragStart={(e) => handleDragStartSigner(e, index)}
                                       onDragOver={(e) => handleDragOverSigner(e, index)}
+                                      onDrop={(e) => handleDropSigner(e, index)}
                                       onDragEnd={handleDragEndSigner}
                                     >
                                       <div className="signer-order-badge">
