@@ -178,6 +178,10 @@ function Dashboard({ user, onLogout }) {
   // Estado para popup de razón de rechazo
   const [rejectionReasonPopup, setRejectionReasonPopup] = useState(null);
 
+  // Estado para confirmación de eliminación de firmante
+  const [confirmRemoveSignerModal, setConfirmRemoveSignerModal] = useState(null);
+  const [removingSignerLoading, setRemovingSignerLoading] = useState(false);
+
   // Estados para Stepper funcional de MUI (3 pasos)
   const steps = ['Cargar documentos', 'Añadir firmantes', 'Enviar'];
   const [activeStep, setActiveStep] = useState(0);
@@ -1940,15 +1944,26 @@ function Dashboard({ user, onLogout }) {
   };
 
   // Eliminar firmante
-  const handleRemoveSigner = async (signerId) => {
+  const handleRemoveSigner = (signerId) => {
     if (!managingDocument) return;
 
     // Confirmar eliminación
     const signature = documentSigners.find(s => s.signer.id === signerId);
     if (!signature) return;
 
-    const confirmMessage = `¿Estás seguro de eliminar a ${signature.signer.name || signature.signer.email} de la lista de firmantes?`;
-    if (!window.confirm(confirmMessage)) return;
+    // Mostrar modal de confirmación
+    setConfirmRemoveSignerModal({
+      signerId,
+      signerName: signature.signer.name || signature.signer.email
+    });
+  };
+
+  // Confirmar eliminación de firmante
+  const confirmRemoveSignerAction = async () => {
+    if (!confirmRemoveSignerModal) return;
+
+    const { signerId } = confirmRemoveSignerModal;
+    setRemovingSignerLoading(true);
 
     try {
       const token = localStorage.getItem('token');
@@ -2025,11 +2040,14 @@ function Dashboard({ user, onLogout }) {
       // Recargar la lista de documentos
       await loadMyDocuments();
 
-      showNotif('Éxito', 'Firmante eliminado exitosamente', 'success');
+      // Cerrar el modal después de éxito
+      setConfirmRemoveSignerModal(null);
     } catch (err) {
       console.error('Error al eliminar firmante:', err);
       showNotif('Error', err.message || 'No se pudo eliminar el firmante', 'error');
       setLoadingDocumentSigners(false);
+    } finally {
+      setRemovingSignerLoading(false);
     }
   };
 
@@ -4547,8 +4565,8 @@ function Dashboard({ user, onLogout }) {
                             </span>
                           )}
                         </div>
-                        {/* Botón de eliminar - Solo para firmantes pendientes */}
-                        {signature.status === 'pending' && managingDocument.status !== 'completed' && (
+                        {/* Botón de eliminar - Solo para firmantes pendientes, placeholder para otros */}
+                        {signature.status === 'pending' && managingDocument.status !== 'completed' ? (
                           <button
                             className="btn-remove-signer"
                             onClick={() => handleRemoveSigner(signature.signer.id)}
@@ -4559,6 +4577,8 @@ function Dashboard({ user, onLogout }) {
                               <path d="M3 6H5H21M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           </button>
+                        ) : (
+                          <div className="btn-remove-signer-placeholder"></div>
                         )}
                       </div>
                     ))}
@@ -4803,6 +4823,45 @@ function Dashboard({ user, onLogout }) {
             <button className="notification-button" onClick={() => setShowNotification(false)}>
               Entendido
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación de firmante */}
+      {confirmRemoveSignerModal && (
+        <div className="delete-modal-overlay" onClick={() => setConfirmRemoveSignerModal(null)}>
+          <div className="delete-modal-minimal" onClick={(e) => e.stopPropagation()}>
+            {/* Icono de basura circular */}
+            <div className="delete-icon-circle">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 6H5H21M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+
+            {/* Título y descripción */}
+            <h2 className="delete-modal-title">Eliminar Firmante</h2>
+            <p className="delete-modal-description">
+              ¿Estás seguro que deseas eliminar este firmante? Esta acción no se puede deshacer.
+            </p>
+
+            {/* Botones */}
+            <div className="delete-modal-buttons">
+              <button
+                className="delete-btn-cancel"
+                onClick={() => setConfirmRemoveSignerModal(null)}
+                disabled={removingSignerLoading}
+              >
+                Cancelar
+              </button>
+              <button
+                className="delete-btn-confirm"
+                onClick={confirmRemoveSignerAction}
+                style={{background:"#fee2e2"}}
+                disabled={removingSignerLoading}
+              >
+                {removingSignerLoading ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
           </div>
         </div>
       )}

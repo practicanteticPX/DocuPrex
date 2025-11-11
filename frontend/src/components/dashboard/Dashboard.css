@@ -1492,6 +1492,14 @@
   height: 18px;
 }
 
+/* Placeholder para mantener alineación cuando no hay botón de eliminar */
+.btn-remove-signer-placeholder {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
 /* Modal de notificación elegante */
 .notification-modal-overlay {
   position: fixed;
