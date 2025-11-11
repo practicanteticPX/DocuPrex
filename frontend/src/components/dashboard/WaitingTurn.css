@@ -64,6 +64,19 @@
   }
 }
 
+/* Animación de puntos de carga para el texto "Verificando..." */
+@keyframes loadingDots {
+  0%, 20% {
+    content: '.';
+  }
+  40% {
+    content: '..';
+  }
+  60%, 100% {
+    content: '...';
+  }
+}
+
 /* Título principal más grande y profesional */
 .waiting-turn-title {
   font-size: 32px;

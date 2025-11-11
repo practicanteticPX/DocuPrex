@@ -55,6 +55,13 @@ function Dashboard({ user, onLogout }) {
   const [viewingDocument, setViewingDocument] = useState(null);
   const [isViewingPending, setIsViewingPending] = useState(false);
   const [documentLoadedFromUrl, setDocumentLoadedFromUrl] = useState(false);
+  // Establecer isCheckingDocumentFromUrl en true si hay un documento en la URL desde el inicio
+  const [isCheckingDocumentFromUrl, setIsCheckingDocumentFromUrl] = useState(() => {
+    const path = window.location.pathname;
+    const savedPath = sessionStorage.getItem('redirectAfterLogin');
+    const checkPath = savedPath || path;
+    return /\/documento\/[a-zA-Z0-9\-]+/.test(checkPath);
+  });
   const [showWaitingTurnScreen, setShowWaitingTurnScreen] = useState(false);
   const [showSignConfirm, setShowSignConfirm] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
@@ -363,11 +370,13 @@ function Dashboard({ user, onLogout }) {
         if (documentState === 'waiting') {
           console.log('⏸️ Mostrando pantalla de espera - No es el turno del usuario');
           setShowWaitingTurnScreen(true);
+          setIsCheckingDocumentFromUrl(false);
           // NO limpiar la URL aquí - se limpiará cuando el usuario cierre el modal
         } else {
           // Abrir el documento con el estado determinado
           handleViewDocument(doc, canSignOrReject);
           console.log('✅ Documento abierto desde URL');
+          setIsCheckingDocumentFromUrl(false);
           // Limpiar la URL después de abrir el documento
           setTimeout(() => {
             window.history.replaceState({}, '', '/');
@@ -376,10 +385,12 @@ function Dashboard({ user, onLogout }) {
       } else {
         console.error('❌ Documento no encontrado');
         setError('El documento solicitado no existe o no tienes acceso a él');
+        setIsCheckingDocumentFromUrl(false);
       }
     } catch (error) {
       console.error('❌ Error al cargar documento desde URL:', error);
       setError('Error al cargar el documento');
+      setIsCheckingDocumentFromUrl(false);
     }
   };
 
@@ -2246,6 +2257,20 @@ function Dashboard({ user, onLogout }) {
   const formatFileSize = (bytes) => {
     return (bytes / 1024 / 1024).toFixed(2) + ' MB';
   };
+
+  // Si se está verificando el documento desde URL, mostrar pantalla de carga
+  if (isCheckingDocumentFromUrl) {
+    return (
+      <div className="waiting-turn-fullscreen-overlay">
+        <div className="waiting-turn-modal">
+          <div className="waiting-turn-content">
+            <img src={clockImage} alt="Verificando documento" className="waiting-turn-icon" />
+            <h2 className="waiting-turn-title">Verificando documento...</h2>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">
