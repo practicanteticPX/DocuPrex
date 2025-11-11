@@ -38,7 +38,8 @@
       "Bash(docker inspect:*)",
       "Bash(del \"d:\\docuprex_docker\\frontend\\public\\vite-hmr-config.js\")",
       "Bash(docker network create:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import './Dashboard.css';
 import './Dashboard.overrides.css';
@@ -90,6 +91,16 @@ function Dashboard({ user, onLogout }) {
   const [selectedSigners, setSelectedSigners] = useState([]);
   const [loadingSigners, setLoadingSigners] = useState(false);
 
+  // Estados para tipos de documentos y roles
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [selectedDocumentType, setSelectedDocumentType] = useState(null);
+  const [documentTypeRoles, setDocumentTypeRoles] = useState([]);
+  const [loadingDocumentTypes, setLoadingDocumentTypes] = useState(false);
+
+  // Estados para dropdown de roles
+  const [openRoleDropdown, setOpenRoleDropdown] = useState(null); // ID del firmante con dropdown abierto
+  const [roleDropdownPosition, setRoleDropdownPosition] = useState({ top: 0, left: 0 });
+
   // Estados para búsqueda de firmantes
   const [searchTermUpload, setSearchTermUpload] = useState('');
   const [searchTermModal, setSearchTermModal] = useState('');
@@ -151,6 +162,24 @@ function Dashboard({ user, onLogout }) {
       document.body.style.width = '';
     };
   }, [showWaitingTurnScreen]);
+
+  // Cerrar dropdowns de roles al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const dropdowns = document.querySelectorAll('.role-dropdown-menu');
+      dropdowns.forEach(dropdown => {
+        const button = dropdown.previousElementSibling;
+        if (dropdown && !dropdown.contains(event.target) && button && !button.contains(event.target)) {
+          dropdown.style.display = 'none';
+        }
+      });
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, []);
 
   // Estados para modal de gestión de firmantes
   const [managingDocument, setManagingDocument] = useState(null);
@@ -491,10 +520,11 @@ function Dashboard({ user, onLogout }) {
     }
   }, [activeTab]);
 
-  // Cargar firmantes disponibles al montar o cambiar a tab upload
+  // Cargar firmantes disponibles y tipos de documentos al montar o cambiar a tab upload
   useEffect(() => {
     if (activeTab === 'upload') {
       loadAvailableSigners();
+      loadDocumentTypes();
     }
   }, [activeTab]);
 
@@ -817,6 +847,72 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
+   * Cargar tipos de documentos desde GraphQL
+   */
+  const loadDocumentTypes = async () => {
+    setLoadingDocumentTypes(true);
+    try {
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        console.warn('No hay token disponible para cargar tipos de documentos');
+        return;
+      }
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            query {
+              documentTypes {
+                id
+                name
+                code
+                description
+                prefix
+                roles {
+                  id
+                  roleName
+                  roleCode
+                  orderPosition
+                  isRequired
+                  description
+                }
+              }
+            }
+          `
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        const error = response.data.errors[0];
+        if (isAuthError(error)) {
+          console.warn('Token inválido o expirado al cargar tipos de documentos');
+          setDocumentTypes([]);
+          return;
+        }
+        throw new Error(error.message);
+      }
+
+      setDocumentTypes(response.data.data.documentTypes || []);
+    } catch (err) {
+      console.error('Error al cargar tipos de documentos:', err);
+      if (isAuthError(err)) {
+        setDocumentTypes([]);
+      } else {
+        setError('Error al cargar tipos de documentos');
+      }
+    } finally {
+      setLoadingDocumentTypes(false);
+    }
+  };
+
+  /**
    * Cargar documentos rechazados desde GraphQL
    */
   const loadRejectedDocuments = async () => {
@@ -933,20 +1029,35 @@ function Dashboard({ user, onLogout }) {
    */
   const toggleSigner = (signerId) => {
     setSelectedSigners(prev => {
-      if (prev.includes(signerId)) {
-        return prev.filter(id => id !== signerId);
+      const isAlreadySelected = prev.some(s =>
+        typeof s === 'object' ? s.userId === signerId : s === signerId
+      );
+
+      if (isAlreadySelected) {
+        return prev.filter(s =>
+          typeof s === 'object' ? s.userId !== signerId : s !== signerId
+        );
       } else {
+        const newSigner = { userId: signerId, roleId: null, roleName: null };
         // Si el firmante es el usuario actual, agregarlo de primero
         if (user && user.id === signerId) {
-          return [signerId, ...prev];
+          return [newSigner, ...prev];
         }
         // Si el usuario actual ya está en la lista, agregarlo después del usuario
-        if (user && prev.includes(user.id)) {
-          const withoutUser = prev.filter(id => id !== user.id);
-          return [user.id, ...withoutUser, signerId];
+        const currentUserInList = prev.some(s =>
+          typeof s === 'object' ? s.userId === user.id : s === user.id
+        );
+        if (user && currentUserInList) {
+          const withoutUser = prev.filter(s =>
+            typeof s === 'object' ? s.userId !== user.id : s !== user.id
+          );
+          const currentUserItem = prev.find(s =>
+            typeof s === 'object' ? s.userId === user.id : s === user.id
+          );
+          return [currentUserItem, ...withoutUser, newSigner];
         }
         // Si no, agregarlo al final
-        return [...prev, signerId];
+        return [...prev, newSigner];
       }
     });
   };
@@ -993,14 +1104,39 @@ function Dashboard({ user, onLogout }) {
    * Eliminar firmante de la lista seleccionada
    */
   const removeSignerFromSelected = (signerId) => {
-    setSelectedSigners(prev => prev.filter(id => id !== signerId));
+    setSelectedSigners(prev => prev.filter(s =>
+      typeof s === 'object' ? s.userId !== signerId : s !== signerId
+    ));
+  };
+
+  /**
+   * Actualizar el rol asignado a un firmante
+   */
+  const updateSignerRole = (signerId, roleId, roleName) => {
+    setSelectedSigners(prev => prev.map(s => {
+      const userId = typeof s === 'object' ? s.userId : s;
+      if (userId === signerId) {
+        // Si se está quitando el rol (roleId null), volver a ID simple
+        if (!roleId) {
+          return signerId;
+        }
+        // Asignar o actualizar rol
+        return {
+          userId: signerId,
+          roleId: roleId,
+          roleName: roleName
+        };
+      }
+      return s;
+    }));
   };
 
   /**
    * Manejar inicio de arrastre de firmante
    */
   const handleDragStartSigner = (e, index) => {
-    const signerId = selectedSigners[index];
+    const signerItem = selectedSigners[index];
+    const signerId = typeof signerItem === 'object' ? signerItem.userId : signerItem;
     // Prevenir que el usuario actual sea arrastrado
     if (user && user.id === signerId) {
       e.preventDefault();
@@ -1034,7 +1170,9 @@ function Dashboard({ user, onLogout }) {
     }
 
     // Prevenir que cualquier firmante sea arrastrado a la posición 0 si el usuario actual está ahí
-    if (user && selectedSigners[0] === user.id && dropIndex === 0) {
+    const firstSignerItem = selectedSigners[0];
+    const firstSignerId = typeof firstSignerItem === 'object' ? firstSignerItem.userId : firstSignerItem;
+    if (user && firstSignerId === user.id && dropIndex === 0) {
       setDraggedSignerIndex(null);
       setDragOverSignerIndex(null);
       return;
@@ -1043,9 +1181,10 @@ function Dashboard({ user, onLogout }) {
     setSelectedSigners(prev => {
       const newOrder = [...prev];
       const draggedItem = newOrder[draggedSignerIndex];
+      const draggedUserId = typeof draggedItem === 'object' ? draggedItem.userId : draggedItem;
 
       // Prevenir que se mueva el usuario actual
-      if (user && draggedItem === user.id) {
+      if (user && draggedUserId === user.id) {
         return prev;
       }
 
@@ -1300,9 +1439,15 @@ function Dashboard({ user, onLogout }) {
       }
       // Ya no usamos 'title' como nombre del documento cuando hay múltiples,
       // el backend usará el nombre real del archivo como título y 'groupTitle' para agrupar.
-      formData.append('title', documentTitle.trim());
+      const finalTitle = selectedDocumentType
+        ? `${selectedDocumentType.prefix} ${documentTitle.trim()}`
+        : documentTitle.trim();
+      formData.append('title', finalTitle);
       if (documentDescription.trim()) {
         formData.append('description', documentDescription.trim());
+      }
+      if (selectedDocumentType) {
+        formData.append('documentTypeId', selectedDocumentType.id);
       }
 
       // Determinar endpoint según número de archivos y opción de unificar
@@ -1325,17 +1470,34 @@ function Dashboard({ user, onLogout }) {
 
         // Asignar firmantes a cada documento creado
         for (const doc of documents) {
+          // Preparar signerAssignments según si son objetos o IDs simples
+          const signerAssignments = selectedSigners.map(s => {
+            if (typeof s === 'object') {
+              return {
+                userId: s.userId,
+                roleId: s.roleId || null,
+                roleName: s.roleName || null
+              };
+            } else {
+              return {
+                userId: s,
+                roleId: null,
+                roleName: null
+              };
+            }
+          });
+
           const assignResponse = await axios.post(
             API_URL,
             {
               query: `
-                mutation AssignSigners($documentId: ID!, $userIds: [ID!]!) {
-                  assignSigners(documentId: $documentId, userIds: $userIds)
+                mutation AssignSigners($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
+                  assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
                 }
               `,
               variables: {
                 documentId: doc.id,
-                userIds: selectedSigners
+                signerAssignments
               }
             },
             { headers: { Authorization: `Bearer ${token}` } }
@@ -1345,7 +1507,10 @@ function Dashboard({ user, onLogout }) {
           }
 
           // Autofirma: Si el usuario actual está en la lista de firmantes, firmar automáticamente
-          if (user && user.id && selectedSigners.includes(user.id)) {
+          const userInSigners = selectedSigners.some(s =>
+            typeof s === 'object' ? s.userId === user.id : s === user.id
+          );
+          if (user && user.id && userInSigners) {
             try {
               const signResponse = await axios.post(
                 API_URL,
@@ -2725,19 +2890,77 @@ function Dashboard({ user, onLogout }) {
                   {activeStep === 0 && (
                     <>
                       <div className="form-group">
+                        <label htmlFor="document-type">
+                          Tipo de documento <span>(opcional)</span>
+                        </label>
+                        <select
+                          id="document-type"
+                          value={selectedDocumentType?.id || ''}
+                          onChange={(e) => {
+                            const typeId = e.target.value;
+                            if (typeId) {
+                              const docType = documentTypes.find(dt => dt.id === typeId);
+                              setSelectedDocumentType(docType);
+                              setDocumentTypeRoles(docType?.roles || []);
+                              // Limpiar firmantes seleccionados cuando cambia el tipo
+                              setSelectedSigners([]);
+                            } else {
+                              setSelectedDocumentType(null);
+                              setDocumentTypeRoles([]);
+                            }
+                          }}
+                          className="form-input"
+                          disabled={uploading || loadingDocumentTypes}
+                        >
+                          <option value="">Sin tipo específico</option>
+                          {documentTypes.map(type => (
+                            <option key={type.id} value={type.id}>
+                              {type.name}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDocumentType && (
+                          <small style={{ display: 'block', marginTop: '0.5rem', color: '#666' }}>
+                            {selectedDocumentType.description}
+                          </small>
+                        )}
+                      </div>
+
+                      <div className="form-group">
                         <label htmlFor="document-title">
                           Título del documento
+                          {selectedDocumentType && (
+                            <span style={{ color: '#059669', fontWeight: '600', marginLeft: '0.5rem' }}>
+                              (comenzará con "{selectedDocumentType.prefix}")
+                            </span>
+                          )}
                         </label>
-                        <input
-                          type="text"
-                          id="document-title"
-                          value={documentTitle}
-                          onChange={(e) => setDocumentTitle(e.target.value)}
-                          placeholder="Ej: Solicitud de anticipo..."
-                          className="form-input"
-                          disabled={uploading}
-                          required
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {selectedDocumentType && (
+                            <span style={{
+                              padding: '0.5rem 1rem',
+                              backgroundColor: '#f3f4f6',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '0.375rem',
+                              fontWeight: '600',
+                              color: '#374151',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {selectedDocumentType.prefix}
+                            </span>
+                          )}
+                          <input
+                            type="text"
+                            id="document-title"
+                            value={documentTitle}
+                            onChange={(e) => setDocumentTitle(e.target.value)}
+                            placeholder={selectedDocumentType ? "Concepto del anticipo..." : "Ej: Solicitud de anticipo..."}
+                            className="form-input"
+                            style={{ flex: 1 }}
+                            disabled={uploading}
+                            required
+                          />
+                        </div>
                       </div>
 
                       <div className="form-group">
@@ -2904,7 +3127,9 @@ function Dashboard({ user, onLogout }) {
                                 <div className="autocomplete-dropdown">
                                   {(() => {
                                     const filteredSigners = getFilteredSignersForUpload().filter(
-                                      s => !selectedSigners.includes(s.id)
+                                      s => !selectedSigners.some(ss =>
+                                        typeof ss === 'object' ? ss.userId === s.id : ss === s.id
+                                      )
                                     );
 
                                     if (filteredSigners.length === 0) {
@@ -2962,7 +3187,8 @@ function Dashboard({ user, onLogout }) {
                               </div>
 
                               <div className="selected-signers-container">
-                                {selectedSigners.map((signerId, index) => {
+                                {selectedSigners.map((signerItem, index) => {
+                                  const signerId = typeof signerItem === 'object' ? signerItem.userId : signerItem;
                                   const signer = availableSigners.find(s => s.id === signerId);
                                   if (!signer) return null;
 
@@ -2990,10 +3216,67 @@ function Dashboard({ user, onLogout }) {
                                       <div className="signer-info-modern flex-grow">
                                         <p className="signer-name-modern">
                                           {signer.name}
+                                          {(() => {
+                                            const signerObj = selectedSigners.find(s =>
+                                              typeof s === 'object' ? s.userId === signerId : s === signerId
+                                            );
+                                            const roleName = typeof signerObj === 'object' ? signerObj.roleName : null;
+                                            return roleName ? (
+                                              <span style={{ fontWeight: '400', color: '#374151' }}> - {roleName}</span>
+                                            ) : null;
+                                          })()}
                                           {isCurrentUser && <span className="you-tag">Tú</span>}
                                         </p>
                                         <p className="signer-email-modern">{signer.email}</p>
                                       </div>
+
+                                      {/* Selector de rol cuando hay tipo de documento - Botón dropdown */}
+                                      {selectedDocumentType && documentTypeRoles.length > 0 && (
+                                        <button
+                                          type="button"
+                                          className="role-dropdown-btn"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+
+                                            if (openRoleDropdown === signerId) {
+                                              // Cerrar si ya está abierto
+                                              setOpenRoleDropdown(null);
+                                            } else {
+                                              // Calcular posición y abrir
+                                              const rect = e.currentTarget.getBoundingClientRect();
+                                              setRoleDropdownPosition({
+                                                top: rect.bottom + 4,
+                                                left: rect.right - 240
+                                              });
+                                              setOpenRoleDropdown(signerId);
+                                            }
+                                          }}
+                                          disabled={uploading}
+                                            style={{
+                                              padding: '0.5rem',
+                                              border: '1px solid #d1d5db',
+                                              borderRadius: '0.375rem',
+                                              backgroundColor: 'white',
+                                              cursor: 'pointer',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              transition: 'all 0.15s',
+                                              width: '36px',
+                                              height: '36px',
+                                              pointerEvents: 'auto',
+                                              position: 'relative',
+                                              zIndex: 10
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                          >
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: '#6b7280', pointerEvents: 'none' }}>
+                                              <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </button>
+                                      )}
 
                                       <button
                                         type="button"
@@ -5010,6 +5293,138 @@ function Dashboard({ user, onLogout }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Portal: Dropdown de roles (renderizado fuera del contenedor para evitar overflow) */}
+      {openRoleDropdown && createPortal(
+        <div
+          className="role-dropdown-overlay"
+          onClick={() => setOpenRoleDropdown(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9998,
+            backgroundColor: 'transparent'
+          }}
+        >
+          <div
+            className="role-dropdown-menu"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: `${roleDropdownPosition.top}px`,
+              left: `${roleDropdownPosition.left}px`,
+              minWidth: '240px',
+              backgroundColor: 'white',
+              border: '1px solid #d1d5db',
+              borderRadius: '0.5rem',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+              zIndex: 9999,
+              maxHeight: '280px',
+              overflowY: 'auto',
+              padding: '0.5rem'
+            }}
+          >
+            {(() => {
+              // Encontrar el firmante actual
+              const signerObj = selectedSigners.find(s =>
+                (typeof s === 'object' ? s.userId : s) === openRoleDropdown
+              );
+              const currentRoleId = typeof signerObj === 'object' ? signerObj.roleId : null;
+
+              return (
+                <>
+                  {/* Opción para quitar rol (si tiene uno asignado) */}
+                  {currentRoleId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateSignerRole(openRoleDropdown, null, null);
+                        setOpenRoleDropdown(null);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem 0.75rem',
+                        textAlign: 'left',
+                        backgroundColor: 'white',
+                        border: 'none',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        color: '#dc2626',
+                        fontWeight: '500',
+                        marginBottom: '0.5rem',
+                        transition: 'background-color 0.15s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                    >
+                      Quitar rol
+                    </button>
+                  )}
+
+                  {/* Divisor si hay opción de quitar */}
+                  {currentRoleId && (
+                    <div style={{
+                      height: '1px',
+                      backgroundColor: '#e5e7eb',
+                      margin: '0.5rem 0'
+                    }} />
+                  )}
+
+                  {/* Lista de roles disponibles */}
+                  {documentTypeRoles.map((role) => {
+                    const isSelected = currentRoleId === role.id;
+                    return (
+                      <button
+                        key={role.id}
+                        type="button"
+                        onClick={() => {
+                          updateSignerRole(openRoleDropdown, role.id, role.roleName);
+                          setOpenRoleDropdown(null);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '0.625rem 0.75rem',
+                          textAlign: 'left',
+                          backgroundColor: isSelected ? '#eef2ff' : 'white',
+                          border: 'none',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontSize: '0.875rem',
+                          color: isSelected ? '#4f46e5' : '#374151',
+                          fontWeight: isSelected ? '500' : '400',
+                          marginBottom: '0.25rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          transition: 'background-color 0.15s'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = '#f9fafb';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = 'white';
+                        }}
+                      >
+                        <span>{role.roleName}</span>
+                        {isSelected && (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M5 13L9 17L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </>
+              );
+            })()}
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>

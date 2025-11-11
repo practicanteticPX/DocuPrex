@@ -270,6 +270,8 @@ const resolvers = {
           ds.user_id as "userId",
           ds.order_position as "orderPosition",
           ds.is_required as "isRequired",
+          ds.assigned_role_id as "assignedRoleId",
+          ds.role_name as "roleName",
           u.id as user_id,
           u.name as user_name,
           u.email as user_email,
@@ -290,6 +292,8 @@ const resolvers = {
         userId: row.userId,
         orderPosition: row.orderPosition,
         isRequired: row.isRequired,
+        assignedRoleId: row.assignedRoleId,
+        roleName: row.roleName,
         user: {
           id: row.user_id,
           name: row.user_name,
@@ -363,6 +367,43 @@ const resolvers = {
           CASE WHEN id = $1 THEN 0 ELSE 1 END,
           name ASC
       `, [user.id]);
+
+      return result.rows;
+    },
+
+    // Obtener todos los tipos de documentos activos
+    documentTypes: async (_, __, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT * FROM document_types
+        WHERE is_active = true
+        ORDER BY name ASC
+      `);
+
+      return result.rows;
+    },
+
+    // Obtener un tipo de documento por ID
+    documentType: async (_, { id }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT * FROM document_types WHERE id = $1
+      `, [id]);
+
+      return result.rows[0];
+    },
+
+    // Obtener roles de un tipo de documento
+    documentTypeRoles: async (_, { documentTypeId }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT * FROM document_type_roles
+        WHERE document_type_id = $1
+        ORDER BY order_position ASC
+      `, [documentTypeId]);
 
       return result.rows;
     },
@@ -548,7 +589,9 @@ const resolvers = {
     },
 
     // Asignar firmantes a un documento
-    assignSigners: async (_, { documentId, userIds }, { user }) => {
+    assignSigners: async (_, { documentId, signerAssignments }, { user }) => {
+      // Extraer userIds para compatibilidad con lógica existente
+      const userIds = signerAssignments.map(sa => sa.userId);
       if (!user) throw new Error('No autenticado');
 
       const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
@@ -586,11 +629,12 @@ const resolvers = {
         );
 
         // Insertar al propietario en posición 1
+        const ownerAssignment = signerAssignments.find(sa => sa.userId === user.id);
         await query(
-          `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
-           VALUES ($1, $2, 1, $3)
+          `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
+           VALUES ($1, $2, 1, $3, $4, $5)
            ON CONFLICT (document_id, user_id) DO NOTHING`,
-          [documentId, user.id, true]
+          [documentId, user.id, true, ownerAssignment?.roleId || null, ownerAssignment?.roleName || null]
         );
 
         // Crear firma pendiente para el propietario
@@ -606,11 +650,12 @@ const resolvers = {
         const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
 
         for (let i = 0; i < otherUserIds.length; i++) {
+          const assignment = signerAssignments.find(sa => sa.userId === otherUserIds[i]);
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
+             VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (document_id, user_id) DO NOTHING`,
-            [documentId, otherUserIds[i], maxPosition + i, true]
+            [documentId, otherUserIds[i], maxPosition + i, true, assignment?.roleId || null, assignment?.roleName || null]
           );
 
           await query(
@@ -625,11 +670,12 @@ const resolvers = {
         const maxPosition = Math.max(...existingSignersResult.rows.map(r => r.order_position));
 
         for (let i = 0; i < userIds.length; i++) {
+          const assignment = signerAssignments.find(sa => sa.userId === userIds[i]);
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
+             VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (document_id, user_id) DO NOTHING`,
-            [documentId, userIds[i], maxPosition + i + 1, true]
+            [documentId, userIds[i], maxPosition + i + 1, true, assignment?.roleId || null, assignment?.roleName || null]
           );
 
           await query(
@@ -645,10 +691,11 @@ const resolvers = {
         let startPosition = 1;
 
         if (isOwner && ownerInNewSigners) {
+          const ownerAssignment = signerAssignments.find(sa => sa.userId === user.id);
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
-             VALUES ($1, $2, 1, $3)`,
-            [documentId, user.id, true]
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
+             VALUES ($1, $2, 1, $3, $4, $5)`,
+            [documentId, user.id, true, ownerAssignment?.roleId || null, ownerAssignment?.roleName || null]
           );
 
           await query(
@@ -663,10 +710,11 @@ const resolvers = {
         // Insertar los demás firmantes
         const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
         for (let i = 0; i < otherUserIds.length; i++) {
+          const assignment = signerAssignments.find(sa => sa.userId === otherUserIds[i]);
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required)
-             VALUES ($1, $2, $3, $4)`,
-            [documentId, otherUserIds[i], startPosition + i, true]
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [documentId, otherUserIds[i], startPosition + i, true, assignment?.roleId || null, assignment?.roleName || null]
           );
 
           await query(
@@ -1883,7 +1931,7 @@ const resolvers = {
                   console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
                   // Construir URL de descarga usando la ruta de la API
-                  const urlDescarga = `http://192.168.0.19:5001/api/download/${documentId}`;
+                  const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
 
                   // Enviar correo solo al creador
                   await notificarDocumentoFirmadoCompleto({
@@ -2005,12 +2053,19 @@ const resolvers = {
     fileSize: (parent) => parent.file_size,
     mimeType: (parent) => parent.mime_type,
     uploadedById: (parent) => parent.uploaded_by,
+    documentTypeId: (parent) => parent.document_type_id,
     createdAt: (parent) => parent.created_at,
     updatedAt: (parent) => parent.updated_at,
     completedAt: (parent) => parent.completed_at,
     // Campos presentes solo en signedDocuments
     signedAt: (parent) => parent.signed_at,
     signatureType: (parent) => parent.signature_type,
+
+    documentType: async (parent) => {
+      if (!parent.document_type_id) return null;
+      const result = await query('SELECT * FROM document_types WHERE id = $1', [parent.document_type_id]);
+      return result.rows[0] || null;
+    },
 
     uploadedBy: async (parent) => {
       // Si ya tenemos los datos del usuario en el parent (de un JOIN), usarlos directamente
@@ -2096,6 +2151,32 @@ const resolvers = {
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.actor_id]);
       return result.rows[0];
     },
+  },
+
+  DocumentType: {
+    // Mapeo de snake_case (BD) a camelCase (GraphQL)
+    isActive: (parent) => parent.is_active,
+    createdAt: (parent) => parent.created_at,
+    updatedAt: (parent) => parent.updated_at,
+
+    roles: async (parent) => {
+      const result = await query(`
+        SELECT * FROM document_type_roles
+        WHERE document_type_id = $1
+        ORDER BY order_position ASC
+      `, [parent.id]);
+      return result.rows;
+    },
+  },
+
+  DocumentTypeRole: {
+    // Mapeo de snake_case (BD) a camelCase (GraphQL)
+    documentTypeId: (parent) => parent.document_type_id,
+    roleName: (parent) => parent.role_name,
+    roleCode: (parent) => parent.role_code,
+    orderPosition: (parent) => parent.order_position,
+    isRequired: (parent) => parent.is_required,
+    createdAt: (parent) => parent.created_at,
   },
 };
 

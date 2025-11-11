@@ -31,6 +31,8 @@ const typeDefs = gql`
     status: String!
     uploadedBy: User!
     uploadedById: ID!
+    documentType: DocumentType
+    documentTypeId: ID
     createdAt: String!
     updatedAt: String!
     completedAt: String
@@ -68,6 +70,31 @@ const typeDefs = gql`
     isRequired: Boolean!
     user: User!
     signature: Signature
+    assignedRoleId: ID
+    roleName: String
+  }
+
+  type DocumentType {
+    id: ID!
+    name: String!
+    code: String!
+    description: String
+    prefix: String!
+    isActive: Boolean!
+    roles: [DocumentTypeRole!]
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type DocumentTypeRole {
+    id: ID!
+    documentTypeId: ID!
+    roleName: String!
+    roleCode: String!
+    orderPosition: Int!
+    isRequired: Boolean!
+    description: String
+    createdAt: String!
   }
 
   type Notification {
@@ -91,6 +118,12 @@ const typeDefs = gql`
     document: Document
   }
 
+  input SignerAssignmentInput {
+    userId: ID!
+    roleId: ID
+    roleName: String
+  }
+
   type Query {
     # Usuarios
     me: User
@@ -107,6 +140,11 @@ const typeDefs = gql`
     rejectedByMeDocuments: [Document!]!
     rejectedByOthersDocuments: [Document!]!
     documentsByStatus(status: String!): [Document!]!
+
+    # Tipos de Documentos
+    documentTypes: [DocumentType!]!
+    documentType(id: ID!): DocumentType
+    documentTypeRoles(documentTypeId: ID!): [DocumentTypeRole!]!
 
     # Firmas
     signatures(documentId: ID!): [Signature!]!
@@ -129,10 +167,10 @@ const typeDefs = gql`
     updateEmailNotifications(enabled: Boolean!): User!
 
     # Documentos
-    uploadDocument(title: String!, description: String): UploadResponse!
-    updateDocument(id: ID!, title: String, description: String, status: String): Document!
+    uploadDocument(title: String!, description: String, documentTypeId: ID): UploadResponse!
+    updateDocument(id: ID!, title: String, description: String, status: String, documentTypeId: ID): Document!
     deleteDocument(id: ID!): Boolean!
-    assignSigners(documentId: ID!, userIds: [ID!]!): Boolean!
+    assignSigners(documentId: ID!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
     removeSigner(documentId: ID!, userId: ID!): Boolean!
     reorderSigners(documentId: ID!, newOrder: [ID!]!): Boolean!
 
