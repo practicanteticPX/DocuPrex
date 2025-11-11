@@ -55,7 +55,7 @@ router.post('/upload', authenticate, (req, res) => {
       });
     }
 
-    const { title, description } = req.body;
+    const { title, description, documentTypeId } = req.body;
 
     try {
       // Construir ruta: usuario/archivo.pdf
@@ -75,8 +75,9 @@ router.post('/upload', authenticate, (req, res) => {
           file_size,
           mime_type,
           status,
-          uploaded_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          uploaded_by,
+          document_type_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
         [
           docTitle,
@@ -86,7 +87,8 @@ router.post('/upload', authenticate, (req, res) => {
           req.file.size,
           req.file.mimetype,
           'pending',
-          req.user.id
+          req.user.id,
+          documentTypeId || null
         ]
       );
 
@@ -161,7 +163,7 @@ router.post('/upload-multiple', authenticate, (req, res) => {
       });
     }
 
-    const { title, description } = req.body;
+    const { title, description, documentTypeId } = req.body;
 
     const created = [];
     try {
@@ -180,8 +182,9 @@ router.post('/upload-multiple', authenticate, (req, res) => {
             file_size,
             mime_type,
             status,
-            uploaded_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            uploaded_by,
+            document_type_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING *`,
           [
             docTitle,
@@ -191,7 +194,8 @@ router.post('/upload-multiple', authenticate, (req, res) => {
             f.size,
             f.mimetype,
             'pending',
-            req.user.id
+            req.user.id,
+            documentTypeId || null
           ]
         );
         const document = result.rows[0];
@@ -257,7 +261,7 @@ router.post('/upload-unified', authenticate, (req, res) => {
       });
     }
 
-    const { title, description } = req.body;
+    const { title, description, documentTypeId } = req.body;
 
     // Validar que hay más de un archivo para unificar
     if (req.files.length === 1) {
@@ -318,8 +322,9 @@ router.post('/upload-unified', authenticate, (req, res) => {
           file_size,
           mime_type,
           status,
-          uploaded_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          uploaded_by,
+          document_type_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
         [
           docTitle,
@@ -329,7 +334,8 @@ router.post('/upload-unified', authenticate, (req, res) => {
           mergeResult.fileSize,
           'application/pdf',
           'pending',
-          req.user.id
+          req.user.id,
+          documentTypeId || null
         ]
       );
 
