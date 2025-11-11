@@ -1584,20 +1584,20 @@
 
 .notification-button {
   width: 100%;
-  padding: 10px 20px;
-  background: #60a5fa;
+  padding: 12px 20px;
+  background: #6366F1;
   color: white;
   border: none;
   border-radius: 8px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
 
 .notification-button:hover {
-  background: #3b82f6;
+  background: #4F46E5;
 }
 
 .notification-button:active {

@@ -181,6 +181,8 @@ function Dashboard({ user, onLogout }) {
   // Estado para confirmación de eliminación de firmante
   const [confirmRemoveSignerModal, setConfirmRemoveSignerModal] = useState(null);
   const [removingSignerLoading, setRemovingSignerLoading] = useState(false);
+  const [addingSignerId, setAddingSignerId] = useState(null);
+  const [errorModalData, setErrorModalData] = useState(null);
 
   // Estados para Stepper funcional de MUI (3 pasos)
   const steps = ['Cargar documentos', 'Añadir firmantes', 'Enviar'];
@@ -2168,7 +2170,9 @@ function Dashboard({ user, onLogout }) {
 
   // Función para agregar un nuevo firmante
   const handleAddSingleSigner = async (userId) => {
-    if (!managingDocument) return;
+    if (!managingDocument || addingSignerId) return;
+
+    setAddingSignerId(userId);
 
     try {
       const token = localStorage.getItem('token');
@@ -2196,11 +2200,14 @@ function Dashboard({ user, onLogout }) {
       await handleManageSigners(managingDocument);
       await loadMyDocuments();
       setSearchNewSigner('');
-
-      showNotif('Éxito', 'Firmante agregado exitosamente', 'success');
     } catch (err) {
       console.error('Error al agregar firmante:', err);
-      showNotif('Error', err.message || 'No se pudo agregar el firmante', 'error');
+      setErrorModalData({
+        title: 'Error',
+        message: err.message || 'No se pudo agregar el firmante'
+      });
+    } finally {
+      setAddingSignerId(null);
     }
   };
 
@@ -4431,90 +4438,104 @@ function Dashboard({ user, onLogout }) {
                       <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#374151' }}>
                         Agregar nuevo firmante
                       </h3>
-                      <div className="signers-search-container" style={{ marginBottom: '8px' }}>
-                        <div className="search-input-wrapper">
-                          <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                          <input
-                            type="text"
-                            className="signers-search-input"
-                            placeholder="Buscar por nombre o correo..."
-                            value={searchNewSigner}
-                            onChange={(e) => setSearchNewSigner(e.target.value)}
-                          />
-                          {searchNewSigner && (
-                            <button
-                              className="search-clear-btn"
-                              onClick={() => setSearchNewSigner('')}
-                              type="button"
-                            >
-                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      {searchNewSigner && (() => {
-                        const existingIds = new Set(documentSigners.map(s => s.signer?.id).filter(Boolean));
-                        const filtered = availableSigners.filter(s =>
-                          !existingIds.has(s.id) &&
-                          (s.name?.toLowerCase().includes(searchNewSigner.toLowerCase()) ||
-                           s.email?.toLowerCase().includes(searchNewSigner.toLowerCase()))
-                        );
-                        return filtered.length > 0 ? (
-                          <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px', marginTop: '8px' }}>
-                            {filtered.map(signer => (
-                              <div
-                                key={signer.id}
-                                onClick={() => handleAddSingleSigner(signer.id)}
-                                style={{
-                                  padding: '10px 12px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '10px',
-                                  cursor: 'pointer',
-                                  borderBottom: '1px solid #f3f4f6',
-                                  transition: 'background 0.2s'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
-                                onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-                              >
-                                <div style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '50%',
-                                  background: '#E0E7FF',
-                                  color: '#4F46E5',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontWeight: 'bold',
-                                  fontSize: '14px'
-                                }}>
-                                  {(signer.name || signer.email || 'U').charAt(0).toUpperCase()}
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <p style={{ margin: 0, fontSize: '14px', fontWeight: '500', color: '#111827' }}>
-                                    {signer.name || 'Usuario'}
-                                  </p>
-                                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280' }}>
-                                    {signer.email}
-                                  </p>
-                                </div>
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M12 5V19M5 12H19" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              </div>
-                            ))}
+
+                      {/* Buscador con dropdown estilo paso 1 */}
+                      <div className="search-wrapper">
+                        <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <input
+                          type="text"
+                          className="search-input-modern"
+                          placeholder="Buscar por nombre o correo"
+                          value={searchNewSigner}
+                          onChange={(e) => setSearchNewSigner(e.target.value)}
+                        />
+                        {searchNewSigner && (
+                          <button
+                            className="search-clear-modern"
+                            onClick={() => setSearchNewSigner('')}
+                            type="button"
+                            aria-label="Limpiar búsqueda"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        )}
+
+                        {/* Dropdown de resultados - solo se muestra cuando hay búsqueda */}
+                        {searchNewSigner && searchNewSigner.trim().length > 0 && (
+                          <div className="autocomplete-dropdown">
+                            {(() => {
+                              const existingIds = new Set(documentSigners.map(s => s.signer?.id).filter(Boolean));
+                              const filteredSigners = availableSigners.filter(s =>
+                                !existingIds.has(s.id) &&
+                                (s.name?.toLowerCase().includes(searchNewSigner.toLowerCase()) ||
+                                 s.email?.toLowerCase().includes(searchNewSigner.toLowerCase()))
+                              );
+
+                              if (filteredSigners.length === 0) {
+                                return (
+                                  <div className="dropdown-empty">
+                                    <p>No se encontraron resultados para "{searchNewSigner}"</p>
+                                  </div>
+                                );
+                              }
+
+                              return filteredSigners.map(signer => {
+                                const isAdding = addingSignerId === signer.id;
+                                return (
+                                  <div
+                                    key={signer.id}
+                                    className="dropdown-item"
+                                    onClick={() => {
+                                      if (!isAdding) {
+                                        handleAddSingleSigner(signer.id);
+                                        // NO limpiar búsqueda - mantener el dropdown abierto
+                                      }
+                                    }}
+                                    style={{
+                                      opacity: isAdding ? 0.5 : 1,
+                                      pointerEvents: isAdding ? 'none' : 'auto',
+                                      transition: 'opacity 0.3s ease'
+                                    }}
+                                  >
+                                    <div className="signer-avatar-circle">
+                                      {(signer.name || signer.email || 'U').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="signer-info-modern">
+                                      <p className="signer-name-modern">
+                                        {signer.name || 'Usuario'}
+                                        {user && user.id === signer.id && (
+                                          <span className="you-tag">Tú</span>
+                                        )}
+                                      </p>
+                                      <p className="signer-email-modern">{signer.email}</p>
+                                    </div>
+                                    {isAdding ? (
+                                      <div style={{
+                                        width: '20px',
+                                        height: '20px',
+                                        border: '2px solid #10b981',
+                                        borderTopColor: 'transparent',
+                                        borderRadius: '50%',
+                                        animation: 'spin 0.6s linear infinite'
+                                      }}></div>
+                                    ) : (
+                                      <div className="add-indicator">
+                                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              });
+                            })()}
                           </div>
-                        ) : (
-                          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
-                            No se encontraron usuarios disponibles
-                          </p>
-                        );
-                      })()}
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -4860,6 +4881,37 @@ function Dashboard({ user, onLogout }) {
                 disabled={removingSignerLoading}
               >
                 {removingSignerLoading ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de error para agregar firmantes */}
+      {errorModalData && (
+        <div className="delete-modal-overlay" onClick={() => setErrorModalData(null)}>
+          <div className="delete-modal-minimal" onClick={(e) => e.stopPropagation()}>
+            {/* Icono de error circular */}
+            <div className="delete-icon-circle">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+
+            {/* Título y descripción */}
+            <h2 className="delete-modal-title">{errorModalData.title}</h2>
+            <p className="delete-modal-description">
+              {errorModalData.message}
+            </p>
+
+            {/* Botón */}
+            <div className="delete-modal-buttons">
+              <button
+                className="delete-btn-confirm"
+                onClick={() => setErrorModalData(null)}
+                style={{background:"#6366F1", width: "100%"}}
+              >
+                Entendido
               </button>
             </div>
           </div>
