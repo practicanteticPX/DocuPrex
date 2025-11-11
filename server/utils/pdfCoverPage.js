@@ -7,7 +7,7 @@ const path = require('path');
  * Diseño moderno y limpio inspirado en la imagen de referencia
  * @param {string} pdfPath - Ruta al PDF original
  * @param {Array} signers - Array de firmantes con {name, email, order_position, status}
- * @param {Object} documentInfo - Información del documento {title, createdAt, uploadedBy}
+ * @param {Object} documentInfo - Información del documento {title, fileName, createdAt, uploadedBy}
  * @returns {Promise<Buffer>} PDF con página de información agregada
  */
 async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
@@ -660,10 +660,18 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     // Guardar en metadatos el número de páginas de firmantes para futuras actualizaciones
     try {
-      const currentTitle = pdfDoc.getTitle() || '';
-      // Remover cualquier SignerPages anterior y agregar el nuevo
-      const cleanTitle = currentTitle.replace(/\s*SignerPages:\d+/g, '');
-      pdfDoc.setTitle(`${cleanTitle} SignerPages:${totalSignerPages}`.trim());
+      // Usar el nombre del archivo original del PDF (sin extensión) como título visible
+      const fileName = documentInfo.fileName || documentInfo.title || 'Documento';
+      // Remover el timestamp y número aleatorio del nombre del archivo
+      // Patrón: "nombre-1762877271658-951648300.pdf" -> "nombre.pdf"
+      // Busca: -[números]-[números].pdf al final del nombre
+      const fileNameClean = fileName.replace(/-\d+-\d+\.pdf$/i, '.pdf');
+      // Remover extensión .pdf si existe
+      const fileNameWithoutExt = fileNameClean.replace(/\.pdf$/i, '');
+      // Establecer el título del PDF (sin mostrar SignerPages, solo guardarlo internamente como Subject)
+      pdfDoc.setTitle(fileNameWithoutExt);
+      // Guardar el contador de páginas en Subject para uso interno
+      pdfDoc.setSubject(`SignerPages:${totalSignerPages}`);
     } catch (err) {
       console.log('⚠️  No se pudieron guardar metadatos (no crítico)');
     }
@@ -703,12 +711,21 @@ async function updateSignersPage(pdfPath, signers, documentInfo) {
     let signerPagesToRemove = 1;
 
     try {
-      const metadata = pdfDoc.getTitle();
-      // Buscamos un patrón como "SignerPages:N" en los metadatos
-      if (metadata && metadata.includes('SignerPages:')) {
-        const match = metadata.match(/SignerPages:(\d+)/);
+      // Primero intentar leer desde Subject (nuevo método)
+      const subject = pdfDoc.getSubject();
+      if (subject && subject.includes('SignerPages:')) {
+        const match = subject.match(/SignerPages:(\d+)/);
         if (match && match[1]) {
           signerPagesToRemove = parseInt(match[1], 10);
+        }
+      } else {
+        // Fallback: intentar leer desde Title (método antiguo) por compatibilidad
+        const metadata = pdfDoc.getTitle();
+        if (metadata && metadata.includes('SignerPages:')) {
+          const match = metadata.match(/SignerPages:(\d+)/);
+          if (match && match[1]) {
+            signerPagesToRemove = parseInt(match[1], 10);
+          }
         }
       }
     } catch (err) {

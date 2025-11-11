@@ -828,6 +828,7 @@ const resolvers = {
         // Preparar información del documento para la portada
         const documentInfo = {
           title: docInfo.title,
+          fileName: docInfo.file_name,
           createdAt: docInfo.created_at,
           uploadedBy: docInfo.uploader_name || 'Sistema'
         };
@@ -1091,6 +1092,7 @@ const resolvers = {
 
             const documentInfo = {
               title: docInfo.title,
+              fileName: docInfo.file_name,
               createdAt: docInfo.created_at,
               uploadedBy: docInfo.uploader_name || 'Sistema'
             };
@@ -1358,6 +1360,7 @@ const resolvers = {
 
             const documentInfo = {
               title: docInfo.rows[0].title,
+              fileName: docInfo.rows[0].file_name,
               createdAt: docInfo.rows[0].created_at,
               uploadedBy: docInfo.rows[0].uploader_name || 'Sistema'
             };
@@ -1614,6 +1617,7 @@ const resolvers = {
 
           const documentInfo = {
             title: docInfo.title,
+            fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
             uploadedBy: docInfo.uploader_name || 'Sistema'
           };
@@ -1879,7 +1883,7 @@ const resolvers = {
                   console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
                   // Construir URL de descarga usando la ruta de la API
-                  const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
+                  const urlDescarga = `http://192.168.0.19:5001/api/download/${documentId}`;
 
                   // Enviar correo solo al creador
                   await notificarDocumentoFirmadoCompleto({
@@ -1946,6 +1950,7 @@ const resolvers = {
 
           const documentInfo = {
             title: docInfo.title,
+            fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
             uploadedBy: docInfo.uploader_name || 'Sistema'
           };
