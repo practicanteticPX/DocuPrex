@@ -615,9 +615,34 @@ const resolvers = {
 
       // Verificar si hay firmantes existentes
       const existingSignersResult = await query(
-        'SELECT user_id, order_position FROM document_signers WHERE document_id = $1 ORDER BY order_position ASC',
+        'SELECT user_id, order_position, role_name FROM document_signers WHERE document_id = $1 ORDER BY order_position ASC',
         [documentId]
       );
+
+      // Validar que no haya roles duplicados
+      const existingRoles = existingSignersResult.rows
+        .filter(r => r.role_name)
+        .map(r => r.role_name);
+
+      const newRoles = signerAssignments
+        .filter(sa => sa.roleName)
+        .map(sa => sa.roleName);
+
+      // Verificar duplicados en los roles nuevos que se están intentando asignar
+      for (const roleName of newRoles) {
+        if (existingRoles.includes(roleName)) {
+          throw new Error(`El rol "${roleName}" ya está asignado a otro firmante. Los roles deben ser únicos.`);
+        }
+      }
+
+      // Verificar duplicados entre los mismos roles nuevos
+      const roleCount = {};
+      for (const roleName of newRoles) {
+        roleCount[roleName] = (roleCount[roleName] || 0) + 1;
+        if (roleCount[roleName] > 1) {
+          throw new Error(`El rol "${roleName}" está duplicado en la lista de nuevos firmantes. Los roles deben ser únicos.`);
+        }
+      }
       const hasExistingSigners = existingSignersResult.rows.length > 0;
       const isOwner = doc.uploaded_by === user.id;
       const ownerInNewSigners = userIds.includes(user.id);

@@ -5419,39 +5419,63 @@ function Dashboard({ user, onLogout }) {
                   {/* Lista de roles disponibles */}
                   {documentTypeRoles.map((role) => {
                     const isSelected = currentRoleId === role.id;
+
+                    // Verificar si este rol ya está asignado a otro firmante
+                    const isRoleTaken = selectedSigners.some(s => {
+                      const otherSignerId = typeof s === 'object' ? s.userId : s;
+                      const otherRoleId = typeof s === 'object' ? s.roleId : null;
+                      // El rol está ocupado si otro firmante (no el actual) lo tiene
+                      return otherSignerId !== openRoleDropdown && otherRoleId === role.id;
+                    });
+
                     return (
                       <button
                         key={role.id}
                         type="button"
                         onClick={() => {
-                          updateSignerRole(openRoleDropdown, role.id, role.roleName);
-                          setOpenRoleDropdown(null);
+                          if (!isRoleTaken) {
+                            updateSignerRole(openRoleDropdown, role.id, role.roleName);
+                            setOpenRoleDropdown(null);
+                          }
                         }}
+                        disabled={isRoleTaken}
                         style={{
                           width: '100%',
                           padding: '0.625rem 0.75rem',
                           textAlign: 'left',
-                          backgroundColor: isSelected ? '#eef2ff' : 'white',
+                          backgroundColor: isSelected ? '#eef2ff' : (isRoleTaken ? '#f9fafb' : 'white'),
                           border: 'none',
                           borderRadius: '0.375rem',
-                          cursor: 'pointer',
+                          cursor: isRoleTaken ? 'not-allowed' : 'pointer',
                           fontSize: '0.875rem',
-                          color: isSelected ? '#4f46e5' : '#374151',
+                          color: isSelected ? '#4f46e5' : (isRoleTaken ? '#9ca3af' : '#374151'),
                           fontWeight: isSelected ? '500' : '400',
                           marginBottom: '0.25rem',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          transition: 'background-color 0.15s'
+                          transition: 'background-color 0.15s',
+                          opacity: isRoleTaken ? 0.6 : 1
                         }}
                         onMouseEnter={(e) => {
-                          if (!isSelected) e.currentTarget.style.backgroundColor = '#f9fafb';
+                          if (!isSelected && !isRoleTaken) e.currentTarget.style.backgroundColor = '#f9fafb';
                         }}
                         onMouseLeave={(e) => {
-                          if (!isSelected) e.currentTarget.style.backgroundColor = 'white';
+                          if (!isSelected && !isRoleTaken) e.currentTarget.style.backgroundColor = 'white';
                         }}
                       >
-                        <span>{role.roleName}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {role.roleName}
+                          {isRoleTaken && (
+                            <span style={{
+                              fontSize: '0.75rem',
+                              color: '#9ca3af',
+                              fontWeight: '400'
+                            }}>
+                              (Asignado)
+                            </span>
+                          )}
+                        </span>
                         {isSelected && (
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M5 13L9 17L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
