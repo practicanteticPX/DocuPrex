@@ -107,6 +107,38 @@ function Dashboard({ user, onLogout }) {
     }
   }, [user]);
 
+  // Bloquear scroll cuando la pantalla de "Aún no es tu turno" esté activa
+  useEffect(() => {
+    if (showWaitingTurnScreen) {
+      // Guardar el scroll actual
+      const scrollY = window.scrollY;
+      // Bloquear scroll
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+    } else {
+      // Restaurar scroll
+      const scrollY = document.body.style.top;
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      // Restaurar posición del scroll
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1);
+      }
+    }
+
+    // Cleanup al desmontar
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+    };
+  }, [showWaitingTurnScreen]);
+
   // Estados para modal de gestión de firmantes
   const [managingDocument, setManagingDocument] = useState(null);
   const [documentSigners, setDocumentSigners] = useState([]);
@@ -4661,42 +4693,22 @@ function Dashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* Pantalla de "Aún no es tu turno de firmar" - NIVEL RAÍZ */}
+      {/* Pantalla de "Aún no es tu turno de firmar" - PANTALLA COMPLETA */}
       {showWaitingTurnScreen && (
-        <div className="sign-confirm-overlay" style={{position: 'fixed', zIndex: 99999}} onClick={() => {
-          console.log('🚪 Cerrando pantalla de espera');
-          setShowWaitingTurnScreen(false);
-          setActiveTab('pending');
-          window.history.replaceState({}, '', '/');
-        }}>
-          <div className="sign-confirm-modal waiting-turn-modal" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="waiting-turn-close-btn"
-              onClick={() => {
-                console.log('🚪 Cerrando pantalla de espera (botón X)');
-                setShowWaitingTurnScreen(false);
-                setActiveTab('pending');
-                window.history.replaceState({}, '', '/');
-              }}
-              title="Cerrar"
-            >
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-
+        <div className="waiting-turn-fullscreen-overlay">
+          <div className="waiting-turn-modal">
             <div className="waiting-turn-content">
               <img src={clockImage} alt="Reloj de espera" className="waiting-turn-icon" />
-              <h2 className="waiting-turn-title">Aún no es tu turno de firmar.</h2>
+              <h2 className="waiting-turn-title">Aún no es tu turno de firmar</h2>
               <p className="waiting-turn-message">
-                El documento no esta disponible para que lo firmes porque hay otras personas que deben firmarlo antes que tu.
+                El documento no está disponible para que lo firmes porque hay otras personas que deben firmarlo antes que tú.
               </p>
               <p className="waiting-turn-submessage">
                 No te preocupes, te notificaremos cuando sea tu turno.
               </p>
-              <div className="sign-confirm-actions">
+              <div className="waiting-turn-actions">
                 <button
-                  className="sign-confirm-btn confirm full-width"
+                  className="waiting-turn-btn"
                   onClick={() => {
                     console.log('🚪 Cerrando pantalla de espera (botón Entendido)');
                     setShowWaitingTurnScreen(false);
