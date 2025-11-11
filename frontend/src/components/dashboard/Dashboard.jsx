@@ -1953,10 +1953,18 @@ function Dashboard({ user, onLogout }) {
     const signature = documentSigners.find(s => s.signer.id === signerId);
     if (!signature) return;
 
-    // Mostrar modal de confirmación
+    // Verificar si este es el último firmante pendiente y hay firmantes que ya firmaron
+    const pendingSigners = documentSigners.filter(s => s.status === 'pending');
+    const signedSigners = documentSigners.filter(s => s.status === 'signed');
+
+    const isLastPending = pendingSigners.length === 1 && pendingSigners[0].signer.id === signerId;
+    const hasSignedSigners = signedSigners.length > 0;
+
+    // Mostrar modal de confirmación con advertencia si corresponde
     setConfirmRemoveSignerModal({
       signerId,
-      signerName: signature.signer.name || signature.signer.email
+      signerName: signature.signer.name || signature.signer.email,
+      isLastPending: isLastPending && hasSignedSigners
     });
   };
 
@@ -4433,7 +4441,7 @@ function Dashboard({ user, onLogout }) {
               ) : (
                 <>
                   {/* Buscador para agregar firmantes - Solo si el documento no está completado */}
-                  {managingDocument.status !== 'completed' && managingDocument.status !== 'rejected' && (
+                  {(managingDocument.status !== 'completed' && managingDocument.status !== 'rejected') && (
                     <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
                       <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#374151' }}>
                         Agregar nuevo firmante
@@ -4852,17 +4860,33 @@ function Dashboard({ user, onLogout }) {
       {confirmRemoveSignerModal && (
         <div className="delete-modal-overlay" onClick={() => setConfirmRemoveSignerModal(null)}>
           <div className="delete-modal-minimal" onClick={(e) => e.stopPropagation()}>
-            {/* Icono de basura circular */}
+            {/* Icono circular - triángulo de advertencia o basura */}
             <div className="delete-icon-circle">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 6H5H21M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              {confirmRemoveSignerModal.isLastPending ? (
+                // Triángulo de advertencia
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 9V13M12 17H12.01M10.29 3.86L1.82 18C1.64537 18.3024 1.55296 18.6453 1.55199 18.9945C1.55101 19.3437 1.64151 19.6871 1.81445 19.9905C1.98738 20.2939 2.23675 20.5467 2.53773 20.7239C2.83871 20.901 3.18082 20.9962 3.53 21H20.47C20.8192 20.9962 21.1613 20.901 21.4623 20.7239C21.7633 20.5467 22.0126 20.2939 22.1856 19.9905C22.3585 19.6871 22.449 19.3437 22.448 18.9945C22.447 18.6453 22.3546 18.3024 22.18 18L13.71 3.86C13.5317 3.56611 13.2807 3.32312 12.9812 3.15448C12.6817 2.98585 12.3437 2.89725 12 2.89725C11.6563 2.89725 11.3183 2.98585 11.0188 3.15448C10.7193 3.32312 10.4683 3.56611 10.29 3.86Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              ) : (
+                // Icono de basura
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 6H5H21M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
             </div>
 
             {/* Título y descripción */}
-            <h2 className="delete-modal-title">Eliminar Firmante</h2>
+            <h2 className="delete-modal-title">
+              {confirmRemoveSignerModal.isLastPending ? 'Advertencia' : 'Eliminar Firmante'}
+            </h2>
             <p className="delete-modal-description">
-              ¿Estás seguro que deseas eliminar este firmante? Esta acción no se puede deshacer.
+              {confirmRemoveSignerModal.isLastPending ? (
+                <>
+                  Este es el último firmante pendiente. Al eliminarlo, el documento se marcará como completado automáticamente y <strong>NO podrás</strong> agregar más firmantes.
+                </>
+              ) : (
+                '¿Estás seguro que deseas eliminar este firmante? Esta acción no se puede deshacer.'
+              )}
             </p>
 
             {/* Botones */}
@@ -4877,7 +4901,7 @@ function Dashboard({ user, onLogout }) {
               <button
                 className="delete-btn-confirm"
                 onClick={confirmRemoveSignerAction}
-                style={{background:"#fee2e2"}}
+                style={{background: confirmRemoveSignerModal.isLastPending ? "#EF4444" : "#fee2e2"}}
                 disabled={removingSignerLoading}
               >
                 {removingSignerLoading ? 'Eliminando...' : 'Eliminar'}
