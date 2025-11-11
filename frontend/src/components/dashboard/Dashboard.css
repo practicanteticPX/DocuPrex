@@ -1370,12 +1370,43 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid #F3F4F6;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 
 .signer-item-modal:last-child {
   border-bottom: none;
+  margin-bottom: 0;
+}
+
+.signer-item-modal:hover {
+  background: #F9FAFB;
+}
+
+.signer-item-modal[draggable="true"] {
+  cursor: grab;
+}
+
+.signer-item-modal[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Estado de arrastre */
+.signer-item-modal.dragging {
+  opacity: 0.4;
+  transform: scale(0.98);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Indicador visual al arrastrar sobre otro elemento */
+.signer-item-modal.drag-over {
+  background: #EFF6FF;
+  border: 2px dashed #60a5fa;
+  transform: translateY(-2px);
 }
 
 .signer-avatar-modal {
@@ -1456,6 +1487,78 @@
   border-radius: 9999px;
   font-size: 12px;
   font-weight: 600;
+}
+
+/* Botón Guardar Orden - Color azul del reloj */
+.btn-save-signers-order {
+  margin-left: 8px;
+  padding: 10px 20px;
+  background: #60a5fa;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  fontSize: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+.btn-save-signers-order:active {
+  transform: scale(0.98);
+}
+
+/* Drag handle mejorado */
+.signer-drag-handle {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-right: 12px;
+  padding: 4px;
+  color: #9CA3AF;
+  cursor: grab;
+  transition: color 0.2s;
+}
+
+.signer-drag-handle:hover {
+  color: #6B7280;
+}
+
+.signer-drag-handle:active {
+  cursor: grabbing;
+}
+
+.signer-drag-handle-dot {
+  width: 4px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+/* Número de orden elegante */
+.signer-order-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  margin-right: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(96, 165, 250, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.signer-item-modal:hover .signer-order-number {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(96, 165, 250, 0.3);
 }
 
 /* Modal Header */
