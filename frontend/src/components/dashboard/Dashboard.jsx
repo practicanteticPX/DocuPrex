@@ -105,6 +105,9 @@ function Dashboard({ user, onLogout }) {
   const [searchTermUpload, setSearchTermUpload] = useState('');
   const [searchTermModal, setSearchTermModal] = useState('');
 
+  // Estado para checkbox "Yo voy a firmar este documento"
+  const [willSignDocument, setWillSignDocument] = useState(false);
+
   // Estados para filtros de "Documentos pendientes"
   const [pendingDocsSearchTerm, setPendingDocsSearchTerm] = useState('');
 
@@ -543,6 +546,17 @@ function Dashboard({ user, onLogout }) {
       loadDocumentTypes();
     }
   }, [activeTab]);
+
+  // Sincronizar estado del checkbox con la presencia del usuario en selectedSigners
+  useEffect(() => {
+    if (!user || !user.id) return;
+
+    const userIsInSigners = selectedSigners.some(s =>
+      (typeof s === 'object' ? s.userId : s) === user.id
+    );
+
+    setWillSignDocument(userIsInSigners);
+  }, [selectedSigners, user]);
 
   // Cargar documentos rechazados al montar o cambiar de tab
   useEffect(() => {
@@ -1160,6 +1174,46 @@ function Dashboard({ user, onLogout }) {
       }
       return s;
     }));
+  };
+
+  /**
+   * Manejar toggle de "Yo voy a firmar este documento"
+   */
+  const handleWillSignToggle = (checked) => {
+    setWillSignDocument(checked);
+
+    if (!user || !user.id) return;
+
+    if (checked) {
+      // Agregar al usuario actual como firmante
+      // Si el documento es tipo SA (Solicitud de Anticipo), asignar rol de Solicitante
+      if (selectedDocumentType && selectedDocumentType.code === 'SA') {
+        // Buscar el rol "Solicitante" en los roles del tipo de documento
+        const solicitanteRole = documentTypeRoles.find(role =>
+          role.roleCode === 'SOLICITANTE' || role.roleName === 'Solicitante'
+        );
+
+        if (solicitanteRole) {
+          // Agregar con rol de Solicitante
+          setSelectedSigners(prev => [{
+            userId: user.id,
+            roleId: solicitanteRole.id,
+            roleName: solicitanteRole.roleName
+          }, ...prev]);
+        } else {
+          // Agregar sin rol si no se encuentra el rol (no debería pasar)
+          setSelectedSigners(prev => [user.id, ...prev]);
+        }
+      } else {
+        // Para otros tipos de documentos, agregar sin rol
+        setSelectedSigners(prev => [user.id, ...prev]);
+      }
+    } else {
+      // Quitar al usuario actual de la lista de firmantes
+      setSelectedSigners(prev => prev.filter(s =>
+        (typeof s === 'object' ? s.userId : s) !== user.id
+      ));
+    }
   };
 
   /**
@@ -3124,6 +3178,55 @@ function Dashboard({ user, onLogout }) {
                             <p className="signers-subtitle">
                               Selecciona los usuarios que deben firmar este documento. El orden es importante.
                             </p>
+                          </div>
+
+                          {/* Checkbox: Yo voy a firmar este documento */}
+                          <div style={{
+                            marginBottom: '1.5rem',
+                            padding: '1rem',
+                            backgroundColor: '#f8fafc',
+                            borderRadius: '0.5rem',
+                            border: '1px solid #e2e8f0'
+                          }}>
+                            <label style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              cursor: 'pointer',
+                              gap: '0.75rem',
+                              userSelect: 'none'
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={willSignDocument}
+                                onChange={(e) => handleWillSignToggle(e.target.checked)}
+                                disabled={uploading}
+                                style={{
+                                  width: '18px',
+                                  height: '18px',
+                                  cursor: 'pointer',
+                                  accentColor: '#6366f1'
+                                }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <span style={{
+                                  fontSize: '0.9375rem',
+                                  fontWeight: '500',
+                                  color: '#1e293b'
+                                }}>
+                                  Yo voy a firmar este documento
+                                </span>
+                                {selectedDocumentType && selectedDocumentType.code === 'SA' && (
+                                  <span style={{
+                                    display: 'block',
+                                    marginTop: '0.25rem',
+                                    fontSize: '0.8125rem',
+                                    color: '#64748b'
+                                  }}>
+                                    Se te asignará automáticamente el rol de Solicitante
+                                  </span>
+                                )}
+                              </div>
+                            </label>
                           </div>
 
                           {/* Sección de usuarios disponibles */}
