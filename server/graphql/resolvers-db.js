@@ -1879,7 +1879,7 @@ const resolvers = {
                   console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
                   // Construir URL de descarga usando la ruta de la API
-                  const urlDescarga = `http://192.168.0.19:5001/api/download/${documentId}`;
+                  const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
 
                   // Enviar correo solo al creador
                   await notificarDocumentoFirmadoCompleto({

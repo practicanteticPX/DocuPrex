@@ -24,8 +24,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Bind a la IP específica de tu máquina
-      - "192.168.0.19:5001:5001"
+      # Exponer solo en IP específica para usuarios remotos (más seguro que 0.0.0.0)
+      # NPM también puede acceder por nombre de contenedor (firmas_server) vía red Docker
+      - "192.168.0.30:5001:5001"
     depends_on:
       - postgres-db
     volumes:
@@ -39,6 +40,9 @@ services:
       - 8.8.8.8
       - 8.8.4.4
       - 1.1.1.1
+    networks:
+      - npm_docker_default  # Red compartida con NPM
+      - default             # Red interna para PostgreSQL
 
   # --- Cliente Frontend (React/Vite) ---
   frontend:
@@ -48,8 +52,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Bind a la IP específica de tu máquina
-      - "192.168.0.19:5173:5173"
+      # Exponer solo en IP específica para usuarios remotos (más seguro que 0.0.0.0)
+      - "192.168.0.30:5173:5173"
     depends_on:
       - server
     volumes:
@@ -57,3 +61,13 @@ services:
       - /app/node_modules
     # No necesita env_file aquí, Vite lo toma de frontend/.env al construir/ejecutar
     command: npm run dev # El --host ya está en el Dockerfile CMD
+    networks:
+      - npm_docker_default  # Red compartida con NPM
+      - default             # Red interna para comunicarse con server
+
+# Declaración de redes
+networks:
+  npm_docker_default:
+    external: true  # Red externa compartida con NPM
+  default:
+    driver: bridge  # Red interna por defecto

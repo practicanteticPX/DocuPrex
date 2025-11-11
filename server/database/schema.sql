@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(50) DEFAULT 'user' CHECK (role IN ('admin', 'user', 'viewer')),
     ad_username VARCHAR(255), -- Usuario de Active Directory
     is_active BOOLEAN DEFAULT true,
+    email_notifications BOOLEAN DEFAULT true, -- Preferencia de notificaciones por email
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -140,12 +141,6 @@ CREATE INDEX IF NOT EXISTS idx_notifications_document_id ON notifications(docume
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
 
--- Trigger para actualizar updated_at en notifications
-CREATE TRIGGER update_notifications_updated_at
-    BEFORE UPDATE ON notifications
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
 -- ==================================================
 -- Función: update_updated_at_column
 -- Actualiza automáticamente el campo updated_at
@@ -157,6 +152,12 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Trigger para actualizar updated_at en notifications
+CREATE TRIGGER update_notifications_updated_at
+    BEFORE UPDATE ON notifications
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
 -- Triggers para actualizar updated_at
 CREATE TRIGGER update_users_updated_at
@@ -216,9 +217,9 @@ WHERE COALESCE(s.status, 'pending') = 'pending'
 -- ==================================================
 
 -- Crear usuario admin por defecto (password: admin123)
--- Hash bcrypt de 'admin123': $2a$10$rT8qKqXGJ5Kh5L8N3L3yYuZvXH5xYH5xYH5xYH5xYH5xYH5xYH5x
+-- Hash bcrypt de 'admin123'
 INSERT INTO users (name, email, password_hash, role)
-VALUES ('Administrador', 'admin@prexxa.local', '$2a$10$rT8qKqXGJ5Kh5L8N3L3yYuZvXH5xYH5xYH5xYH5xYH5xYH5xYH5x', 'admin')
+VALUES ('Administrador', 'admin@prexxa.local', '$2a$10$FgJuYW.xZaij4hcfNgaKD.IRSphSJN6BPLfaq2gEdU.cRkozqPaRC', 'admin')
 ON CONFLICT (email) DO NOTHING;
 
 -- ==================================================

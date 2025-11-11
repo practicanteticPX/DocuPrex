@@ -7,24 +7,19 @@ import './SignersOrder.css';
 import './WaitingTurn.css';
 import Notifications from './Notifications';
 import clockImage from '../../assets/clock.png';
-
-// Determinar el host del backend basándose en el hostname actual
-const getBackendHost = () => {
-  const hostname = window.location.hostname;
-  const protocol = window.location.protocol; // http: o https:
-
-  // Usar el mismo host desde donde se accede, solo cambiar el puerto
-  return `${protocol}//${hostname}:5001`;
-};
-
-const BACKEND_HOST = getBackendHost();
-const API_URL = `${BACKEND_HOST}/graphql`;
-const API_UPLOAD_URL = `${BACKEND_HOST}/api/upload`;
-const API_UPLOAD_MULTI_URL = `${BACKEND_HOST}/api/upload-multiple`;
-const API_UPLOAD_UNIFIED_URL = `${BACKEND_HOST}/api/upload-unified`;
+import {
+  API_URL,
+  API_UPLOAD_URL,
+  API_UPLOAD_MULTI_URL,
+  API_UPLOAD_UNIFIED_URL,
+  BACKEND_HOST,
+  getDocumentUrl,
+  getDownloadUrl,
+  getViewUrl
+} from '../../config/api';
 
 // Log para debug
-console.log('🔗 Backend URL:', API_URL);
+console.log('🔗 Dashboard - Backend URL:', API_URL);
 
 /**
  * Helper function para manejar errores de autenticación en GraphQL
@@ -2144,22 +2139,7 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
-  const getDocumentUrl = (filePath) => {
-    if (!filePath) return '';
-
-    // Si la ruta comienza con /app/uploads (formato antiguo), convertir a ruta relativa
-    if (filePath.startsWith('/app/uploads/')) {
-      return `${BACKEND_HOST}/uploads/${filePath.replace('/app/uploads/', '')}`;
-    }
-
-    // Si la ruta comienza con uploads/ (formato nuevo), usar directamente
-    if (filePath.startsWith('uploads/')) {
-      return `${BACKEND_HOST}/${filePath}`;
-    }
-
-    // Si no tiene ningún prefijo, asumir que es relativo a uploads/
-    return `${BACKEND_HOST}/uploads/${filePath}`;
-  };
+  // getDocumentUrl ahora se importa desde config/api.js
 
   // Conversión robusta para fechas que vengan en distintos formatos
   const toDateSafe = (value) => {
@@ -3996,7 +3976,7 @@ function Dashboard({ user, onLogout }) {
                 </>
               )}
               <a
-                href={`${BACKEND_HOST}/api/download/${viewingDocument.id}`}
+                href={getDownloadUrl(viewingDocument.id)}
                 className="pdf-viewer-action-btn download"
                 title="Descargar"
                 target="_blank"
@@ -4037,13 +4017,13 @@ function Dashboard({ user, onLogout }) {
           {/* Contenedor del PDF */}
           <div className="pdf-viewer-minimal-body">
             <object
-              data={`${BACKEND_HOST}/api/view/${viewingDocument.id}`}
+              data={getViewUrl(viewingDocument.id)}
               type="application/pdf"
               className="pdf-viewer-minimal-iframe"
               title={viewingDocument.title}
             >
               <embed
-                src={`${BACKEND_HOST}/api/view/${viewingDocument.id}`}
+                src={getViewUrl(viewingDocument.id)}
                 type="application/pdf"
                 className="pdf-viewer-minimal-iframe"
                 title={viewingDocument.title}
@@ -4057,7 +4037,7 @@ function Dashboard({ user, onLogout }) {
                 </div>
                 <p className="fallback-title">No se puede mostrar el PDF en este navegador</p>
                 <a
-                  href={`${BACKEND_HOST}/api/download/${viewingDocument.id}`}
+                  href={getDownloadUrl(viewingDocument.id)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="fallback-download-btn"

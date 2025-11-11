@@ -29,7 +29,14 @@
       "Bash(docker restart:*)",
       "Bash(docker logs:*)",
       "Bash(docker volume:*)",
-      "Bash(del temp-cleanup.js)"
+      "Bash(del temp-cleanup.js)",
+      "Bash(timeout 5 bash:*)",
+      "Bash(move:*)",
+      "Bash(timeout 10 bash:*)",
+      "Bash(docker network inspect:*)",
+      "Bash(docker network connect:*)",
+      "Bash(docker inspect:*)",
+      "Bash(del \"d:\\docuprex_docker\\frontend\\public\\vite-hmr-config.js\")"
     ],
     "deny": [],
     "ask": []

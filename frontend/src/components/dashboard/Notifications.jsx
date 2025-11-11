@@ -1,15 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './Notifications.css';
-
-// Determinar el host del backend basándose en el hostname actual
-const getBackendHost = () => {
-  const hostname = window.location.hostname;
-  const protocol = window.location.protocol;
-  return `${protocol}//${hostname}:5001`;
-};
-
-const API_URL = `${getBackendHost()}/graphql`;
+import { API_URL } from '../../config/api';
 
 /**
  * Helper function para manejar errores de autenticación en GraphQL

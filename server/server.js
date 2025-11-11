@@ -33,13 +33,17 @@ const getUserFromToken = (token) => {
 async function startServer() {
   const app = express();
 
-  // Middleware de seguridad - Ajustado para desarrollo sin HTTPS
+  // Trust proxy - Necesario para detectar el protocolo real detrás de Nginx Proxy Manager
+  // Esto permite que req.protocol devuelva 'https' cuando NPM usa SSL
+  app.set('trust proxy', true);
+
+  // Middleware de seguridad - Ajustado para soportar HTTP y HTTPS
   app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
     crossOriginEmbedderPolicy: false, // Permitir que los PDFs se embeden
     crossOriginResourcePolicy: { policy: "cross-origin" }, // Permitir recursos cross-origin
     crossOriginOpenerPolicy: false, // Deshabilitar COOP para desarrollo sin HTTPS
-    strictTransportSecurity: false, // Deshabilitar HSTS para desarrollo sin HTTPS
+    strictTransportSecurity: false, // Deshabilitar HSTS para permitir HTTP y HTTPS
     frameguard: false // Deshabilitar X-Frame-Options para permitir iframes
   }));
 
@@ -47,9 +51,9 @@ async function startServer() {
   const allowedOrigins = process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
     : [
-        'http://firmapro.com:5173',
-        'http://www.firmapro.com:5173',
-        'http://192.168.0.19:5173',
+        'http://docuprex.com:5173',
+        'http://www.docuprex.com:5173',
+        'http://192.168.0.30:5173',
         'http://localhost:5173'
       ];
 
@@ -248,8 +252,8 @@ async function startServer() {
 
   // Iniciar servidor
   app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://192.168.0.19:${PORT}`);
-    console.log(`📊 GraphQL disponible en http://192.168.0.19:${PORT}${server.graphqlPath}`);
+    console.log(`🚀 Servidor corriendo en http://192.168.0.30:${PORT}`);
+    console.log(`📊 GraphQL disponible en http://192.168.0.30:${PORT}${server.graphqlPath}`);
     console.log(`🔐 Autenticación Active Directory configurada`);
     console.log(`   - Host: ${process.env.AD_HOSTNAME || 'No configurado'}`);
     console.log(`   - Protocol: ${process.env.AD_PROTOCOL || 'ldap'}`);

@@ -3,16 +3,7 @@ import axios from 'axios'
 import Login from './components/login/Login.jsx'
 import Dashboard from './components/dashboard/Dashboard.jsx'
 import './App.css'
-
-// Determinar el host del backend
-const getBackendHost = () => {
-  const hostname = window.location.hostname;
-  const protocol = window.location.protocol;
-  return `${protocol}//${hostname}:5001`;
-};
-
-const BACKEND_HOST = getBackendHost();
-const API_URL = `${BACKEND_HOST}/graphql`;
+import { API_URL } from './config/api'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
