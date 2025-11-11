@@ -184,6 +184,12 @@ function Dashboard({ user, onLogout }) {
   const [addingSignerId, setAddingSignerId] = useState(null);
   const [errorModalData, setErrorModalData] = useState(null);
 
+  // Estado para modal de posición inválida
+  const [invalidPositionModal, setInvalidPositionModal] = useState(false);
+
+  // Estado para modal de éxito al guardar orden
+  const [saveOrderSuccessModal, setSaveOrderSuccessModal] = useState(false);
+
   // Estados para Stepper funcional de MUI (3 pasos)
   const steps = ['Cargar documentos', 'Añadir firmantes', 'Enviar'];
   const [activeStep, setActiveStep] = useState(0);
@@ -2114,7 +2120,7 @@ function Dashboard({ user, onLogout }) {
 
     // REGLA 1: Los firmantes que ya firmaron o rechazaron NO se pueden mover EN ABSOLUTO
     if (draggedSigner.status === 'signed' || draggedSigner.status === 'rejected') {
-      showNotif('No se puede reordenar', `No se puede mover a ${draggedSigner.signer.name || draggedSigner.signer.email} porque ya ha ${draggedSigner.status === 'signed' ? 'firmado' : 'rechazado'}. Solo los firmantes pendientes pueden reordenarse.`, 'error');
+      setInvalidPositionModal(true);
       setDraggedSignerIndex(null);
       setDragOverSignerIndex(null);
       return;
@@ -2131,8 +2137,7 @@ function Dashboard({ user, onLogout }) {
 
     // Si hay firmantes firmados/rechazados y intentamos mover antes o en su zona
     if (lastSignedOrRejectedIndex >= 0 && dropIndex <= lastSignedOrRejectedIndex) {
-      const minAllowedPosition = lastSignedOrRejectedIndex + 2; // +2 porque las posiciones empiezan en 1
-      showNotif('Posición no válida', `No puedes mover este firmante a la posición ${dropIndex + 1}. Debe estar después de la posición ${lastSignedOrRejectedIndex + 1}, ya que los primeros ${lastSignedOrRejectedIndex + 1} firmantes ya han firmado o rechazado. Solo puedes reordenar firmantes pendientes entre sí.`, 'error');
+      setInvalidPositionModal(true);
       setDraggedSignerIndex(null);
       setDragOverSignerIndex(null);
       return;
@@ -2192,7 +2197,7 @@ function Dashboard({ user, onLogout }) {
       await handleManageSigners(managingDocument);
       await loadMyDocuments();
 
-      showNotif('Éxito', 'Orden de firmantes actualizado exitosamente', 'success');
+      setSaveOrderSuccessModal(true);
     } catch (err) {
       console.error('Error al reordenar firmantes:', err);
       showNotif('Error', err.message || 'No se pudo reordenar los firmantes', 'error');
@@ -4147,17 +4152,17 @@ function Dashboard({ user, onLogout }) {
             <div className="pdf-viewer-header-right">
               {isViewingPending && !isWaitingTurn && (
                 <>
+                  <button className="pdf-viewer-action-btn sign" onClick={handleOpenSignConfirm}>
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Firmar
+                  </button>
                   <button className="pdf-viewer-action-btn reject" onClick={handleOpenRejectConfirm}>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                     Rechazar
-                  </button>
-                  <button className="pdf-viewer-action-btn sign" onClick={handleOpenSignConfirm}>
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M11 5H6C5.46957 5 4.96086 5.21071 4.58579 5.58579C4.21071 5.96086 4 6.46957 4 7V19C4 19.5304 4.21071 20.0391 4.58579 20.4142C4.96086 20.7893 5.46957 21 6 21H18C18.5304 21 19.0391 20.7893 19.4142 20.4142C19.7893 20.0391 20 19.5304 20 19V14M18.5 2.5C18.8978 2.1022 19.4374 1.87868 20 1.87868C20.5626 1.87868 21.1022 2.1022 21.5 2.5C21.8978 2.8978 22.1213 3.43739 22.1213 4C22.1213 4.56261 21.8978 5.1022 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    Firmar
                   </button>
                 </>
               )}
@@ -4287,24 +4292,19 @@ function Dashboard({ user, onLogout }) {
                     <path d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
-                <h3 className="reject-confirm-title">Rechazar documento</h3>
+                <h3 className="reject-confirm-title">Rechazar Documento</h3>
                 <p className="reject-confirm-message">
                   Por favor, explica la razón del rechazo. Esta información será visible para todos los involucrados.
                 </p>
                 <div className="reject-reason-container">
                   <textarea
                     className="reject-reason-input"
-                    placeholder="Escribe la razón del rechazo (mínimo 5 caracteres)..."
+                    placeholder="Explica la razón del rechazo..."
                     value={rejectReason}
                     onChange={handleRejectReasonChange}
                     rows="4"
                     maxLength="500"
                   />
-                  <div className="reject-reason-info">
-                    <span className={`char-count ${rejectReason.length < 5 ? 'insufficient' : 'sufficient'}`}>
-                      {rejectReason.length}/500 caracteres (mínimo 5)
-                    </span>
-                  </div>
                   {rejectError && (
                     <div className="reject-error-message">
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4661,24 +4661,15 @@ function Dashboard({ user, onLogout }) {
                   className="btn-save-signers-order"
                   onClick={handleSaveOrder}
                   disabled={savingOrder}
+                  style={{
+                    backgroundColor: '#6366f1',
+                    color: 'white',
+                    minWidth: '160px',
+                    transform: 'none',
+                    transition: 'opacity 0.2s ease'
+                  }}
                 >
-                  {savingOrder ? (
-                    <>
-                      <svg className="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/>
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-                      </svg>
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M17 21V13H7V21M7 3V8H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      Guardar Orden
-                    </>
-                  )}
+                  {savingOrder ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               )}
             </div>
@@ -4719,6 +4710,71 @@ function Dashboard({ user, onLogout }) {
                 style={{background:"#fee2e2"}}
                 >
                 {deleting ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de posición inválida */}
+      {invalidPositionModal && (
+        <div className="delete-modal-overlay" onClick={() => setInvalidPositionModal(false)}>
+          <div className="delete-modal-minimal" onClick={(e) => e.stopPropagation()}>
+            {/* Icono de alerta circular */}
+            <div className="delete-icon-circle" style={{backgroundColor: '#fef2f2'}}>
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{color: '#ef4444'}}>
+                <path d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+
+            {/* Título y descripción */}
+            <h2 className="delete-modal-title">Posición no válida</h2>
+            <p className="delete-modal-description">
+              Solo puedes reordenar firmantes pendientes entre sí.
+            </p>
+
+            {/* Botón único */}
+            <div className="delete-modal-buttons">
+              <button
+                className="delete-btn-confirm"
+                onClick={() => setInvalidPositionModal(false)}
+                style={{
+                  background: '#4f46e5',
+                  color: 'white',
+                  width: '100%'
+                }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de éxito al guardar orden */}
+      {saveOrderSuccessModal && (
+        <div className="delete-modal-overlay" onClick={() => setSaveOrderSuccessModal(false)} style={{backdropFilter: 'blur(4px)', backgroundColor: 'rgba(0, 0, 0, 0.3)'}}>
+          <div className="delete-modal-minimal" onClick={(e) => e.stopPropagation()}>
+            {/* Icono de check circular verde */}
+            <div className="success-icon-circle">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+
+            {/* Título y descripción */}
+            <h2 className="delete-modal-title" style={{textAlign: 'center'}}>Éxito</h2>
+            <p className="delete-modal-description" style={{textAlign: 'center'}}>
+              Orden de firmantes actualizado exitosamente
+            </p>
+
+            {/* Botón único */}
+            <div className="delete-modal-buttons" style={{justifyContent: 'center'}}>
+              <button
+                className="success-btn-confirm"
+                onClick={() => setSaveOrderSuccessModal(false)}
+              >
+                Entendido
               </button>
             </div>
           </div>

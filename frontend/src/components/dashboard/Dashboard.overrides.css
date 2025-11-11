@@ -561,8 +561,8 @@ textarea.form-input:focus {
 }
 
 .pdf-viewer-action-btn.download {
-  color: #6366F1 !important;
-  border-color: #6366F1 !important;
+  color: #374151 !important;
+  border-color: #374151 !important;
 }
 
 .pdf-viewer-action-btn.download:hover {
@@ -593,18 +593,6 @@ textarea.form-input:focus {
 
 .fallback-download-btn:hover {
   background-color: #4F46E5 !important;
-}
-
-/* Botón de firmar */
-.pdf-viewer-action-btn.sign {
-  color: white !important;
-  background-color: #10B981 !important;
-  border-color: #10B981 !important;
-}
-
-.pdf-viewer-action-btn.sign:hover {
-  background-color: #059669 !important;
-  border-color: #059669 !important;
 }
 
 /* ========================================
@@ -681,23 +669,14 @@ textarea.form-input:focus {
    BOTÓN RECHAZAR Y POPUP DE RECHAZO
    ======================================== */
 
-/* Botón de rechazar */
-.pdf-viewer-action-btn.reject {
-  color: #DC2626 !important;
-  border-color: #DC2626 !important;
-}
-
-.pdf-viewer-action-btn.reject:hover {
-  background-color: #FEE2E2 !important;
-  border-color: #DC2626 !important;
-}
-
 /* Modal de rechazo */
 .reject-confirm-modal {
   background-color: white !important;
   border-radius: 16px !important;
-  padding: 32px !important;
-  max-width: 520px !important;
+  padding: 38px 31px !important;
+  max-width: 470px !important;
+  width: 90% !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
 }
 
 .reject-confirm-icon {
@@ -708,12 +687,18 @@ textarea.form-input:focus {
 .reject-reason-input {
   width: 100% !important;
   border: 1px solid #D1D5DB !important;
-  border-radius: 8px !important;
+  border-radius: 9px !important;
+  font-size: 14px !important;
+  background-color: #F9FAFB !important;
+  padding: 12px 15px !important;
+  min-height: 110px !important;
+  box-sizing: border-box !important;
 }
 
 .reject-reason-input:focus {
   border-color: #DC2626 !important;
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+  background-color: white !important;
 }
 
 .char-count.insufficient {
@@ -731,23 +716,32 @@ textarea.form-input:focus {
 }
 
 .reject-confirm-btn.cancel {
-  background-color: white !important;
-  border: 1px solid #E5E7EB !important;
+  background-color: #F3F4F6 !important;
+  border: none !important;
   color: #374151 !important;
+  padding: 11px 25px !important;
+  border-radius: 9px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
 }
 
 .reject-confirm-btn.cancel:hover {
-  background-color: #F9FAFB !important;
-  border-color: #D1D5DB !important;
+  background-color: #E5E7EB !important;
 }
 
 .reject-confirm-btn.confirm {
-  background-color: #DC2626 !important;
+  background-color: #EF4444 !important;
   color: white !important;
+  padding: 11px 25px !important;
+  border-radius: 9px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2) !important;
 }
 
 .reject-confirm-btn.confirm:hover:not(:disabled) {
-  background-color: #B91C1C !important;
+  background-color: #DC2626 !important;
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3) !important;
 }
 
 .reject-confirm-btn.confirm:disabled {
@@ -1445,6 +1439,24 @@ textarea.form-input:focus {
   color: #DC2626 !important;
 }
 
+/* Icono circular de éxito verde */
+.success-icon-circle {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50% !important;
+  background: #d1fae5 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-bottom: 20px !important;
+}
+
+.success-icon-circle svg {
+  width: 28px !important;
+  height: 28px !important;
+  color: #10b981 !important;
+}
+
 /* Título del modal */
 .delete-modal-title {
   font-size: 20px !important;
@@ -1512,6 +1524,30 @@ textarea.form-input:focus {
 }
 
 .delete-btn-confirm:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Botón de Éxito Verde */
+.success-btn-confirm {
+  flex: 1 !important;
+  padding: 12px 20px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  background: #10b981 !important;
+  color: white !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  width: 100% !important;
+}
+
+.success-btn-confirm:hover {
+  background: #059669 !important;
+}
+
+.success-btn-confirm:disabled {
   opacity: 0.6 !important;
   cursor: not-allowed !important;
 }
