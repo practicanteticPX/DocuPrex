@@ -75,6 +75,7 @@ function Dashboard({ user, onLogout }) {
   const [orderErrorMessage, setOrderErrorMessage] = useState('');
   const [signing, setSigning] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   // Estado para modal de notificación elegante
   const [showNotification, setShowNotification] = useState(false);
@@ -1482,7 +1483,7 @@ function Dashboard({ user, onLogout }) {
     try {
       // Si la notificación es de documento eliminado, mostrar mensaje informativo
       if (notification.type === 'document_deleted') {
-        alert(`El documento "${notification.documentTitle}" ha sido eliminado y ya no está disponible.`);
+        showNotif('Documento eliminado', `El documento "${notification.documentTitle}" ha sido eliminado y ya no está disponible.`, 'error');
         return;
       }
 
@@ -1548,7 +1549,7 @@ function Dashboard({ user, onLogout }) {
 
       if (!doc) {
         console.error('Documento no encontrado');
-        alert(`El documento "${notification.documentTitle}" ya no está disponible. Es posible que haya sido eliminado.`);
+        showNotif('Documento no disponible', `El documento "${notification.documentTitle}" ya no está disponible. Es posible que haya sido eliminado.`, 'error');
         return;
       }
 
@@ -1732,7 +1733,7 @@ function Dashboard({ user, onLogout }) {
       await loadMyDocuments();
     } catch (err) {
       console.error('Error al eliminar documento:', err);
-      alert(err.message || 'Error al eliminar el documento');
+      showNotif('Error', err.message || 'No se pudo eliminar el documento', 'error');
     } finally {
       setDeleting(false);
     }
@@ -1812,7 +1813,7 @@ function Dashboard({ user, onLogout }) {
       setDocumentSigners(signers);
     } catch (err) {
       console.error('Error al cargar firmantes:', err);
-      alert('Error al cargar la información de firmantes');
+      showNotif('Error', 'No se pudo cargar la información de firmantes', 'error');
       setManagingDocument(null);
     } finally {
       setLoadingDocumentSigners(false);
@@ -1928,7 +1929,7 @@ function Dashboard({ user, onLogout }) {
       try { await loadMyDocuments(); } catch {}
     } catch (err) {
       console.error('Error al asignar firmantes:', err);
-      alert(err.message || 'Error al asignar firmantes');
+      showNotif('Error', err.message || 'No se pudo asignar los firmantes', 'error');
     }
   };
 
@@ -2018,10 +2019,10 @@ function Dashboard({ user, onLogout }) {
       // Recargar la lista de documentos
       await loadMyDocuments();
 
-      alert('Firmante eliminado exitosamente');
+      showNotif('Éxito', 'Firmante eliminado exitosamente', 'success');
     } catch (err) {
       console.error('Error al eliminar firmante:', err);
-      alert(err.message || 'Error al eliminar firmante');
+      showNotif('Error', err.message || 'No se pudo eliminar el firmante', 'error');
       setLoadingDocumentSigners(false);
     }
   };
@@ -2050,7 +2051,7 @@ function Dashboard({ user, onLogout }) {
 
     // REGLA 1: Los firmantes que ya firmaron o rechazaron NO se pueden mover EN ABSOLUTO
     if (draggedSigner.status === 'signed' || draggedSigner.status === 'rejected') {
-      alert(`No se puede mover a ${draggedSigner.signer.name || draggedSigner.signer.email} porque ya ha ${draggedSigner.status === 'signed' ? 'firmado' : 'rechazado'}. Solo los firmantes pendientes pueden reordenarse.`);
+      showNotif('No se puede reordenar', `No se puede mover a ${draggedSigner.signer.name || draggedSigner.signer.email} porque ya ha ${draggedSigner.status === 'signed' ? 'firmado' : 'rechazado'}. Solo los firmantes pendientes pueden reordenarse.`, 'error');
       setDraggedSignerIndex(null);
       return;
     }
@@ -2067,7 +2068,7 @@ function Dashboard({ user, onLogout }) {
     // Si hay firmantes firmados/rechazados y intentamos mover antes o en su zona
     if (lastSignedOrRejectedIndex >= 0 && dropIndex <= lastSignedOrRejectedIndex) {
       const minAllowedPosition = lastSignedOrRejectedIndex + 2; // +2 porque las posiciones empiezan en 1
-      alert(`No puedes mover este firmante a la posición ${dropIndex + 1}. Debe estar después de la posición ${lastSignedOrRejectedIndex + 1}, ya que los primeros ${lastSignedOrRejectedIndex + 1} firmantes ya han firmado o rechazado. Solo puedes reordenar firmantes pendientes entre sí.`);
+      showNotif('Posición no válida', `No puedes mover este firmante a la posición ${dropIndex + 1}. Debe estar después de la posición ${lastSignedOrRejectedIndex + 1}, ya que los primeros ${lastSignedOrRejectedIndex + 1} firmantes ya han firmado o rechazado. Solo puedes reordenar firmantes pendientes entre sí.`, 'error');
       setDraggedSignerIndex(null);
       return;
     }
@@ -2093,9 +2094,10 @@ function Dashboard({ user, onLogout }) {
 
   // Guardar el nuevo orden en el servidor
   const handleSaveOrder = async () => {
-    if (!managingDocument) return;
+    if (!managingDocument || savingOrder) return;
 
     try {
+      setSavingOrder(true);
       const token = localStorage.getItem('token');
       const newOrder = documentSigners.map(signer => signer.signer.id);
 
@@ -2123,10 +2125,12 @@ function Dashboard({ user, onLogout }) {
       await handleManageSigners(managingDocument);
       await loadMyDocuments();
 
-      alert('Orden de firmantes actualizado exitosamente');
+      showNotif('Éxito', 'Orden de firmantes actualizado exitosamente', 'success');
     } catch (err) {
       console.error('Error al reordenar firmantes:', err);
-      alert(err.message || 'Error al reordenar firmantes');
+      showNotif('Error', err.message || 'No se pudo reordenar los firmantes', 'error');
+    } finally {
+      setSavingOrder(false);
     }
   };
 
@@ -2161,10 +2165,10 @@ function Dashboard({ user, onLogout }) {
       await loadMyDocuments();
       setSearchNewSigner('');
 
-      alert('Firmante agregado exitosamente');
+      showNotif('Éxito', 'Firmante agregado exitosamente', 'success');
     } catch (err) {
       console.error('Error al agregar firmante:', err);
-      alert(err.message || 'Error al agregar firmante');
+      showNotif('Error', err.message || 'No se pudo agregar el firmante', 'error');
     }
   };
 
@@ -4591,12 +4595,25 @@ function Dashboard({ user, onLogout }) {
                 <button
                   className="btn-save-signers-order"
                   onClick={handleSaveOrder}
+                  disabled={savingOrder}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M17 21V13H7V21M7 3V8H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Guardar Orden
+                  {savingOrder ? (
+                    <>
+                      <svg className="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                      </svg>
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16L21 8V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M17 21V13H7V21M7 3V8H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Guardar Orden
+                    </>
+                  )}
                 </button>
               )}
             </div>
