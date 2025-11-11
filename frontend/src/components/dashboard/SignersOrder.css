@@ -395,22 +395,30 @@
   background: white;
   border: 1.5px solid #E5E7EB;
   border-radius: 10px;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: move;
   position: relative;
 }
 
 .selected-signer-card:hover {
-  border-color: #D1D5DB;
-  background: #FAFAFA;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-color: #A855F7;
+  background: #FAF5FF;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.15);
 }
 
 .selected-signer-card.dragging {
-  opacity: 0.6;
-  border-color: #6366F1;
+  opacity: 0.4;
+  transform: scale(0.98);
+  border-color: #A855F7;
   background: #F5F3FF;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
+}
+
+/* Indicador visual al arrastrar sobre otro elemento */
+.selected-signer-card.drag-over {
+  background: #FAF5FF;
+  border: 2px dashed #A855F7;
+  transform: translateY(-2px);
 }
 
 .selected-signer-card.locked {

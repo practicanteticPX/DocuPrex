@@ -170,6 +170,7 @@ function Dashboard({ user, onLogout }) {
 
   // Estado para drag and drop de firmantes
   const [draggedSignerIndex, setDraggedSignerIndex] = useState(null);
+  const [dragOverSignerIndex, setDragOverSignerIndex] = useState(null);
 
   // Estado para controlar "ver más" en firmantes de Mis Documentos
   const [expandedSigners, setExpandedSigners] = useState({});
@@ -992,6 +993,10 @@ function Dashboard({ user, onLogout }) {
    */
   const handleDragOverSigner = (e, index) => {
     e.preventDefault();
+
+    // Establecer el índice sobre el que estamos arrastrando para el efecto visual
+    setDragOverSignerIndex(index);
+
     if (draggedSignerIndex === null || draggedSignerIndex === index) return;
 
     // Prevenir que cualquier firmante sea arrastrado a la posición 0 si el usuario actual está ahí
@@ -1028,6 +1033,7 @@ function Dashboard({ user, onLogout }) {
    */
   const handleDragEndSigner = () => {
     setDraggedSignerIndex(null);
+    setDragOverSignerIndex(null);
   };
 
   /**
@@ -2036,6 +2042,9 @@ function Dashboard({ user, onLogout }) {
   const handleSignerDragOver = (e, index) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+
+    // Establecer el índice sobre el que estamos arrastrando para el efecto visual
+    setDragOverSignerIndex(index);
   };
 
   const handleSignerDrop = (e, dropIndex) => {
@@ -2043,6 +2052,7 @@ function Dashboard({ user, onLogout }) {
 
     if (draggedSignerIndex === null || draggedSignerIndex === dropIndex) {
       setDraggedSignerIndex(null);
+      setDragOverSignerIndex(null);
       return;
     }
 
@@ -2053,6 +2063,7 @@ function Dashboard({ user, onLogout }) {
     if (draggedSigner.status === 'signed' || draggedSigner.status === 'rejected') {
       showNotif('No se puede reordenar', `No se puede mover a ${draggedSigner.signer.name || draggedSigner.signer.email} porque ya ha ${draggedSigner.status === 'signed' ? 'firmado' : 'rechazado'}. Solo los firmantes pendientes pueden reordenarse.`, 'error');
       setDraggedSignerIndex(null);
+      setDragOverSignerIndex(null);
       return;
     }
 
@@ -2070,6 +2081,7 @@ function Dashboard({ user, onLogout }) {
       const minAllowedPosition = lastSignedOrRejectedIndex + 2; // +2 porque las posiciones empiezan en 1
       showNotif('Posición no válida', `No puedes mover este firmante a la posición ${dropIndex + 1}. Debe estar después de la posición ${lastSignedOrRejectedIndex + 1}, ya que los primeros ${lastSignedOrRejectedIndex + 1} firmantes ya han firmado o rechazado. Solo puedes reordenar firmantes pendientes entre sí.`, 'error');
       setDraggedSignerIndex(null);
+      setDragOverSignerIndex(null);
       return;
     }
 
@@ -2086,10 +2098,12 @@ function Dashboard({ user, onLogout }) {
 
     setDocumentSigners(updatedSigners);
     setDraggedSignerIndex(null);
+    setDragOverSignerIndex(null);
   };
 
   const handleSignerDragEnd = () => {
     setDraggedSignerIndex(null);
+    setDragOverSignerIndex(null);
   };
 
   // Guardar el nuevo orden en el servidor
@@ -2907,7 +2921,7 @@ function Dashboard({ user, onLogout }) {
                                   return (
                                     <div
                                       key={signerId}
-                                      className={`selected-signer-card ${draggedSignerIndex === index ? 'dragging' : ''} ${isCurrentUser ? 'locked' : ''}`}
+                                      className={`selected-signer-card ${draggedSignerIndex === index ? 'dragging' : ''} ${dragOverSignerIndex === index && draggedSignerIndex !== index ? 'drag-over' : ''} ${isCurrentUser ? 'locked' : ''}`}
                                       draggable={canDrag}
                                       onDragStart={(e) => handleDragStartSigner(e, index)}
                                       onDragOver={(e) => handleDragOverSigner(e, index)}
@@ -4494,7 +4508,7 @@ function Dashboard({ user, onLogout }) {
                     {documentSigners.map((signature, index) => (
                       <div
                         key={signature.id}
-                        className={`signer-item-modal ${draggedSignerIndex === index ? 'dragging' : ''}`}
+                        className={`selected-signer-card ${draggedSignerIndex === index ? 'dragging' : ''} ${dragOverSignerIndex === index && draggedSignerIndex !== index ? 'drag-over' : ''}`}
                         draggable={managingDocument.status !== 'completed' && (signature.status === 'pending' || signature.status === 'signed')}
                         onDragStart={(e) => handleSignerDragStart(e, index)}
                         onDragOver={(e) => handleSignerDragOver(e, index)}

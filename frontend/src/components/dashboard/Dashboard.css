@@ -1356,58 +1356,18 @@
   background: #E5E7EB;
 }
 
-/* Lista de firmantes en modal */
+/* Lista de firmantes en modal - usa los mismos estilos que selected-signers-container */
 .signers-list-modal {
-  background: #ffffff;
-  border: 1px solid #E5E7EB;
-  border-radius: 10px;
-  overflow-y: auto;
-  max-height: 400px;
-}
-
-.signer-item-modal {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #F3F4F6;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding: 2px;
 }
 
-.signer-item-modal:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-}
-
-.signer-item-modal:hover {
-  background: #F9FAFB;
-}
-
-.signer-item-modal[draggable="true"] {
-  cursor: grab;
-}
-
-.signer-item-modal[draggable="true"]:active {
-  cursor: grabbing;
-}
-
-/* Estado de arrastre */
-.signer-item-modal.dragging {
-  opacity: 0.4;
-  transform: scale(0.98);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Indicador visual al arrastrar sobre otro elemento */
-.signer-item-modal.drag-over {
-  background: #EFF6FF;
-  border: 2px dashed #60a5fa;
-  transform: translateY(-2px);
-}
+/* Los estilos de selected-signer-card se aplican también al modal */
 
 /* Los estilos signer-avatar-circle, signer-info-modern,
    signer-name-modern, signer-email-modern vienen de SignersOrder.css */
