@@ -420,7 +420,17 @@ function Dashboard({ user, onLogout }) {
   // Cambiar el título de la página cuando se abre el visor de PDF
   useEffect(() => {
     if (viewingDocument) {
-      document.title = viewingDocument.title || 'Visor de Documentos';
+      const desiredTitle = viewingDocument.title || 'Visor de Documentos';
+      document.title = desiredTitle;
+
+      // Forzar el título cada segundo para evitar que el PDF interno lo sobrescriba
+      const intervalId = setInterval(() => {
+        if (document.title !== desiredTitle) {
+          document.title = desiredTitle;
+        }
+      }, 100);
+
+      return () => clearInterval(intervalId);
     } else {
       document.title = 'DocuPrex';
     }
