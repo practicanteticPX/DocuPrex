@@ -54,6 +54,7 @@ function Dashboard({ user, onLogout }) {
   const [loadingRejected, setLoadingRejected] = useState(false);
   const [viewingDocument, setViewingDocument] = useState(null);
   const [isViewingPending, setIsViewingPending] = useState(false);
+  const [isWaitingTurn, setIsWaitingTurn] = useState(false);
   const [documentLoadedFromUrl, setDocumentLoadedFromUrl] = useState(false);
   // Establecer isCheckingDocumentFromUrl en true si hay un documento en la URL desde el inicio
   const [isCheckingDocumentFromUrl, setIsCheckingDocumentFromUrl] = useState(() => {
@@ -234,9 +235,10 @@ function Dashboard({ user, onLogout }) {
   /**
    * Abrir el visor de PDF con el documento seleccionado
    */
-  const handleViewDocument = (doc, isPending = false) => {
+  const handleViewDocument = (doc, isPending = false, isWaiting = false) => {
     setViewingDocument(doc);
     setIsViewingPending(isPending);
+    setIsWaitingTurn(isWaiting);
   };
 
   /**
@@ -1591,6 +1593,7 @@ function Dashboard({ user, onLogout }) {
   const handleCloseViewer = () => {
     setViewingDocument(null);
     setIsViewingPending(false);
+    setIsWaitingTurn(false);
     setShowSignConfirm(false);
     setShowRejectConfirm(false);
     setRejectReason('');
@@ -3206,7 +3209,55 @@ function Dashboard({ user, onLogout }) {
                         <div className="doc-actions-clean">
                           <button
                             className="btn-action-clean"
-                            onClick={() => handleViewDocument(doc, true)}
+                            onClick={async () => {
+                              // Hacer query para obtener información de firmantes con orderPosition
+                              try {
+                                const token = localStorage.getItem('token');
+                                const response = await axios.post(
+                                  API_URL,
+                                  {
+                                    query: `
+                                      query GetDocumentSigners($documentId: ID!) {
+                                        documentSigners(documentId: $documentId) {
+                                          userId
+                                          orderPosition
+                                          signature {
+                                            status
+                                          }
+                                        }
+                                      }
+                                    `,
+                                    variables: { documentId: doc.id }
+                                  },
+                                  {
+                                    headers: {
+                                      'Authorization': `Bearer ${token}`,
+                                      'Content-Type': 'application/json',
+                                    },
+                                  }
+                                );
+
+                                const signers = response.data?.data?.documentSigners || [];
+                                const currentUserSigner = signers.find(s => s.userId === user.id);
+                                let isWaiting = false;
+
+                                if (currentUserSigner && currentUserSigner.signature?.status === 'pending') {
+                                  const previousSigners = signers.filter(
+                                    s => s.orderPosition < currentUserSigner.orderPosition
+                                  );
+                                  const allPreviousSigned = previousSigners.every(
+                                    s => s.signature && s.signature.status === 'signed'
+                                  );
+                                  isWaiting = !allPreviousSigned;
+                                }
+
+                                handleViewDocument(doc, true, isWaiting);
+                              } catch (error) {
+                                console.error('Error al verificar orden de firma:', error);
+                                // Si hay error, abrir el documento de todos modos
+                                handleViewDocument(doc, true, false);
+                              }
+                            }}
                             title="Ver documento"
                             style={{marginTop: '-1.5vw'}}
                           >
@@ -4016,7 +4067,7 @@ function Dashboard({ user, onLogout }) {
               )}
             </div>
             <div className="pdf-viewer-header-right">
-              {isViewingPending && (
+              {isViewingPending && !isWaitingTurn && (
                 <>
                   <button className="pdf-viewer-action-btn reject" onClick={handleOpenRejectConfirm}>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4031,6 +4082,14 @@ function Dashboard({ user, onLogout }) {
                     Firmar
                   </button>
                 </>
+              )}
+              {isViewingPending && isWaitingTurn && (
+                <div className="pdf-viewer-waiting-message">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '20px', height: '20px'}}>
+                    <path d="M12 8V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span>Aún no es tu turno de firmar. Hay otras personas que deben firmarlo antes que tú.</span>
+                </div>
               )}
               <a
                 href={getDownloadUrl(viewingDocument.id)}
