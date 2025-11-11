@@ -251,11 +251,17 @@ const resolvers = {
       if (!user) throw new Error('No autenticado');
 
       const result = await query(`
-        SELECT s.*, u.name as signer_name, u.email as signer_email
+        SELECT
+          s.*,
+          u.name as signer_name,
+          u.email as signer_email,
+          ds.role_name as role_name,
+          ds.order_position as order_position
         FROM signatures s
         JOIN users u ON s.signer_id = u.id
+        LEFT JOIN document_signers ds ON ds.document_id = s.document_id AND ds.user_id = s.signer_id
         WHERE s.document_id = $1
-        ORDER BY s.created_at DESC
+        ORDER BY COALESCE(ds.order_position, s.created_at::integer) ASC
       `, [documentId]);
 
       return result.rows;
@@ -848,7 +854,7 @@ const resolvers = {
 
         // Obtener lista completa de firmantes con su orden y estado actual
         const signersResult = await query(
-          `SELECT u.id, u.name, u.email, ds.order_position,
+          `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
                   COALESCE(s.status, 'pending') as status,
                   s.signed_at,
                   s.rejected_at
@@ -1121,7 +1127,7 @@ const resolvers = {
 
           // Obtener lista actualizada de firmantes
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position,
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
                     s.rejected_at
@@ -1392,7 +1398,7 @@ const resolvers = {
 
         if (docInfo.rows.length > 0) {
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, s.status, s.signed_at, s.rejected_at
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, s.status, s.signed_at, s.rejected_at
              FROM document_signers ds
              JOIN users u ON ds.user_id = u.id
              LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1648,7 +1654,7 @@ const resolvers = {
 
           // Obtener firmantes con estados actualizados
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position,
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
                     s.rejected_at
@@ -1931,7 +1937,7 @@ const resolvers = {
                   console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
                   // Construir URL de descarga usando la ruta de la API
-                  const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
+                  const urlDescarga = `http://192.168.0.19:5001/api/download/${documentId}`;
 
                   // Enviar correo solo al creador
                   await notificarDocumentoFirmadoCompleto({
@@ -1981,7 +1987,7 @@ const resolvers = {
 
           // Obtener firmantes con estados actualizados
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position,
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
                     s.rejected_at

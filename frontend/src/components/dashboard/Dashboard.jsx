@@ -181,6 +181,22 @@ function Dashboard({ user, onLogout }) {
     };
   }, []);
 
+  // Cerrar dropdown de roles al hacer scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (openRoleDropdown !== null) {
+        setOpenRoleDropdown(null);
+      }
+    };
+
+    // Escuchar scroll en la ventana y en todos los contenedores scrollables
+    window.addEventListener('scroll', handleScroll, true);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [openRoleDropdown]);
+
   // Estados para modal de gestión de firmantes
   const [managingDocument, setManagingDocument] = useState(null);
   const [documentSigners, setDocumentSigners] = useState([]);
@@ -632,6 +648,8 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectionReason
                   rejectedAt
+                  roleName
+                  orderPosition
                   signer {
                     id
                     name
@@ -696,6 +714,8 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectionReason
                   rejectedAt
+                  roleName
+                  orderPosition
                   signer {
                     id
                     name
@@ -761,6 +781,8 @@ function Dashboard({ user, onLogout }) {
                   status
                   rejectionReason
                   signedAt
+                  roleName
+                  orderPosition
                 }
               }
             }
@@ -944,6 +966,8 @@ function Dashboard({ user, onLogout }) {
                   status
                   rejectionReason
                   rejectedAt
+                  roleName
+                  orderPosition
                   signer {
                     id
                     name
@@ -970,6 +994,8 @@ function Dashboard({ user, onLogout }) {
                   status
                   rejectionReason
                   rejectedAt
+                  roleName
+                  orderPosition
                   signer {
                     id
                     name
@@ -1975,6 +2001,7 @@ function Dashboard({ user, onLogout }) {
               documentSigners(documentId: $documentId) {
                 userId
                 orderPosition
+                roleName
                 user {
                   id
                   name
@@ -2011,6 +2038,7 @@ function Dashboard({ user, onLogout }) {
         id: ds.signature?.id || `temp-${ds.userId}`,
         signer: ds.user,
         orderPosition: ds.orderPosition,
+        roleName: ds.roleName,
         status: ds.signature?.status || 'pending',
         signedAt: ds.signature?.signedAt,
         rejectedAt: ds.signature?.rejectedAt,
@@ -2203,6 +2231,7 @@ function Dashboard({ user, onLogout }) {
               documentSigners(documentId: $documentId) {
                 userId
                 orderPosition
+                roleName
                 user {
                   id
                   name
@@ -3554,7 +3583,10 @@ function Dashboard({ user, onLogout }) {
                                     className="signer-dot"
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                   ></span>
-                                  <span className="signer-name">{sig.signer?.name || sig.signer?.email}</span>
+                                  <span className="signer-name">
+                                    {sig.signer?.name || sig.signer?.email}
+                                    {sig.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {sig.roleName}</span>}
+                                  </span>
                                 </div>
                               );
                             })}
@@ -3851,7 +3883,10 @@ function Dashboard({ user, onLogout }) {
                                     className="signer-dot"
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                   ></span>
-                                  <span className="signer-name">{sig.signer?.name || sig.signer?.email}</span>
+                                  <span className="signer-name">
+                                    {sig.signer?.name || sig.signer?.email}
+                                    {sig.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {sig.roleName}</span>}
+                                  </span>
                                 </div>
                               );
                             })}
@@ -4105,7 +4140,10 @@ function Dashboard({ user, onLogout }) {
                                       className="signer-dot"
                                       style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                     ></span>
-                                    <span className="signer-name">{sig.signer.name || sig.signer.email}</span>
+                                    <span className="signer-name">
+                                      {sig.signer.name || sig.signer.email}
+                                      {sig.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {sig.roleName}</span>}
+                                    </span>
                                   </div>
                                 );
                               })}
@@ -4868,7 +4906,10 @@ function Dashboard({ user, onLogout }) {
                         </div>
 
                         <div className="signer-info-modern flex-grow">
-                          <p className="signer-name-modern">{signature.signer?.name || 'Usuario'}</p>
+                          <p className="signer-name-modern">
+                            {signature.signer?.name || 'Usuario'}
+                            {signature.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {signature.roleName}</span>}
+                          </p>
                           <p className="signer-email-modern">{signature.signer?.email || 'N/A'}</p>
                           {signature.status === 'rejected' && signature.rejectionReason && (
                             <p className="signer-rejection-reason">Razón: {signature.rejectionReason}</p>

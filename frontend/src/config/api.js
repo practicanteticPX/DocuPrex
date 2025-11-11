@@ -20,7 +20,7 @@ export const getBackendUrl = () => {
   // Si estamos en HTTPS, usar rutas relativas para aprovechar el proxy de Vite
   // Esto evita problemas de mixed content (HTTPS -> HTTP)
   if (protocol === 'https:') {
-    return ''; // Ruta relativa, el proxy de Vite redirigirá a http://192.168.0.30:5001
+    return ''; // Ruta relativa, el proxy de Vite redirigirá a http://192.168.0.19:5001
   }
 
   // Si estamos en HTTP, usar URL absoluta con el puerto del backend

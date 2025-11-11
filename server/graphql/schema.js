@@ -62,6 +62,8 @@ const typeDefs = gql`
     signedAt: String
     createdAt: String
     updatedAt: String
+    roleName: String
+    orderPosition: Int
   }
 
   type DocumentSigner {

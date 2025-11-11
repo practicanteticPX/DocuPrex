@@ -354,12 +354,16 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       const infoX = avatarX + 35;
       const infoY = yPosition - 23;
 
-      // Nombre del firmante
+      // Nombre del firmante con rol
       const signerName = signer.name || 'Sin nombre';
-      const maxNameLength = 30;
-      const displayName = signerName.length > maxNameLength
-        ? signerName.substring(0, maxNameLength) + '...'
-        : signerName;
+      const roleName = signer.role_name || '';
+
+      // Si hay rol, agregar " - Rol" al nombre
+      const fullName = roleName ? `${signerName} - ${roleName}` : signerName;
+      const maxNameLength = 40;
+      const displayName = fullName.length > maxNameLength
+        ? fullName.substring(0, maxNameLength) + '...'
+        : fullName;
 
       currentPage.drawText(displayName, {
         x: infoX,
