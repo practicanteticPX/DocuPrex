@@ -5345,33 +5345,35 @@
 }
 
 .pdf-viewer-action-btn.sign {
-  color: white;
-  background-color: #22c55e;
+  color: #22c55e;
+  background-color: transparent;
   border: none;
-  padding: 10px 24px;
-  border-radius: 12px;
+  padding: 10px 20px;
+  border-radius: 8px;
   font-weight: 600;
-  min-width: 130px;
+  min-width: 110px;
   justify-content: center;
+  transition: background-color 0.2s ease;
 }
 
 .pdf-viewer-action-btn.sign:hover {
-  background-color: #16a34a;
+  background-color: #dcfce7;
 }
 
 .pdf-viewer-action-btn.reject {
-  color: rgba(255, 255, 255, 0.95);
-  background-color: #ef4444;
+  color: #ef4444;
+  background-color: transparent;
   border: none;
-  padding: 10px 24px;
-  border-radius: 12px;
+  padding: 10px 20px;
+  border-radius: 8px;
   font-weight: 600;
-  min-width: 130px;
+  min-width: 110px;
   justify-content: center;
+  transition: background-color 0.2s ease;
 }
 
 .pdf-viewer-action-btn.reject:hover {
-  background-color: #dc2626;
+  background-color: #fee2e2;
 }
 
 .pdf-viewer-action-btn.close {
