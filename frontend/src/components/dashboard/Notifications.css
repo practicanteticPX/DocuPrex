@@ -124,6 +124,7 @@
 .notification-item {
   position: relative;
   display: flex;
+  align-items: flex-start;
   gap: 12px;
   padding: 16px 20px;
   border-bottom: 1px solid #F3F4F6;
@@ -143,16 +144,18 @@
   background-color: #DBEAFE;
 }
 
+.notification-item:last-child {
+  border-bottom: none;
+}
+
 /* Punto de no leído */
 .notification-unread-dot {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   width: 8px;
   height: 8px;
   background-color: #3B82F6;
   border-radius: 50%;
+  margin-top: 6px;
 }
 
 /* Contenido de la notificación */
@@ -160,34 +163,33 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-left: 8px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .notification-type {
   font-size: 13px;
   font-weight: 600;
   color: #111827;
+  line-height: 1.3;
 }
 
 .notification-message {
-  font-size: 14px;
-  color: #374151;
-  line-height: 1.4;
-}
-
-.notification-document-title {
   font-size: 13px;
-  color: #6B7280;
-  line-height: 1.4;
+  color: #4B5563;
+  line-height: 1.5;
+  word-wrap: break-word;
+  text-align: left;
 }
 
 /* Tiempo de la notificación */
 .notification-time {
+  flex-shrink: 0;
   font-size: 12px;
   color: #9CA3AF;
   white-space: nowrap;
-  align-self: flex-start;
+  margin-top: 2px;
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
 
 /* Footer del dropdown */

@@ -75,17 +75,17 @@ const getNotificationMessage = (notification) => {
 
   switch (notification.type) {
     case 'signature_request':
-      return `${actorName} te asignó como firmante`;
+      return `${actorName} te asignó como firmante del documento: ${documentTitle}`;
     case 'document_signed':
-      return `${actorName} firmó el documento`;
+      return `${actorName} firmó el documento: ${documentTitle}`;
     case 'document_completed':
-      return `El documento ha sido completado - Todos los firmantes han firmado`;
+      return `El documento "${documentTitle}" ha sido completado - Todos los firmantes han firmado`;
     case 'document_rejected':
-      return `${actorName} ha rechazado tu documento "${documentTitle}"`;
+      return `${actorName} ha rechazado tu documento: ${documentTitle}`;
     case 'document_rejected_by_other':
-      return `${actorName} rechazó el documento`;
+      return `${actorName} rechazó el documento: ${documentTitle}`;
     case 'document_deleted':
-      return `${actorName} eliminó el documento`;
+      return `${actorName} eliminó el documento: ${documentTitle}`;
     default:
       return 'Nueva notificación';
   }
@@ -339,9 +339,6 @@ const Notifications = ({ onNotificationClick }) => {
                     </div>
                     <div className="notification-message">
                       {getNotificationMessage(notification)}
-                    </div>
-                    <div className="notification-document-title">
-                      {notification.documentTitle}
                     </div>
                   </div>
 

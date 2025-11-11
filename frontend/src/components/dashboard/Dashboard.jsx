@@ -4501,29 +4501,17 @@ function Dashboard({ user, onLogout }) {
                         onDrop={(e) => handleSignerDrop(e, index)}
                         onDragEnd={handleSignerDragEnd}
                       >
-                        {/* Drag handle - Solo si se puede mover */}
-                        {managingDocument.status !== 'completed' && (signature.status === 'pending' || signature.status === 'signed') && (
-                          <div className="signer-drag-handle">
-                            <div className="signer-drag-handle-dot"></div>
-                            <div className="signer-drag-handle-dot"></div>
-                            <div className="signer-drag-handle-dot"></div>
-                          </div>
-                        )}
-                        <div className="signer-order-number">
+                        <div className="signer-order-badge">
                           {signature.orderPosition || (index + 1)}
                         </div>
-                        <div className="signer-avatar-modal">
+
+                        <div className="signer-avatar-circle">
                           {(signature.signer?.name || signature.signer?.email || 'U').charAt(0).toUpperCase()}
                         </div>
-                        <div className="signer-info-modal">
-                          <p className="signer-name-modal">{signature.signer?.name || 'Usuario'}</p>
-                          <p className="signer-email-modal">{signature.signer?.email || 'N/A'}</p>
-                          {signature.status === 'signed' && signature.signedAt && (
-                            <p className="signer-timestamp">Firmado: {formatDateTime(signature.signedAt)}</p>
-                          )}
-                          {signature.status === 'pending' && (
-                            <p className="signer-timestamp-pending">Pendiente desde: {formatDateTime(signature.createdAt)}</p>
-                          )}
+
+                        <div className="signer-info-modern flex-grow">
+                          <p className="signer-name-modern">{signature.signer?.name || 'Usuario'}</p>
+                          <p className="signer-email-modern">{signature.signer?.email || 'N/A'}</p>
                           {signature.status === 'rejected' && signature.rejectionReason && (
                             <p className="signer-rejection-reason">Razón: {signature.rejectionReason}</p>
                           )}
