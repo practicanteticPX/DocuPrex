@@ -130,7 +130,6 @@ async function startServer() {
       // Sanitizar el nombre del archivo para evitar caracteres problemáticos
       const sanitizedTitle = title
         .replace(/[<>:"/\\|?*]/g, '_') // Reemplazar caracteres inválidos en nombres de archivos
-        .replace(/\s+/g, '_') // Reemplazar espacios con guiones bajos
         .substring(0, 200); // Limitar longitud del nombre
 
       // Configurar headers para visualización inline
@@ -183,7 +182,6 @@ async function startServer() {
       // Sanitizar el nombre del archivo para evitar caracteres problemáticos
       const sanitizedTitle = title
         .replace(/[<>:"/\\|?*]/g, '_') // Reemplazar caracteres inválidos en nombres de archivos
-        .replace(/\s+/g, '_') // Reemplazar espacios con guiones bajos
         .substring(0, 200); // Limitar longitud del nombre
 
       // Configurar headers para descarga
