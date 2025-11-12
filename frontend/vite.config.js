@@ -11,7 +11,7 @@ export default defineConfig({
     allowedHosts: [
       'docuprex.com',
       'www.docuprex.com',
-      '192.168.0.19',
+      '192.168.0.30',
       'localhost'
     ],
     hmr: {

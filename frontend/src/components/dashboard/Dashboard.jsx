@@ -2471,13 +2471,13 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation AssignSigners($documentId: ID!, $userIds: [ID!]!) {
-              assignSigners(documentId: $documentId, userIds: $userIds)
+            mutation AssignSigners($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
+              assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
             }
           `,
           variables: {
             documentId: managingDocument.id,
-            userIds: [userId]
+            signerAssignments: [{ userId: userId }]
           }
         },
         { headers: { Authorization: `Bearer ${token}` } }
