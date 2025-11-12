@@ -1329,11 +1329,11 @@ function Dashboard({ user, onLogout }) {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Validar máximo 10 archivos
+    // Validar máximo 20 archivos
     const currentCount = selectedFiles.length;
     const newCount = currentCount + files.length;
-    if (newCount > 10) {
-      setError(`Máximo 10 archivos permitidos. Ya tienes ${currentCount} archivo(s) seleccionado(s).`);
+    if (newCount > 20) {
+      setError(`Máximo 20 archivos permitidos. Ya tienes ${currentCount} archivo(s) seleccionado(s).`);
       return;
     }
 
@@ -1346,7 +1346,7 @@ function Dashboard({ user, onLogout }) {
         const k = f.name + ':' + f.size;
         if (!map.has(k)) {
           // Validar que no se exceda el límite
-          if (result.length < 10) {
+          if (result.length < 20) {
             result.push(f);
             map.set(k, true);
           }
@@ -1384,11 +1384,11 @@ function Dashboard({ user, onLogout }) {
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files || []);
     if (files.length > 0) {
-      // Validar máximo 10 archivos
+      // Validar máximo 20 archivos
       const currentCount = selectedFiles.length;
       const newCount = currentCount + files.length;
-      if (newCount > 10) {
-        setError(`Máximo 10 archivos permitidos. Ya tienes ${currentCount} archivo(s) seleccionado(s).`);
+      if (newCount > 20) {
+        setError(`Máximo 20 archivos permitidos. Ya tienes ${currentCount} archivo(s) seleccionado(s).`);
         return;
       }
 
@@ -1401,7 +1401,7 @@ function Dashboard({ user, onLogout }) {
           const k = f.name + ':' + f.size;
           if (!map.has(k)) {
             // Validar que no se exceda el límite
-            if (result.length < 10) {
+            if (result.length < 20) {
               result.push(f);
               map.set(k, true);
             }
@@ -3143,7 +3143,7 @@ function Dashboard({ user, onLogout }) {
                     </div>
 
                     {/* Botón para agregar más archivos - minimalista */}
-                    {(selectedFiles.length > 0 || selectedFile) && selectedFiles.length < 10 && (
+                    {(selectedFiles.length > 0 || selectedFile) && selectedFiles.length < 20 && (
                       <div className="add-more-files-container">
                         <button
                           type="button"
