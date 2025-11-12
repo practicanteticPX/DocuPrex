@@ -328,7 +328,7 @@ router.post('/upload-unified', authenticate, (req, res) => {
         RETURNING *`,
         [
           docTitle,
-          description?.trim() || `Documento unificado de ${req.files.length} archivos`,
+          description?.trim() || null,
           mergedFileName,
           relativePath,
           mergeResult.fileSize,

@@ -3007,21 +3007,11 @@ function Dashboard({ user, onLogout }) {
                             </option>
                           ))}
                         </select>
-                        {selectedDocumentType && (
-                          <small style={{ display: 'block', marginTop: '0.5rem', color: '#666' }}>
-                            {selectedDocumentType.description}
-                          </small>
-                        )}
                       </div>
 
                       <div className="form-group">
                         <label htmlFor="document-title">
                           Título del documento
-                          {selectedDocumentType && (
-                            <span style={{ color: '#059669', fontWeight: '600', marginLeft: '0.5rem' }}>
-                              (comenzará con "{selectedDocumentType.prefix}")
-                            </span>
-                          )}
                         </label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           {selectedDocumentType && (

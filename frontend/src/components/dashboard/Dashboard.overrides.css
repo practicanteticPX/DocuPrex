@@ -1593,6 +1593,7 @@ textarea.form-input:focus {
   color: #1F2937 !important;
   font-weight: 500 !important;
   padding: 10px 44px 10px 14px !important;
+  text-indent: 0.1px !important;
 }
 
 #document-type:hover:not(:disabled) {
