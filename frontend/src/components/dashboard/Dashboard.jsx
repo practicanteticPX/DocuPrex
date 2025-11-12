@@ -1299,30 +1299,54 @@ function Dashboard({ user, onLogout }) {
 
   /**
    * Filtrar firmantes para la vista de subir documento
+   * Excluye al usuario actual ya que solo puede agregarse mediante el botón "Yo voy a firmar este documento"
+   * Busca cada palabra del término de búsqueda por separado
    */
   const getFilteredSignersForUpload = () => {
-    if (!searchTermUpload.trim()) {
-      return availableSigners;
-    }
-    const term = searchTermUpload.toLowerCase();
-    return availableSigners.filter(signer =>
-      signer.name.toLowerCase().includes(term) ||
-      signer.email.toLowerCase().includes(term)
+    // Filtrar para excluir al usuario actual
+    const signersWithoutCurrentUser = availableSigners.filter(signer =>
+      !user || signer.id !== user.id
     );
+
+    if (!searchTermUpload.trim()) {
+      return signersWithoutCurrentUser;
+    }
+
+    // Dividir el término de búsqueda en palabras
+    const searchWords = searchTermUpload.toLowerCase().trim().split(/\s+/);
+
+    return signersWithoutCurrentUser.filter(signer => {
+      const name = signer.name.toLowerCase();
+      const email = signer.email.toLowerCase();
+
+      // Todas las palabras deben encontrarse en el nombre o email
+      return searchWords.every(word =>
+        name.includes(word) || email.includes(word)
+      );
+    });
   };
 
   /**
    * Filtrar firmantes para el modal de mis documentos
+   * Busca cada palabra del término de búsqueda por separado
    */
   const getFilteredSignersForModal = (candidates) => {
     if (!searchTermModal.trim()) {
       return candidates;
     }
-    const term = searchTermModal.toLowerCase();
-    return candidates.filter(signer =>
-      signer.name.toLowerCase().includes(term) ||
-      signer.email.toLowerCase().includes(term)
-    );
+
+    // Dividir el término de búsqueda en palabras
+    const searchWords = searchTermModal.toLowerCase().trim().split(/\s+/);
+
+    return candidates.filter(signer => {
+      const name = signer.name.toLowerCase();
+      const email = signer.email.toLowerCase();
+
+      // Todas las palabras deben encontrarse en el nombre o email
+      return searchWords.every(word =>
+        name.includes(word) || email.includes(word)
+      );
+    });
   };
 
   const handleFileChange = (e) => {

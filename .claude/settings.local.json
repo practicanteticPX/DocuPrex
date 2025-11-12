@@ -40,7 +40,8 @@
       "Bash(docker network create:*)",
       "Bash(psql:*)",
       "Bash(cat:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(nul)"
     ],
     "deny": [],
     "ask": []

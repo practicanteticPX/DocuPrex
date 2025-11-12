@@ -70,94 +70,128 @@ async function notificarAsignacionFirmante({
   const frontendUrl = 'http://192.168.0.30:5173';
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
-  const subject = '📝 Has sido asignado como firmante de un documento';
+  const subject = 'Solicitud de firma';
 
   const html = `
     <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-          }
-          .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f9f9f9;
-          }
-          .header {
-            background-color: #4F46E5;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 5px 5px 0 0;
-          }
-          .content {
-            background-color: white;
-            padding: 30px;
-            border-radius: 0 0 5px 5px;
-          }
-          .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #4F46E5;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
-          }
-          .info {
-            background-color: #f0f0f0;
-            padding: 15px;
-            border-left: 4px solid #4F46E5;
-            margin: 20px 0;
-          }
-          .footer {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-            font-size: 12px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>📝 DocuPrex - Solicitud de Firma</h1>
-          </div>
-          <div class="content">
-            <p>Hola <strong>${nombreFirmante}</strong>,</p>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Firma pendiente</title>
+      <style>
+        body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          background-color: #f3f4f6;
+          font-family: 'Poppins', Arial, sans-serif;
+        }
+        .container {
+          width: 100%;
+          max-width: 448px;
+          margin: 0 auto;
+          background-color: #ffffff;
+        }
+        .content {
+          padding: 32px;
+          text-align: center;
+        }
+        h1 {
+          margin-top: 0; 
+          margin-bottom: 8px;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 20px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+        p {
+          margin: 0;
+          margin-bottom: 32px;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 16px;
+          color: #6b7280;
+        }
+        .button-link {
+          display: inline-block;
+          color: #ffffff;
+          text-decoration: none;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 16px;
+          font-weight: 600;
+          padding: 12px 24px;
+          border-radius: 8px;
+        }
+        .footer {
+          padding: 24px 0;
+          text-align: center;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 12px;
+          color: #6b7280;
+        }
+      </style>
+    </head>
+    <body style="margin: 0; padding: 0; width: 100%; background-color: #f3f4f6;">
+      
+      <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f3f4f6" style="width: 100%; background-color: #f3f4f6;">
+        
+        <tr>
+          <td style="height: 64px; font-size: 0; line-height: 0;">&nbsp;</td>
+        </tr>
+        
+        <tr>
+          <td align="center">
+            <table class="container" role="presentation" width="448" align="center" style="width: 100%; max-width: 448px; margin: 0 auto; background-color: #ffffff;" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="content" style="padding: 32px; text-align: center;">
+                  
+                  <h1 style="margin-top: 0; margin-bottom: 8px; font-family: 'Poppins', Arial, sans-serif; font-size: 20px; font-weight: 600; color: #1f2937;">
+                    Firma pendiente
+                  </h1>
+                  
+                  <p style="margin: 0; margin-bottom: 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; color: #6b7280;">
+                    <span style="font-weight: 500; color: #374151;">${creadorDocumento}</span> te ha enviado el documento "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>" para que lo firmes.
+                  </p>
+                  
+                  <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto;">
+                    <tr>
+                      <td align="center" bgcolor="#4F46E5" style="background-color: #4F46E5; border-radius: 8px;">
+                        <a href="${documentoUrl}" target="_blank" class="button-link" style="display: inline-block; text-decoration: none; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; font-weight: 600; padding: 12px 24px; border: 1px solid #4F46E5; border-radius: 8px;">
+                          
+                          <span style="color: #ffffff; text-decoration: none;">
+                            Ver Documento
+                          </span>
+                          </a>
+                      </td>
+                    </tr>
+                  </table>
+                  
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <tr>
+          <td align="center">
+            <table role="presentation" width="448" border="0" cellspacing="0" cellpadding="0" align="center" style="width: 100%; max-width: 448px; margin: 0 auto;">
+              <tr>
+                <td class="footer" style="padding: 24px 0; text-align: center; font-family: 'Poppins', Arial, sans-serif; font-size: 12px; color: #6b7280;">
+                  <p style="margin: 0;">&copy; ${new Date().getFullYear()} DocuPrex&reg; - Powered by Prexxa TIC</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <tr>
+          <td style="height: 64px; font-size: 0; line-height: 0;">&nbsp;</td>
+        </tr>
 
-            <p>Has sido asignado como firmante de un documento en el sistema DocuPrex.</p>
+      </table>
 
-            <div class="info">
-              <p><strong>Documento:</strong> ${nombreDocumento}</p>
-              <p><strong>Solicitado por:</strong> ${creadorDocumento}</p>
-            </div>
-
-            <p>Por favor, revisa y firma el documento haciendo clic en el siguiente botón:</p>
-
-            <div style="text-align: center;">
-              <a href="${documentoUrl}" class="button">Ver y Firmar Documento</a>
-            </div>
-
-            <p>También puedes copiar y pegar el siguiente enlace en tu navegador:</p>
-            <p style="word-break: break-all; color: #4F46E5;">${documentoUrl}</p>
-
-            <p style="margin-top: 30px; color: #666;">
-              Si tienes alguna pregunta, por favor contacta con el solicitante del documento.
-            </p>
-          </div>
-          <div class="footer">
-            <p>Este es un correo automático, por favor no responder.</p>
-            <p>&copy; ${new Date().getFullYear()} DocuPrex - Sistema de Firmas Digitales</p>
-          </div>
-        </div>
-      </body>
+    </body>
     </html>
   `;
 
@@ -198,7 +232,7 @@ async function notificarDocumentoFirmadoCompleto({
   const frontendUrl = 'http://192.168.0.30:5173';
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
-  const subject = '✅ Documento firmado completamente';
+  const subject = 'Documento Completado';
 
   const html = `
     <!DOCTYPE html>
@@ -338,106 +372,133 @@ async function notificarDocumentoRechazado({
   const frontendUrl = 'http://192.168.0.30:5173';
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
-  const subject = '❌ Documento rechazado';
+  const subject = 'Documento rechazado';
 
   const html = `
     <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-          }
-          .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f9f9f9;
-          }
-          .header {
-            background-color: #EF4444;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 5px 5px 0 0;
-          }
-          .content {
-            background-color: white;
-            padding: 30px;
-            border-radius: 0 0 5px 5px;
-          }
-          .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #6366F1;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
-          }
-          .info {
-            background-color: #FEF2F2;
-            padding: 15px;
-            border-left: 4px solid #EF4444;
-            margin: 20px 0;
-          }
-          .motivo {
-            background-color: #F9FAFB;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-            font-style: italic;
-          }
-          .footer {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-            font-size: 12px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>❌ Documento Rechazado</h1>
-          </div>
-          <div class="content">
-            <p>Estimado usuario,</p>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Documento Rechazado</title>
+      <style>
+        body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          background-color: #f3f4f6;
+          font-family: 'Poppins', Arial, sans-serif;
+        }
+        .container {
+          width: 100%;
+          max-width: 448px;
+          margin: 0 auto;
+          background-color: #ffffff;
+        }
+        .content {
+          padding: 32px;
+          text-align: center;
+        }
+        h1 {
+          margin-top: 0; 
+          margin-bottom: 8px;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 20px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+        p {
+          margin: 0;
+          margin-bottom: 32px;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 16px;
+          color: #6b7280;
+        }
+        .button-link {
+          display: inline-block;
+          color: #ffffff;
+          text-decoration: none;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 16px;
+          font-weight: 600;
+          padding: 12px 24px;
+          border-radius: 8px;
+        }
+        .footer {
+          padding: 24px 0;
+          text-align: center;
+          font-family: 'Poppins', Arial, sans-serif;
+          font-size: 12px;
+          color: #6b7280;
+        }
+      </style>
+    </head>
+    <body style="margin: 0; padding: 0; width: 100%; background-color: #f3f4f6;">
+      
+      <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f3f4f6" style="width: 100%; background-color: #f3f4f6;">
+        
+        <tr>
+          <td style="height: 64px; font-size: 0; line-height: 0;">&nbsp;</td>
+        </tr>
+        
+        <tr>
+          <td align="center">
+            <table class="container" role="presentation" width="448" align="center" style="width: 100%; max-width: 448px; margin: 0 auto; background-color: #ffffff;" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="content" style="padding: 32px; text-align: center;">
+                  
+                  <h1 style="margin-top: 0; margin-bottom: 8px; font-family: 'Poppins', Arial, sans-serif; font-size: 20px; font-weight: 600; color: #1f2937;">
+                    Documento rechazado
+                  </h1>
+                  
+                  <p style="margin: 0; margin-bottom: 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; color: #6b7280;">
+                    <span style="font-weight: 500; color: #374151;">${rechazadoPor}</span> ha rechazado el documento "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>".
+                  </p>
+                  
+                  <div style="margin-bottom: 32px; text-align: left; background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 12px 16px;">
+                    <p style="margin: 0; font-family: 'Poppins', Arial, sans-serif; font-size: 15px; color: #374151; margin-bottom: 4px; font-weight: 600;">Motivo del rechazo:</p>
+                    <p style="margin: 0; font-family: 'Poppins', Arial, sans-serif; font-size: 15px; color: #6b7280; font-style: italic;">${motivoRechazo}</p>
+                  </div>
 
-            <p>Te informamos que el siguiente documento ha sido <strong>rechazado</strong>.</p>
 
-            <div class="info">
-              <p><strong>Documento:</strong> ${nombreDocumento}</p>
-              <p><strong>Rechazado por:</strong> ${rechazadoPor}</p>
-              <p><strong>Fecha:</strong> ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}</p>
-            </div>
+                  <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto;">
+                    <tr>
+                      <td align="center" bgcolor="#EF4444" style="background-color: #EF4444; border-radius: 8px;">
+                        <a href="${documentoUrl}" target="_blank" class="button-link" style="display: inline-block; text-decoration: none; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; font-weight: 600; padding: 12px 24px; border: 1px solid #EF4444; border-radius: 8px;">
+                          <span style="color: #ffffff; text-decoration: none;">
+                            Ver Detalles
+                          </span>
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                  
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <tr>
+          <td align="center">
+            <table role="presentation" width="448" border="0" cellspacing="0" cellpadding="0" align="center" style="width: 100%; max-width: 448px; margin: 0 auto;">
+              <tr>
+                <td class="footer" style="padding: 24px 0; text-align: center; font-family: 'Poppins', Arial, sans-serif; font-size: 12px; color: #6b7280;">
+                  <p style="margin: 0;">&copy; ${new Date().getFullYear()} DocuPrex&reg; - Powered by Prexxa TIC</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <tr>
+          <td style="height: 64px; font-size: 0; line-height: 0;">&nbsp;</td>
+        </tr>
 
-            ${motivoRechazo ? `
-            <p><strong>Motivo del rechazo:</strong></p>
-            <div class="motivo">
-              ${motivoRechazo}
-            </div>
-            ` : ''}
+      </table>
 
-            <p>Puedes ver los detalles del documento haciendo clic en el siguiente botón:</p>
-
-            <div style="text-align: center;">
-              <a href="${documentoUrl}" class="button">Ver Detalles del Documento</a>
-            </div>
-
-            <p style="margin-top: 20px; color: #666; font-size: 14px;">
-              <strong>Nota:</strong> Es posible que necesites revisar el documento y realizar las correcciones necesarias antes de solicitar nuevamente las firmas.
-            </p>
-          </div>
-          <div class="footer">
-            <p>Este es un correo automático, por favor no responder.</p>
-            <p>&copy; ${new Date().getFullYear()} DocuPrex - Sistema de Firmas Digitales</p>
-          </div>
-        </div>
-      </body>
+    </body>
     </html>
   `;
 
