@@ -95,6 +95,7 @@ function Dashboard({ user, onLogout }) {
   const [documentTypes, setDocumentTypes] = useState([]);
   const [selectedDocumentType, setSelectedDocumentType] = useState(null);
   const [documentTypeRoles, setDocumentTypeRoles] = useState([]);
+  const [showDocTypeDropdown, setShowDocTypeDropdown] = useState(false);
   const [loadingDocumentTypes, setLoadingDocumentTypes] = useState(false);
 
   // Estados para dropdown de roles
@@ -199,6 +200,24 @@ function Dashboard({ user, onLogout }) {
       window.removeEventListener('scroll', handleScroll, true);
     };
   }, [openRoleDropdown]);
+
+  // Cerrar dropdown de tipo de documento al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const wrapper = document.querySelector('.custom-select-wrapper');
+      if (wrapper && !wrapper.contains(event.target) && showDocTypeDropdown) {
+        setShowDocTypeDropdown(false);
+      }
+    };
+
+    if (showDocTypeDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDocTypeDropdown]);
 
   // Estados para modal de gestión de firmantes
   const [managingDocument, setManagingDocument] = useState(null);
@@ -3005,32 +3024,87 @@ function Dashboard({ user, onLogout }) {
                         <label htmlFor="document-type">
                           Tipo de documento <span>(opcional)</span>
                         </label>
-                        <select
-                          id="document-type"
-                          value={selectedDocumentType?.id || ''}
-                          onChange={(e) => {
-                            const typeId = e.target.value;
-                            if (typeId) {
-                              const docType = documentTypes.find(dt => dt.id === typeId);
-                              setSelectedDocumentType(docType);
-                              setDocumentTypeRoles(docType?.roles || []);
-                              // Limpiar firmantes seleccionados cuando cambia el tipo
-                              setSelectedSigners([]);
-                            } else {
-                              setSelectedDocumentType(null);
-                              setDocumentTypeRoles([]);
-                            }
-                          }}
-                          className="form-input"
-                          disabled={uploading || loadingDocumentTypes}
-                        >
-                          <option value="">Sin tipo específico</option>
-                          {documentTypes.map(type => (
-                            <option key={type.id} value={type.id}>
-                              {type.name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="custom-select-wrapper" style={{ position: 'relative' }}>
+                          <button
+                            type="button"
+                            id="document-type"
+                            className="custom-select-trigger"
+                            onClick={() => !uploading && !loadingDocumentTypes && setShowDocTypeDropdown(!showDocTypeDropdown)}
+                            disabled={uploading || loadingDocumentTypes}
+                          >
+                            <span className="custom-select-value">
+                              {selectedDocumentType ? selectedDocumentType.name : 'Sin tipo específico'}
+                            </span>
+                            <svg
+                              className="custom-select-arrow"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                              style={{
+                                transform: showDocTypeDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                                transition: 'transform 0.2s ease'
+                              }}
+                            >
+                              <polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+
+                          {showDocTypeDropdown && (
+                            <div className="custom-select-dropdown">
+                              <div
+                                className="custom-select-option"
+                                onClick={() => {
+                                  setSelectedDocumentType(null);
+                                  setDocumentTypeRoles([]);
+                                  setShowDocTypeDropdown(false);
+                                }}
+                              >
+                                <div className="option-content">
+                                  <div className="option-info">
+                                    <p className="option-name">Sin tipo específico</p>
+                                    <p className="option-description">Documento sin plantilla predefinida</p>
+                                  </div>
+                                </div>
+                                {!selectedDocumentType && (
+                                  <div className="option-check">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+
+                              {documentTypes.map(type => (
+                                <div
+                                  key={type.id}
+                                  className="custom-select-option"
+                                  onClick={() => {
+                                    setSelectedDocumentType(type);
+                                    setDocumentTypeRoles(type?.roles || []);
+                                    setSelectedSigners([]);
+                                    setShowDocTypeDropdown(false);
+                                  }}
+                                >
+                                  <div className="option-content">
+                                    <div className="option-info">
+                                      <p className="option-name">{type.name}</p>
+                                      {type.description && (
+                                        <p className="option-description">{type.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {selectedDocumentType?.id === type.id && (
+                                    <div className="option-check">
+                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div className="form-group">
