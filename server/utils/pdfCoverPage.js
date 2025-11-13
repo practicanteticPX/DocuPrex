@@ -57,26 +57,29 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     // Dibujar marca de agua rotada y con transparencia
     const watermarkText = documentStatus;
-    const watermarkSize = 120;
+    const watermarkSize = 110;
     const watermarkWidth = fontBold.widthOfTextAtSize(watermarkText, watermarkSize);
 
     // Color de la marca de agua según estado
-    let watermarkColor = rgb(0.95, 0.95, 0.95); // Gris muy claro para PENDIENTE
+    let watermarkColor = rgb(1, 0.93, 0.60); // Gris muy claro para PENDIENTE
     if (documentStatus === 'FIRMADO') {
-      watermarkColor = rgb(0.88, 0.98, 0.92); // Verde muy claro
+      watermarkColor = rgb(0.72, 0.94, 0.82); // Verde muy claro
     } else if (documentStatus === 'RECHAZADO') {
-      watermarkColor = rgb(0.98, 0.88, 0.88); // Rojo muy claro
+      watermarkColor = rgb(0.96, 0.72, 0.72); // Rojo muy claro
     }
 
     // Dibujar marca de agua centrada y rotada 45 grados
+    const watermarkRotatedWidth = watermarkWidth * Math.cos(45 * Math.PI / 180);
+    const watermarkY = height / 2 + 240;
+
     coverPage.drawText(watermarkText, {
-      x: (width - watermarkWidth * 0.7) / 2,
-      y: height / 2 - 60,
+      x: (width - watermarkRotatedWidth) / 2,
+      y: watermarkY,
       size: watermarkSize,
       font: fontBold,
       color: watermarkColor,
-      rotate: { angle: -45, type: 'degrees' },
-      opacity: 0.15,
+      rotate: { angle: -55, type: 'degrees' },
+      opacity: 0.3,
     });
 
     // ========== TÍTULO PRINCIPAL - ESTILO ZAPSIGN ==========
@@ -89,9 +92,20 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       color: rgb(0.05, 0.05, 0.05),
     });
 
-    yPosition -= 8;
+    yPosition -= 25;
 
-    // Fecha y hora de actualización (formato UTC-0500)
+    // Fecha y hora de actualización (formato UTC-0500) - línea 1
+    coverPage.drawText('Fechas y horas en UTC-0500 (America/Bogota)', {
+      x: margin,
+      y: yPosition,
+      size: 9,
+      font: fontRegular,
+      color: rgb(0.4, 0.4, 0.4),
+    });
+
+    yPosition -= 14;
+
+    // Fecha y hora de actualización - línea 2
     const generatedDate = new Date().toLocaleString('es-CO', {
       timeZone: 'America/Bogota',
       day: '2-digit',
@@ -103,17 +117,26 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       hour12: false
     });
 
-    const dateText = `Fechas y horas en UTC-0500 (America/Bogota)\nÚltima actualización en ${generatedDate}`;
-    coverPage.drawText(dateText, {
+    coverPage.drawText(`Última actualización en ${generatedDate}`, {
       x: margin,
       y: yPosition,
       size: 9,
       font: fontRegular,
       color: rgb(0.4, 0.4, 0.4),
-      lineHeight: 12,
     });
 
-    yPosition -= 35;
+    yPosition -= 25;
+
+    // Borde inferior para separar el header
+    coverPage.drawRectangle({
+      x: margin,
+      y: yPosition,
+      width: width - (margin * 2),
+      height: 1,
+      color: rgb(0.85, 0.85, 0.85),
+    });
+
+    yPosition -= 25;
 
     // ========== INFORMACIÓN DEL DOCUMENTO - ESTILO ZAPSIGN (SIN CAJA) ==========
     // Estado del documento
@@ -144,7 +167,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
-    // Documento (nombre del archivo)
+    // Documento (título asignado al subir)
     coverPage.drawText('Documento:', {
       x: margin,
       y: yPosition,
@@ -155,13 +178,13 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 16;
 
-    const docFileName = documentInfo.fileName || documentInfo.title || 'Sin nombre';
-    const maxFileNameLength = 60;
-    const displayFileName = docFileName.length > maxFileNameLength
-      ? docFileName.substring(0, maxFileNameLength) + '...'
-      : docFileName;
+    const docTitle = documentInfo.title || 'Sin nombre';
+    const maxTitleLength = 60;
+    const displayTitle = docTitle.length > maxTitleLength
+      ? docTitle.substring(0, maxTitleLength) + '...'
+      : docTitle;
 
-    coverPage.drawText(displayFileName, {
+    coverPage.drawText(displayTitle, {
       x: margin,
       y: yPosition,
       size: 10,
@@ -217,8 +240,8 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       yPosition -= 16;
 
-      const rejectedByEmail = rejectedSigner.email || 'negociaciones@prexxa.com.co';
-      coverPage.drawText(rejectedByEmail, {
+      const rejectedByName = rejectedSigner.name || 'Sin nombre';
+      coverPage.drawText(rejectedByName, {
         x: margin,
         y: yPosition,
         size: 10,
@@ -294,6 +317,17 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 10;
 
+    // Borde inferior para separar la información del documento
+    coverPage.drawRectangle({
+      x: margin,
+      y: yPosition,
+      width: width - (margin * 2),
+      height: 1,
+      color: rgb(0.85, 0.85, 0.85),
+    });
+
+    yPosition -= 25;
+
     // ========== FIRMANTES - ESTILO ZAPSIGN ==========
     // Título de la sección
     const signedCount = sortedSigners.filter(s => s.status === 'signed').length;
@@ -318,7 +352,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       color: rgb(0.4, 0.4, 0.4),
     });
 
-    yPosition -= 25;
+    yPosition -= 30;
 
     // Variable para la página actual (sortedSigners ya fue declarado arriba)
     let currentPage = coverPage;
@@ -349,48 +383,79 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
         // Agregar también la marca de agua a las nuevas páginas
         newPage.drawText(watermarkText, {
-          x: (width - watermarkWidth * 0.7) / 2,
-          y: height / 2 - 60,
+          x: (width - watermarkRotatedWidth) / 2,
+          y: watermarkY,
           size: watermarkSize,
           font: fontBold,
           color: watermarkColor,
           rotate: { angle: -45, type: 'degrees' },
-          opacity: 0.15,
+          opacity: 0.3,
         });
       }
 
-      // Línea separadora entre firmantes (muy sutil)
+      // Línea separadora entre firmantes
       if (i > 0) {
         currentPage.drawRectangle({
           x: margin,
-          y: yPosition + 5,
+          y: yPosition + 10,
           width: width - (margin * 2),
-          height: 0.5,
+          height: 1,
           color: rgb(0.9, 0.9, 0.9),
         });
-        yPosition -= 10;
+        yPosition -= 15;
       }
 
-      // Badge de estado inline con el nombre
+      // Determinar texto y color del badge de estado
       let statusText = 'Firma pendiente';
       let statusBadgeColor = rgb(0.95, 0.95, 0.95); // Gris claro
+      let statusTextColor = rgb(0.3, 0.3, 0.3);
 
       if (signer.status === 'signed') {
         statusText = 'Firmado';
         statusBadgeColor = rgb(0.82, 0.95, 0.84); // Verde claro ZapSign
+        statusTextColor = rgb(0.13, 0.59, 0.25);
       } else if (signer.status === 'rejected') {
         statusText = 'Rechazado';
         statusBadgeColor = rgb(0.98, 0.85, 0.85); // Rojo claro
+        statusTextColor = rgb(0.8, 0.1, 0.1);
       }
 
-      // Dibujar badge de estado (redondeado pequeño)
+      // Nombre del firmante (en mayúsculas, estilo ZapSign)
+      const signerName = (signer.name || 'Sin nombre').toUpperCase();
+      const maxNameLength = 50;
+      const displayName = signerName.length > maxNameLength
+        ? signerName.substring(0, maxNameLength) + '...'
+        : signerName;
+
+      currentPage.drawText(displayName, {
+        x: margin,
+        y: yPosition,
+        size: 10,
+        font: fontBold,
+        color: rgb(0.05, 0.05, 0.05),
+      });
+
+      // Rol del firmante (si existe) - al lado del nombre con guión
+      if (signer.role_name) {
+        const nameWidth = fontBold.widthOfTextAtSize(displayName, 10);
+        const roleText = ` - ${signer.role_name}`;
+        currentPage.drawText(roleText, {
+          x: margin + nameWidth,
+          y: yPosition,
+          size: 10,
+          font: fontRegular,
+          color: rgb(0.5, 0.5, 0.5), // Gris
+        });
+      }
+
+      // Badge de estado a la derecha del nombre (alineado a la misma altura)
       const badgePadding = 8;
       const badgeTextWidth = fontBold.widthOfTextAtSize(statusText, 8);
       const badgeWidth = badgeTextWidth + (badgePadding * 2);
       const badgeHeight = 16;
       const badgeRadius = badgeHeight / 2;
-      const badgeX = margin;
-      const badgeY = yPosition - 2;
+      const badgeX = width - margin - badgeWidth;
+      const badgeY = yPosition + 3; // Alineado con el nombre
 
       // Rectángulo central del badge
       currentPage.drawRectangle({
@@ -417,36 +482,12 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       });
 
       // Texto del badge
-      let statusTextColor = rgb(0.3, 0.3, 0.3);
-      if (signer.status === 'signed') {
-        statusTextColor = rgb(0.13, 0.59, 0.25);
-      } else if (signer.status === 'rejected') {
-        statusTextColor = rgb(0.8, 0.1, 0.1);
-      }
-
       currentPage.drawText(statusText, {
         x: badgeX + badgePadding,
         y: badgeY - 2.5,
         size: 8,
         font: fontBold,
         color: statusTextColor,
-      });
-
-      yPosition -= 25;
-
-      // Nombre del firmante (en mayúsculas, estilo ZapSign)
-      const signerName = (signer.name || 'Sin nombre').toUpperCase();
-      const maxNameLength = 50;
-      const displayName = signerName.length > maxNameLength
-        ? signerName.substring(0, maxNameLength) + '...'
-        : signerName;
-
-      currentPage.drawText(displayName, {
-        x: margin,
-        y: yPosition,
-        size: 10,
-        font: fontBold,
-        color: rgb(0.05, 0.05, 0.05),
       });
 
       yPosition -= 18;
@@ -490,20 +531,9 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 18;
       }
 
-      // Puntos de autenticación (título)
-      currentPage.drawText('Puntos de autenticación:', {
-        x: margin,
-        y: yPosition,
-        size: 9,
-        font: fontBold,
-        color: rgb(0.3, 0.3, 0.3),
-      });
-
-      yPosition -= 16;
-
-      // Email (único punto de autenticación que mostramos según tus instrucciones)
+      // Email (sin título, directamente el correo)
       const signerEmail = signer.email || 'No disponible';
-      currentPage.drawText(`Correo electrónico: ${signerEmail}`, {
+      currentPage.drawText(`${signerEmail}`, {
         x: margin,
         y: yPosition,
         size: 9,
