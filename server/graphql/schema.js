@@ -60,6 +60,7 @@ const typeDefs = gql`
     rejectionReason: String
     rejectedAt: String
     signedAt: String
+    consecutivo: String
     createdAt: String
     updatedAt: String
     roleName: String
@@ -184,7 +185,7 @@ const typeDefs = gql`
     reorderSigners(documentId: ID!, newOrder: [ID!]!): Boolean!
 
     # Firmas
-    signDocument(documentId: ID!, signatureData: String!): Signature!
+    signDocument(documentId: ID!, signatureData: String!, consecutivo: String): Signature!
     rejectDocument(documentId: ID!, reason: String): Boolean!
 
     # Notificaciones

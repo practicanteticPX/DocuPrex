@@ -227,6 +227,29 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
+    // Tipo de documento (si existe)
+    if (documentInfo.documentTypeName) {
+      coverPage.drawText('Tipo de documento:', {
+        x: margin,
+        y: yPosition,
+        size: 9,
+        font: fontBold,
+        color: rgb(0.3, 0.3, 0.3),
+      });
+
+      yPosition -= 16;
+
+      coverPage.drawText(documentInfo.documentTypeName, {
+        x: margin,
+        y: yPosition,
+        size: 10,
+        font: fontRegular,
+        color: rgb(0.15, 0.15, 0.15),
+      });
+
+      yPosition -= 25;
+    }
+
     // Rechazado por / Acción realizada por (si aplica)
     const rejectedSigner = sortedSigners.find(s => s.status === 'rejected');
     if (rejectedSigner) {
@@ -550,7 +573,21 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         color: rgb(0.4, 0.4, 0.4),
       });
 
-      yPosition -= 30; // Espaciado entre firmantes
+      yPosition -= 18;
+
+      // Consecutivo (si existe - solo para Legalización de Facturas)
+      if (signer.consecutivo) {
+        currentPage.drawText(`Consecutivo: ${signer.consecutivo}`, {
+          x: margin,
+          y: yPosition,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.4, 0.4, 0.4),
+        });
+        yPosition -= 18;
+      }
+
+      yPosition -= 12; // Espaciado entre firmantes
       signersInCurrentPage++; // Incrementar el contador de firmantes en la página
     }
 

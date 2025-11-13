@@ -924,9 +924,10 @@ const resolvers = {
 
         // Obtener información completa del documento y uploader
         const docInfoResult = await query(
-          `SELECT d.*, u.name as uploader_name
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
           FROM documents d
           LEFT JOIN users u ON d.uploaded_by = u.id
+          LEFT JOIN document_types dt ON d.document_type_id = dt.id
           WHERE d.id = $1`,
           [documentId]
         );
@@ -942,7 +943,9 @@ const resolvers = {
           `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                   COALESCE(s.status, 'pending') as status,
                   s.signed_at,
-                  s.rejected_at
+                  s.rejected_at,
+                  s.rejection_reason,
+                  s.consecutivo
           FROM document_signers ds
           JOIN users u ON ds.user_id = u.id
           LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -969,7 +972,8 @@ const resolvers = {
           title: docInfo.title,
           fileName: docInfo.file_name,
           createdAt: docInfo.created_at,
-          uploadedBy: docInfo.uploader_name || 'Sistema'
+          uploadedBy: docInfo.uploader_name || 'Sistema',
+          documentTypeName: docInfo.document_type_name || null
         };
 
         // Si ya existían firmantes, actualizar la página; si no, crear nueva
@@ -1483,7 +1487,7 @@ const resolvers = {
 
         if (docInfo.rows.length > 0) {
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names, s.status, s.signed_at, s.rejected_at
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names, s.status, s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo
              FROM document_signers ds
              JOIN users u ON ds.user_id = u.id
              LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1775,7 +1779,7 @@ const resolvers = {
     },
 
     // Firmar documento
-    signDocument: async (_, { documentId, signatureData }, { user }) => {
+    signDocument: async (_, { documentId, signatureData, consecutivo }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
       // Verificar si el usuario es el propietario del documento
@@ -1840,18 +1844,19 @@ const resolvers = {
           `UPDATE signatures
           SET status = 'signed',
               signature_data = $1,
+              consecutivo = $2,
               signed_at = CURRENT_TIMESTAMP
-          WHERE document_id = $2 AND signer_id = $3
+          WHERE document_id = $3 AND signer_id = $4
           RETURNING *`,
-          [signatureData, documentId, user.id]
+          [signatureData, consecutivo || null, documentId, user.id]
         );
       } else {
         // No existe, crear una nueva
         result = await query(
-          `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, signed_at)
-          VALUES ($1, $2, 'signed', $3, 'digital', CURRENT_TIMESTAMP)
+          `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, consecutivo, signed_at)
+          VALUES ($1, $2, 'signed', $3, 'digital', $4, CURRENT_TIMESTAMP)
           RETURNING *`,
-          [documentId, user.id, signatureData]
+          [documentId, user.id, signatureData, consecutivo || null]
         );
       }
 

@@ -69,6 +69,8 @@ function Dashboard({ user, onLogout }) {
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState('');
+  const [consecutivo, setConsecutivo] = useState(''); // Campo para Legalización de Facturas
+  const [showConsecutivoModal, setShowConsecutivoModal] = useState(false); // Modal para agregar consecutivo
   const [showDescription, setShowDescription] = useState(false);
   const [showRejectSuccess, setShowRejectSuccess] = useState(false);
   const [showSignSuccess, setShowSignSuccess] = useState(false);
@@ -255,6 +257,9 @@ function Dashboard({ user, onLogout }) {
   const [pendingSignerForRoles, setPendingSignerForRoles] = useState(null); // { userId, name, email }
   const [selectedRolesForNewSigner, setSelectedRolesForNewSigner] = useState([]); // Array de { roleId, roleName }
 
+  // Estado para popup de error de roles (máximo 3 roles)
+  const [roleErrorPopup, setRoleErrorPopup] = useState(null); // { message: string }
+
   // Estado para modal de posición inválida
   const [invalidPositionModal, setInvalidPositionModal] = useState(false);
 
@@ -273,6 +278,25 @@ function Dashboard({ user, onLogout }) {
   const allStepsCompleted = () => completedSteps() === totalSteps();
 
   const handleNext = () => {
+    // Validar roles para FV cuando se sale del paso 1 (Añadir firmantes)
+    if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'FV') {
+      const signersWithoutRoles = selectedSigners.filter(s => {
+        if (typeof s === 'object') {
+          const hasRoles = s.roleIds && s.roleIds.length > 0;
+          return !hasRoles;
+        }
+        return true; // Si es solo ID, no tiene roles
+      });
+
+      if (signersWithoutRoles.length > 0) {
+        setError('Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado');
+        return; // Bloquear el avance
+      }
+    }
+
+    // Limpiar error si todo está bien
+    setError('');
+
     const newActiveStep =
       isLastStep() && !allStepsCompleted()
         ? steps.findIndex((step, i) => !(i in completed))
@@ -525,6 +549,8 @@ function Dashboard({ user, onLogout }) {
                         managingDocument ||
                         confirmDeleteOpen ||
                         rejectionReasonPopup ||
+                        roleErrorPopup ||
+                        showConsecutivoModal ||
                         showWaitingTurnScreen;
 
     if (hasModalOpen) {
@@ -580,6 +606,42 @@ function Dashboard({ user, onLogout }) {
 
     setWillSignDocument(userIsInSigners);
   }, [selectedSigners, user]);
+
+  // Auto-limpiar errores cuando se cumplen los requisitos
+  useEffect(() => {
+    if (!error) return; // Si no hay error, no hacer nada
+
+    // Limpiar error de "completa todos los campos" cuando hay archivos y título
+    if (error.includes('completa todos los campos')) {
+      if (selectedFiles && selectedFiles.length > 0 && documentTitle.trim().length > 0) {
+        setError('');
+      }
+    }
+
+    // Limpiar error de "selecciona al menos un firmante" cuando hay firmantes
+    if (error.includes('selecciona al menos un firmante')) {
+      if (selectedSigners && selectedSigners.length > 0) {
+        setError('');
+      }
+    }
+
+    // Limpiar error de roles FV cuando todos los firmantes tienen roles
+    if (error.includes('todos los firmantes deben tener al menos 1 rol')) {
+      if (selectedDocumentType && selectedDocumentType.code === 'FV') {
+        const signersWithoutRoles = selectedSigners.filter(s => {
+          if (typeof s === 'object') {
+            const hasRoles = s.roleIds && s.roleIds.length > 0;
+            return !hasRoles;
+          }
+          return true;
+        });
+
+        if (signersWithoutRoles.length === 0) {
+          setError('');
+        }
+      }
+    }
+  }, [error, selectedFiles, documentTitle, selectedSigners, selectedDocumentType]);
 
   // Cargar documentos rechazados al montar o cambiar de tab
   useEffect(() => {
@@ -1211,7 +1273,7 @@ function Dashboard({ user, onLogout }) {
           } else {
             // Agregar el rol (máximo 3)
             if (roleIds.length >= 3) {
-              alert('Máximo 3 roles por firmante');
+              setRoleErrorPopup({ message: 'Un firmante no puede tener más de 3 roles' });
               return s;
             }
             return {
@@ -1584,21 +1646,8 @@ function Dashboard({ user, onLogout }) {
       return;
     }
 
-    // Validar que todos los firmantes FV tengan al menos 1 rol
-    if (selectedDocumentType && selectedDocumentType.code === 'FV') {
-      const signersWithoutRoles = selectedSigners.filter(s => {
-        if (typeof s === 'object') {
-          const hasRoles = s.roleIds && s.roleIds.length > 0;
-          return !hasRoles;
-        }
-        return true; // Si es solo ID, no tiene roles
-      });
-
-      if (signersWithoutRoles.length > 0) {
-        setError('Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado');
-        return;
-      }
-    }
+    // Nota: La validación de roles FV ahora se hace en handleNext (paso 1 -> 2)
+    // ya no es necesario validar aquí porque no se puede llegar al paso 3 sin roles
 
     setUploading(true);
     setError('');
@@ -1787,17 +1836,19 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation SignDocument($documentId: ID!, $signatureData: String!) {
-              signDocument(documentId: $documentId, signatureData: $signatureData) {
+            mutation SignDocument($documentId: ID!, $signatureData: String!, $consecutivo: String) {
+              signDocument(documentId: $documentId, signatureData: $signatureData, consecutivo: $consecutivo) {
                 id
                 status
                 signedAt
+                consecutivo
               }
             }
           `,
           variables: {
             documentId: docId,
-            signatureData: `Firmado por ${user.name || user.email} el ${new Date().toISOString()}`
+            signatureData: `Firmado por ${user.name || user.email} el ${new Date().toISOString()}`,
+            consecutivo: consecutivo || null
           }
         },
         {
@@ -1813,6 +1864,9 @@ function Dashboard({ user, onLogout }) {
 
       // Mostrar popup de éxito
       setShowSignSuccess(true);
+
+      // Limpiar consecutivo después de firmar
+      setConsecutivo('');
 
       // Recargar ambas listas: pendientes y firmados
       await loadPendingDocuments();
@@ -2022,6 +2076,7 @@ function Dashboard({ user, onLogout }) {
 
   const handleCancelSign = () => {
     setShowSignConfirm(false);
+    setConsecutivo(''); // Limpiar consecutivo al cancelar
   };
 
   const handleConfirmSign = async () => {
@@ -2030,6 +2085,16 @@ function Dashboard({ user, onLogout }) {
       setShowSignConfirm(false);
       // No cerrar el viewer aquí, dejar que el usuario cierre el popup de éxito
     }
+  };
+
+  const handleSaveConsecutivo = () => {
+    // Guardar el consecutivo - se enviará al firmar el documento
+    setShowConsecutivoModal(false);
+  };
+
+  const handleCancelConsecutivo = () => {
+    setShowConsecutivoModal(false);
+    // No limpiar el consecutivo para que se mantenga si lo cierran sin guardar
   };
 
   const handleOpenRejectConfirm = () => {
@@ -2655,7 +2720,7 @@ function Dashboard({ user, onLogout }) {
       } else {
         // Agregar el rol (máximo 3)
         if (prev.length >= 3) {
-          alert('Máximo 3 roles por firmante');
+          setRoleErrorPopup({ message: 'Un firmante no puede tener más de 3 roles' });
           return prev;
         }
         return [...prev, { roleId, roleName }];
@@ -4820,6 +4885,25 @@ function Dashboard({ user, onLogout }) {
             <div className="pdf-viewer-header-right">
               {isViewingPending && !isWaitingTurn && (
                 <>
+                  {/* Botón Consecutivo (solo para FV) */}
+                  {viewingDocument && viewingDocument.documentType && viewingDocument.documentType.code === 'FV' && (
+                    <button
+                      className="pdf-viewer-action-btn consecutivo"
+                      onClick={() => setShowConsecutivoModal(true)}
+                      title="Agregar consecutivo"
+                      style={{
+                        backgroundColor: '#F59E0B',
+                        color: 'white'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#D97706'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = '#F59E0B'}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 5H7C6.46957 5 5.96086 5.21071 5.58579 5.58579C5.21071 5.96086 5 6.46957 5 7V19C5 19.5304 5.21071 20.0391 5.58579 20.4142C5.96086 20.7893 6.46957 21 7 21H17C17.5304 21 18.0391 20.7893 18.4142 20.4142C18.7893 20.0391 19 19.5304 19 19V7C19 6.46957 18.7893 5.96086 18.4142 5.58579C18.0391 5.21071 17.5304 5 17 5H15M9 5C9 5.53043 9.21071 6.03914 9.58579 6.41421C9.96086 6.78929 10.4696 7 11 7H13C13.5304 7 14.0391 6.78929 14.4142 6.41421C14.7893 6.03914 15 5.53043 15 5M9 5C9 4.46957 9.21071 3.96086 9.58579 3.58579C9.96086 3.21071 10.4696 3 11 3H13C13.5304 3 14.0391 3.21071 14.4142 3.58579C14.7893 3.96086 15 4.46957 15 5M12 12H15M12 16H15M9 12H9.01M9 16H9.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Consecutivo
+                    </button>
+                  )}
                   <button className="pdf-viewer-action-btn sign" onClick={handleOpenSignConfirm}>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -5837,6 +5921,91 @@ function Dashboard({ user, onLogout }) {
                 style={{background:"#6366F1", width: "100%"}}
               >
                 Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup de error de roles (máximo 3 roles) */}
+      {roleErrorPopup && (
+        <div className="rejection-popup-overlay" onClick={() => setRoleErrorPopup(null)}>
+          <div
+            className="rejection-popup-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '450px',
+              borderRadius: '12px',
+              padding: '0',
+              textAlign: 'center'
+            }}
+          >
+            {/* Icono circular rojo */}
+            <div style={{
+              paddingTop: '40px',
+              paddingBottom: '24px',
+              display: 'flex',
+              justifyContent: 'center'
+            }}>
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                backgroundColor: '#FEE2E2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+            </div>
+
+            {/* Título */}
+            <h2 style={{
+              fontSize: '20px',
+              fontWeight: '600',
+              color: '#111827',
+              margin: '0 0 12px 0',
+              padding: '0 32px'
+            }}>
+              Error de validación
+            </h2>
+
+            {/* Mensaje */}
+            <p style={{
+              fontSize: '15px',
+              color: '#6B7280',
+              lineHeight: '1.5',
+              margin: '0 0 32px 0',
+              padding: '0 32px'
+            }}>
+              {roleErrorPopup.message}
+            </p>
+
+            {/* Botón */}
+            <div style={{
+              padding: '0 32px 32px 32px'
+            }}>
+              <button
+                onClick={() => setRoleErrorPopup(null)}
+                style={{
+                  width: '100%',
+                  backgroundColor: '#DC2626',
+                  color: 'white',
+                  border: 'none',
+                  padding: '14px 24px',
+                  borderRadius: '8px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = '#B91C1C'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = '#DC2626'}
+              >
+                Listo
               </button>
             </div>
           </div>
