@@ -587,6 +587,18 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 18;
       }
 
+      // Razón de rechazo (si el firmante rechazó el documento)
+      if (signer.status === 'rejected' && signer.rejection_reason) {
+        currentPage.drawText(`Razón de rechazo: ${signer.rejection_reason}`, {
+          x: margin,
+          y: yPosition,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.86, 0.26, 0.26), // Color rojo para destacar el rechazo
+        });
+        yPosition -= 18;
+      }
+
       yPosition -= 12; // Espaciado entre firmantes
       signersInCurrentPage++; // Incrementar el contador de firmantes en la página
     }

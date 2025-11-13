@@ -1219,7 +1219,9 @@ const resolvers = {
             `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
-                    s.rejected_at
+                    s.rejected_at,
+                    s.rejection_reason,
+                    s.consecutivo
             FROM document_signers ds
             JOIN users u ON ds.user_id = u.id
             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1731,9 +1733,10 @@ const resolvers = {
 
         // Obtener información del documento
         const docInfoResult = await query(
-          `SELECT d.*, u.name as uploader_name
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
           FROM documents d
           LEFT JOIN users u ON d.uploaded_by = u.id
+          LEFT JOIN document_types dt ON d.document_type_id = dt.id
           WHERE d.id = $1`,
           [documentId]
         );
@@ -1746,7 +1749,9 @@ const resolvers = {
             `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
-                    s.rejected_at
+                    s.rejected_at,
+                    s.rejection_reason,
+                    s.consecutivo
             FROM document_signers ds
             JOIN users u ON ds.user_id = u.id
             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1762,7 +1767,8 @@ const resolvers = {
             title: docInfo.title,
             fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
-            uploadedBy: docInfo.uploader_name || 'Sistema'
+            uploadedBy: docInfo.uploader_name || 'Sistema',
+            documentTypeName: docInfo.document_type_name || null
           };
 
           // Actualizar la página de firmantes
@@ -2065,9 +2071,10 @@ const resolvers = {
 
         // Obtener información del documento
         const docInfoResult = await query(
-          `SELECT d.*, u.name as uploader_name
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
           FROM documents d
           LEFT JOIN users u ON d.uploaded_by = u.id
+          LEFT JOIN document_types dt ON d.document_type_id = dt.id
           WHERE d.id = $1`,
           [documentId]
         );
@@ -2080,7 +2087,9 @@ const resolvers = {
             `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
-                    s.rejected_at
+                    s.rejected_at,
+                    s.rejection_reason,
+                    s.consecutivo
             FROM document_signers ds
             JOIN users u ON ds.user_id = u.id
             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -2096,7 +2105,8 @@ const resolvers = {
             title: docInfo.title,
             fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
-            uploadedBy: docInfo.uploader_name || 'Sistema'
+            uploadedBy: docInfo.uploader_name || 'Sistema',
+            documentTypeName: docInfo.document_type_name || null
           };
 
           // Actualizar la página de firmantes
