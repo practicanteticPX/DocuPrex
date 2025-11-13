@@ -256,6 +256,7 @@ const resolvers = {
           u.name as signer_name,
           u.email as signer_email,
           ds.role_name as role_name,
+          ds.role_names as role_names,
           ds.order_position as order_position
         FROM signatures s
         JOIN users u ON s.signer_id = u.id
@@ -278,6 +279,8 @@ const resolvers = {
           ds.is_required as "isRequired",
           ds.assigned_role_id as "assignedRoleId",
           ds.role_name as "roleName",
+          ds.assigned_role_ids as "assignedRoleIds",
+          ds.role_names as "roleNames",
           u.id as user_id,
           u.name as user_name,
           u.email as user_email,
@@ -300,6 +303,8 @@ const resolvers = {
         isRequired: row.isRequired,
         assignedRoleId: row.assignedRoleId,
         roleName: row.roleName,
+        assignedRoleIds: row.assignedRoleIds || [],
+        roleNames: row.roleNames || [],
         user: {
           id: row.user_id,
           name: row.user_name,
@@ -615,34 +620,36 @@ const resolvers = {
 
       // Verificar si hay firmantes existentes
       const existingSignersResult = await query(
-        'SELECT user_id, order_position, role_name FROM document_signers WHERE document_id = $1 ORDER BY order_position ASC',
+        'SELECT user_id, order_position, role_name, role_names FROM document_signers WHERE document_id = $1 ORDER BY order_position ASC',
         [documentId]
       );
 
-      // Validar que no haya roles duplicados
-      const existingRoles = existingSignersResult.rows
-        .filter(r => r.role_name)
-        .map(r => r.role_name);
+      // Función helper para normalizar roles (soportar legacy y nuevo formato)
+      const normalizeRoles = (assignment) => {
+        // Priorizar nuevo formato (arrays)
+        let roleIds = assignment.roleIds || [];
+        let roleNames = assignment.roleNames || [];
 
-      const newRoles = signerAssignments
-        .filter(sa => sa.roleName)
-        .map(sa => sa.roleName);
+        // Fallback a formato legacy (singular)
+        if (roleIds.length === 0 && assignment.roleId) {
+          roleIds = [assignment.roleId];
+        }
+        if (roleNames.length === 0 && assignment.roleName) {
+          roleNames = [assignment.roleName];
+        }
 
-      // Verificar duplicados en los roles nuevos que se están intentando asignar
-      for (const roleName of newRoles) {
-        if (existingRoles.includes(roleName)) {
-          throw new Error(`El rol "${roleName}" ya está asignado a otro firmante. Los roles deben ser únicos.`);
+        return { roleIds, roleNames };
+      };
+
+      // Validar máximo 3 roles por firmante
+      for (const assignment of signerAssignments) {
+        const { roleIds, roleNames } = normalizeRoles(assignment);
+
+        if (roleIds.length > 3 || roleNames.length > 3) {
+          throw new Error('Un firmante no puede tener más de 3 roles asignados');
         }
       }
 
-      // Verificar duplicados entre los mismos roles nuevos
-      const roleCount = {};
-      for (const roleName of newRoles) {
-        roleCount[roleName] = (roleCount[roleName] || 0) + 1;
-        if (roleCount[roleName] > 1) {
-          throw new Error(`El rol "${roleName}" está duplicado en la lista de nuevos firmantes. Los roles deben ser únicos.`);
-        }
-      }
       const hasExistingSigners = existingSignersResult.rows.length > 0;
       const isOwner = doc.uploaded_by === user.id;
       const ownerInNewSigners = userIds.includes(user.id);
@@ -661,11 +668,21 @@ const resolvers = {
 
         // Insertar al propietario en posición 1
         const ownerAssignment = signerAssignments.find(sa => sa.userId === user.id);
+        const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
+
         await query(
-          `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
-           VALUES ($1, $2, 1, $3, $4, $5)
+          `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+           VALUES ($1, $2, 1, $3, $4, $5, $6::uuid[], $7::text[])
            ON CONFLICT (document_id, user_id) DO NOTHING`,
-          [documentId, user.id, true, ownerAssignment?.roleId || null, ownerAssignment?.roleName || null]
+          [
+            documentId,
+            user.id,
+            true,
+            ownerRoles.roleIds[0] || null, // Mantener compatibilidad legacy
+            ownerRoles.roleNames[0] || null, // Mantener compatibilidad legacy
+            ownerRoles.roleIds,
+            ownerRoles.roleNames
+          ]
         );
 
         // Crear firma pendiente para el propietario
@@ -682,11 +699,22 @@ const resolvers = {
 
         for (let i = 0; i < otherUserIds.length; i++) {
           const assignment = signerAssignments.find(sa => sa.userId === otherUserIds[i]);
+          const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
+
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])
              ON CONFLICT (document_id, user_id) DO NOTHING`,
-            [documentId, otherUserIds[i], maxPosition + i, true, assignment?.roleId || null, assignment?.roleName || null]
+            [
+              documentId,
+              otherUserIds[i],
+              maxPosition + i,
+              true,
+              roles.roleIds[0] || null,
+              roles.roleNames[0] || null,
+              roles.roleIds,
+              roles.roleNames
+            ]
           );
 
           await query(
@@ -702,11 +730,22 @@ const resolvers = {
 
         for (let i = 0; i < userIds.length; i++) {
           const assignment = signerAssignments.find(sa => sa.userId === userIds[i]);
+          const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
+
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])
              ON CONFLICT (document_id, user_id) DO NOTHING`,
-            [documentId, userIds[i], maxPosition + i + 1, true, assignment?.roleId || null, assignment?.roleName || null]
+            [
+              documentId,
+              userIds[i],
+              maxPosition + i + 1,
+              true,
+              roles.roleIds[0] || null,
+              roles.roleNames[0] || null,
+              roles.roleIds,
+              roles.roleNames
+            ]
           );
 
           await query(
@@ -723,10 +762,20 @@ const resolvers = {
 
         if (isOwner && ownerInNewSigners) {
           const ownerAssignment = signerAssignments.find(sa => sa.userId === user.id);
+          const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
+
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
-             VALUES ($1, $2, 1, $3, $4, $5)`,
-            [documentId, user.id, true, ownerAssignment?.roleId || null, ownerAssignment?.roleName || null]
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+             VALUES ($1, $2, 1, $3, $4, $5, $6::uuid[], $7::text[])`,
+            [
+              documentId,
+              user.id,
+              true,
+              ownerRoles.roleIds[0] || null,
+              ownerRoles.roleNames[0] || null,
+              ownerRoles.roleIds,
+              ownerRoles.roleNames
+            ]
           );
 
           await query(
@@ -742,10 +791,21 @@ const resolvers = {
         const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
         for (let i = 0; i < otherUserIds.length; i++) {
           const assignment = signerAssignments.find(sa => sa.userId === otherUserIds[i]);
+          const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
+
           await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [documentId, otherUserIds[i], startPosition + i, true, assignment?.roleId || null, assignment?.roleName || null]
+            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])`,
+            [
+              documentId,
+              otherUserIds[i],
+              startPosition + i,
+              true,
+              roles.roleIds[0] || null,
+              roles.roleNames[0] || null,
+              roles.roleIds,
+              roles.roleNames
+            ]
           );
 
           await query(
@@ -879,7 +939,7 @@ const resolvers = {
 
         // Obtener lista completa de firmantes con su orden y estado actual
         const signersResult = await query(
-          `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
+          `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                   COALESCE(s.status, 'pending') as status,
                   s.signed_at,
                   s.rejected_at
@@ -1152,7 +1212,7 @@ const resolvers = {
 
           // Obtener lista actualizada de firmantes
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
                     s.rejected_at
@@ -1423,7 +1483,7 @@ const resolvers = {
 
         if (docInfo.rows.length > 0) {
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, s.status, s.signed_at, s.rejected_at
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names, s.status, s.signed_at, s.rejected_at
              FROM document_signers ds
              JOIN users u ON ds.user_id = u.id
              LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1679,7 +1739,7 @@ const resolvers = {
 
           // Obtener firmantes con estados actualizados
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
                     s.rejected_at
@@ -2012,7 +2072,7 @@ const resolvers = {
 
           // Obtener firmantes con estados actualizados
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name,
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
                     s.signed_at,
                     s.rejected_at

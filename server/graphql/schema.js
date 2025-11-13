@@ -74,6 +74,9 @@ const typeDefs = gql`
     signature: Signature
     assignedRoleId: ID
     roleName: String
+    # Nuevos campos para múltiples roles
+    assignedRoleIds: [ID!]
+    roleNames: [String!]
   }
 
   type DocumentType {
@@ -122,8 +125,12 @@ const typeDefs = gql`
 
   input SignerAssignmentInput {
     userId: ID!
+    # Campos legacy (mantener compatibilidad)
     roleId: ID
     roleName: String
+    # Nuevos campos para múltiples roles
+    roleIds: [ID!]
+    roleNames: [String!]
   }
 
   type Query {

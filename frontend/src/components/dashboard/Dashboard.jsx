@@ -251,6 +251,10 @@ function Dashboard({ user, onLogout }) {
   const [addingSignerId, setAddingSignerId] = useState(null);
   const [errorModalData, setErrorModalData] = useState(null);
 
+  // Estados para selección de roles al agregar firmante (FV)
+  const [pendingSignerForRoles, setPendingSignerForRoles] = useState(null); // { userId, name, email }
+  const [selectedRolesForNewSigner, setSelectedRolesForNewSigner] = useState([]); // Array de { roleId, roleName }
+
   // Estado para modal de posición inválida
   const [invalidPositionModal, setInvalidPositionModal] = useState(false);
 
@@ -808,6 +812,12 @@ function Dashboard({ user, onLogout }) {
                   id
                   code
                   name
+                  roles {
+                    id
+                    roleName
+                    roleCode
+                    orderPosition
+                  }
                 }
                 signatures {
                   id
@@ -1175,21 +1185,54 @@ function Dashboard({ user, onLogout }) {
 
   /**
    * Actualizar el rol asignado a un firmante
+   * Soporta múltiples roles para tipo FV (Legalización de Facturas)
    */
   const updateSignerRole = (signerId, roleId, roleName) => {
+    const isFV = selectedDocumentType && selectedDocumentType.code === 'FV';
+
     setSelectedSigners(prev => prev.map(s => {
       const userId = typeof s === 'object' ? s.userId : s;
       if (userId === signerId) {
-        // Si se está quitando el rol (roleId null), volver a ID simple
-        if (!roleId) {
-          return signerId;
+        // Para tipo FV: soportar múltiples roles (hasta 3)
+        if (isFV) {
+          const currentObj = typeof s === 'object' ? s : { userId: signerId, roleIds: [], roleNames: [] };
+          const roleIds = currentObj.roleIds || [];
+          const roleNames = currentObj.roleNames || [];
+
+          // Toggle del rol: si ya está, quitarlo; si no, agregarlo
+          const roleIndex = roleIds.indexOf(roleId);
+          if (roleIndex >= 0) {
+            // Quitar el rol
+            return {
+              userId: signerId,
+              roleIds: roleIds.filter((_, i) => i !== roleIndex),
+              roleNames: roleNames.filter((_, i) => i !== roleIndex)
+            };
+          } else {
+            // Agregar el rol (máximo 3)
+            if (roleIds.length >= 3) {
+              alert('Máximo 3 roles por firmante');
+              return s;
+            }
+            return {
+              userId: signerId,
+              roleIds: [...roleIds, roleId],
+              roleNames: [...roleNames, roleName]
+            };
+          }
+        } else {
+          // Para otros tipos (SA): un solo rol
+          // Si se está quitando el rol (roleId null), volver a ID simple
+          if (!roleId) {
+            return signerId;
+          }
+          // Asignar o actualizar rol
+          return {
+            userId: signerId,
+            roleId: roleId,
+            roleName: roleName
+          };
         }
-        // Asignar o actualizar rol
-        return {
-          userId: signerId,
-          roleId: roleId,
-          roleName: roleName
-        };
       }
       return s;
     }));
@@ -1541,6 +1584,22 @@ function Dashboard({ user, onLogout }) {
       return;
     }
 
+    // Validar que todos los firmantes FV tengan al menos 1 rol
+    if (selectedDocumentType && selectedDocumentType.code === 'FV') {
+      const signersWithoutRoles = selectedSigners.filter(s => {
+        if (typeof s === 'object') {
+          const hasRoles = s.roleIds && s.roleIds.length > 0;
+          return !hasRoles;
+        }
+        return true; // Si es solo ID, no tiene roles
+      });
+
+      if (signersWithoutRoles.length > 0) {
+        setError('Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado');
+        return;
+      }
+    }
+
     setUploading(true);
     setError('');
 
@@ -1603,14 +1662,20 @@ function Dashboard({ user, onLogout }) {
             if (typeof s === 'object') {
               return {
                 userId: s.userId,
+                // Campos singulares (legacy - para SA)
                 roleId: s.roleId || null,
-                roleName: s.roleName || null
+                roleName: s.roleName || null,
+                // Campos arrays (nuevo - para FV)
+                roleIds: s.roleIds || null,
+                roleNames: s.roleNames || null
               };
             } else {
               return {
                 userId: s,
                 roleId: null,
-                roleName: null
+                roleName: null,
+                roleIds: null,
+                roleNames: null
               };
             }
           });
@@ -2088,6 +2153,10 @@ function Dashboard({ user, onLogout }) {
     setManagingDocument(doc);
     setLoadingDocumentSigners(true);
     setModalSelectedSigners([]);
+    // Limpiar estado de selección de roles para FV
+    setPendingSignerForRoles(null);
+    setSelectedRolesForNewSigner([]);
+    setSearchNewSigner('');
     if (availableSigners.length === 0) {
       try { await loadAvailableSigners(); } catch {}
     }
@@ -2104,6 +2173,7 @@ function Dashboard({ user, onLogout }) {
                 userId
                 orderPosition
                 roleName
+                roleNames
                 user {
                   id
                   name
@@ -2141,6 +2211,7 @@ function Dashboard({ user, onLogout }) {
         signer: ds.user,
         orderPosition: ds.orderPosition,
         roleName: ds.roleName,
+        roleNames: ds.roleNames || [],
         status: ds.signature?.status || 'pending',
         signedAt: ds.signature?.signedAt,
         rejectedAt: ds.signature?.rejectedAt,
@@ -2162,6 +2233,10 @@ function Dashboard({ user, onLogout }) {
     setManagingDocument(null);
     setDocumentSigners([]);
     setModalSelectedSigners([]);
+    // Limpiar estado de selección de roles para FV
+    setPendingSignerForRoles(null);
+    setSelectedRolesForNewSigner([]);
+    setSearchNewSigner('');
   };
 
   // Selección para modal de gestión de firmantes
@@ -2334,6 +2409,7 @@ function Dashboard({ user, onLogout }) {
                 userId
                 orderPosition
                 roleName
+                roleNames
                 user {
                   id
                   name
@@ -2503,13 +2579,33 @@ function Dashboard({ user, onLogout }) {
   };
 
   // Función para agregar un nuevo firmante
-  const handleAddSingleSigner = async (userId) => {
+  const handleAddSingleSigner = async (userId, rolesData = null) => {
     if (!managingDocument || addingSignerId) return;
+
+    // Si es FV y no se han proporcionado roles, abrir selector de roles
+    const isFV = managingDocument.documentType?.code === 'FV';
+    if (isFV && !rolesData) {
+      const signer = availableSigners.find(s => s.id === userId);
+      if (signer) {
+        setPendingSignerForRoles({ userId, name: signer.name, email: signer.email });
+        setSelectedRolesForNewSigner([]);
+        setSearchNewSigner(''); // Limpiar búsqueda para ocultar el dropdown
+      }
+      return;
+    }
 
     setAddingSignerId(userId);
 
     try {
       const token = localStorage.getItem('token');
+
+      // Preparar signerAssignment con roles si es FV
+      const signerAssignment = { userId };
+      if (isFV && rolesData) {
+        signerAssignment.roleIds = rolesData.roleIds;
+        signerAssignment.roleNames = rolesData.roleNames;
+      }
+
       const response = await axios.post(
         API_URL,
         {
@@ -2520,7 +2616,7 @@ function Dashboard({ user, onLogout }) {
           `,
           variables: {
             documentId: managingDocument.id,
-            signerAssignments: [{ userId: userId }]
+            signerAssignments: [signerAssignment]
           }
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -2534,6 +2630,10 @@ function Dashboard({ user, onLogout }) {
       await handleManageSigners(managingDocument);
       await loadMyDocuments();
       setSearchNewSigner('');
+
+      // Limpiar estado de selector de roles
+      setPendingSignerForRoles(null);
+      setSelectedRolesForNewSigner([]);
     } catch (err) {
       console.error('Error al agregar firmante:', err);
       setErrorModalData({
@@ -2543,6 +2643,37 @@ function Dashboard({ user, onLogout }) {
     } finally {
       setAddingSignerId(null);
     }
+  };
+
+  // Toggle de rol para nuevo firmante (FV)
+  const toggleRoleForNewSigner = (roleId, roleName) => {
+    setSelectedRolesForNewSigner(prev => {
+      const index = prev.findIndex(r => r.roleId === roleId);
+      if (index >= 0) {
+        // Quitar el rol
+        return prev.filter((_, i) => i !== index);
+      } else {
+        // Agregar el rol (máximo 3)
+        if (prev.length >= 3) {
+          alert('Máximo 3 roles por firmante');
+          return prev;
+        }
+        return [...prev, { roleId, roleName }];
+      }
+    });
+  };
+
+  // Confirmar adición de firmante con roles (FV)
+  const confirmAddSignerWithRoles = async () => {
+    if (!pendingSignerForRoles) return;
+
+    const roleIds = selectedRolesForNewSigner.map(r => r.roleId);
+    const roleNames = selectedRolesForNewSigner.map(r => r.roleName);
+
+    await handleAddSingleSigner(pendingSignerForRoles.userId, {
+      roleIds,
+      roleNames
+    });
   };
 
   // Actualizar preferencias de notificaciones por correo
@@ -3445,6 +3576,16 @@ function Dashboard({ user, onLogout }) {
                                             const signerObj = selectedSigners.find(s =>
                                               typeof s === 'object' ? s.userId === signerId : s === signerId
                                             );
+
+                                            // Soportar múltiples roles para FV
+                                            if (typeof signerObj === 'object' && signerObj.roleNames && signerObj.roleNames.length > 0) {
+                                              const rolesText = signerObj.roleNames.join(' / ');
+                                              return (
+                                                <span style={{ fontWeight: '400', color: '#374151' }}> - {rolesText}</span>
+                                              );
+                                            }
+
+                                            // Fallback a rol singular para SA
                                             const roleName = typeof signerObj === 'object' ? signerObj.roleName : null;
                                             return roleName ? (
                                               <span style={{ fontWeight: '400', color: '#374151' }}> - {roleName}</span>
@@ -5088,6 +5229,166 @@ function Dashboard({ user, onLogout }) {
                     </div>
                   )}
 
+                  {/* Modal de selección de roles para nuevo firmante (solo FV) */}
+                  {pendingSignerForRoles && managingDocument.documentType?.code === 'FV' && (
+                    <div style={{
+                      marginBottom: '20px',
+                      padding: '16px',
+                      backgroundColor: '#f9fafb',
+                      border: '2px solid #4f46e5',
+                      borderRadius: '8px'
+                    }}>
+                      <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#374151' }}>
+                          Asignar roles a: {pendingSignerForRoles.name}
+                        </h3>
+                        <button
+                          onClick={() => {
+                            setPendingSignerForRoles(null);
+                            setSelectedRolesForNewSigner([]);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#6b7280',
+                            padding: '4px'
+                          }}
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </div>
+
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                        Selecciona hasta 3 roles. Los roles marcados como "Único" solo pueden asignarse a un firmante.
+                      </p>
+
+                      {/* Lista de roles con checkboxes */}
+                      <div style={{ marginBottom: '12px' }}>
+                        {managingDocument.documentType?.roles?.map((role) => {
+                          const isSelected = selectedRolesForNewSigner.some(r => r.roleId === role.id);
+                          const exclusiveRoleCodes = ['RESPONSABLE_NEGOCIACIONES', 'AREA_FINANCIERA', 'CAUSACION'];
+                          const isExclusiveRole = exclusiveRoleCodes.includes(role.roleCode);
+
+                          // Verificar si el rol exclusivo ya está asignado
+                          const isRoleTaken = isExclusiveRole && documentSigners.some(ds => {
+                            const roleNames = ds.roleNames || (ds.roleName ? [ds.roleName] : []);
+                            return roleNames.includes(role.roleName);
+                          });
+
+                          return (
+                            <button
+                              key={role.id}
+                              onClick={() => {
+                                if (!isRoleTaken) {
+                                  toggleRoleForNewSigner(role.id, role.roleName);
+                                }
+                              }}
+                              disabled={isRoleTaken}
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                marginBottom: '8px',
+                                backgroundColor: isSelected ? '#eef2ff' : (isRoleTaken ? '#f9fafb' : 'white'),
+                                border: isSelected ? '2px solid #4f46e5' : '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                cursor: isRoleTaken ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                opacity: isRoleTaken ? 0.6 : 1,
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              {/* Checkbox */}
+                              <div style={{
+                                width: '18px',
+                                height: '18px',
+                                border: '2px solid ' + (isSelected ? '#4f46e5' : '#d1d5db'),
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: isSelected ? '#4f46e5' : 'white',
+                                flexShrink: 0
+                              }}>
+                                {isSelected && (
+                                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </div>
+
+                              <span style={{ flex: 1, textAlign: 'left', fontSize: '14px', color: isSelected ? '#4f46e5' : '#374151', fontWeight: isSelected ? '500' : '400' }}>
+                                {role.roleName}
+                              </span>
+
+                              {/* Badge de rol exclusivo */}
+                              {isExclusiveRole && !isRoleTaken && (
+                                <span style={{
+                                  fontSize: '11px',
+                                  color: '#f59e0b',
+                                  fontWeight: '500',
+                                  backgroundColor: '#fef3c7',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px'
+                                }}>
+                                  Único
+                                </span>
+                              )}
+
+                              {isRoleTaken && (
+                                <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                                  (Asignado)
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Botones de acción */}
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={() => {
+                            setPendingSignerForRoles(null);
+                            setSelectedRolesForNewSigner([]);
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            backgroundColor: 'white',
+                            color: '#374151',
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={confirmAddSignerWithRoles}
+                          disabled={addingSignerId || selectedRolesForNewSigner.length === 0}
+                          style={{
+                            padding: '8px 16px',
+                            border: 'none',
+                            borderRadius: '6px',
+                            backgroundColor: (addingSignerId || selectedRolesForNewSigner.length === 0) ? '#9ca3af' : '#4f46e5',
+                            color: 'white',
+                            fontSize: '14px',
+                            cursor: (addingSignerId || selectedRolesForNewSigner.length === 0) ? 'not-allowed' : 'pointer',
+                            fontWeight: '500'
+                          }}
+                        >
+                          {addingSignerId ? 'Agregando...' : `Agregar${selectedRolesForNewSigner.length > 0 ? ` (${selectedRolesForNewSigner.length} ${selectedRolesForNewSigner.length === 1 ? 'rol' : 'roles'})` : ' (selecciona al menos 1 rol)'}`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#374151' }}>
                     Firmantes del documento {managingDocument.status !== 'completed' && '(Arrastra para reordenar)'}
                   </h3>
@@ -5580,58 +5881,95 @@ function Dashboard({ user, onLogout }) {
               const signerObj = selectedSigners.find(s =>
                 (typeof s === 'object' ? s.userId : s) === openRoleDropdown
               );
+
+              const isFV = selectedDocumentType && selectedDocumentType.code === 'FV';
               const currentRoleId = typeof signerObj === 'object' ? signerObj.roleId : null;
+              const currentRoleIds = (typeof signerObj === 'object' && signerObj.roleIds) ? signerObj.roleIds : [];
 
               return (
                 <>
-                  {/* Opción para quitar rol (si tiene uno asignado) */}
-                  {currentRoleId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateSignerRole(openRoleDropdown, null, null);
-                        setOpenRoleDropdown(null);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.625rem 0.75rem',
-                        textAlign: 'left',
-                        backgroundColor: 'white',
-                        border: 'none',
-                        borderRadius: '0.375rem',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem',
-                        color: '#dc2626',
-                        fontWeight: '500',
-                        marginBottom: '0.5rem',
-                        transition: 'background-color 0.15s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                    >
-                      Quitar rol
-                    </button>
+                  {/* Opción para quitar rol (solo para tipo SA - un solo rol) */}
+                  {!isFV && currentRoleId && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateSignerRole(openRoleDropdown, null, null);
+                          setOpenRoleDropdown(null);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '0.625rem 0.75rem',
+                          textAlign: 'left',
+                          backgroundColor: 'white',
+                          border: 'none',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontSize: '0.875rem',
+                          color: '#dc2626',
+                          fontWeight: '500',
+                          marginBottom: '0.5rem',
+                          transition: 'background-color 0.15s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                      >
+                        Quitar rol
+                      </button>
+
+                      <div style={{
+                        height: '1px',
+                        backgroundColor: '#e5e7eb',
+                        margin: '0.5rem 0'
+                      }} />
+                    </>
                   )}
 
-                  {/* Divisor si hay opción de quitar */}
-                  {currentRoleId && (
+                  {/* Encabezado para tipo FV */}
+                  {isFV && (
                     <div style={{
-                      height: '1px',
-                      backgroundColor: '#e5e7eb',
-                      margin: '0.5rem 0'
-                    }} />
+                      padding: '0.5rem 0.75rem',
+                      fontSize: '0.75rem',
+                      color: '#6b7280',
+                      fontWeight: '400',
+                      marginBottom: '0.5rem',
+                      lineHeight: '1.4'
+                    }}>
+                      Selecciona hasta 3 roles<br/>
+                      <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+                        Los roles marcados como "Único" solo pueden asignarse a un firmante
+                      </span>
+                    </div>
                   )}
 
                   {/* Lista de roles disponibles */}
                   {documentTypeRoles.map((role) => {
-                    const isSelected = currentRoleId === role.id;
+                    // Para tipo FV: verificar si el rol está en el array
+                    // Para otros tipos: verificar si es el rol actual
+                    const isSelected = isFV
+                      ? currentRoleIds.includes(role.id)
+                      : currentRoleId === role.id;
 
-                    // Verificar si este rol ya está asignado a otro firmante
+                    // Roles exclusivos para FV (solo un firmante puede tenerlos)
+                    const exclusiveRoleCodes = ['RESPONSABLE_NEGOCIACIONES', 'AREA_FINANCIERA', 'CAUSACION'];
+                    const isExclusiveRole = isFV && exclusiveRoleCodes.includes(role.roleCode);
+
+                    // Para tipo SA: Verificar si este rol ya está asignado a otro firmante
+                    // Para tipo FV: Solo verificar para roles exclusivos
                     const isRoleTaken = selectedSigners.some(s => {
                       const otherSignerId = typeof s === 'object' ? s.userId : s;
-                      const otherRoleId = typeof s === 'object' ? s.roleId : null;
-                      // El rol está ocupado si otro firmante (no el actual) lo tiene
-                      return otherSignerId !== openRoleDropdown && otherRoleId === role.id;
+
+                      if (isFV) {
+                        // Para FV: solo bloquear roles exclusivos que otro firmante ya tiene
+                        if (!isExclusiveRole) return false; // Los compartibles nunca están "ocupados"
+
+                        const otherRoleIds = typeof s === 'object' && s.roleIds ? s.roleIds : [];
+                        return otherSignerId !== openRoleDropdown && otherRoleIds.includes(role.id);
+                      } else {
+                        // Para SA: todos los roles son exclusivos
+                        const otherRoleId = typeof s === 'object' ? s.roleId : null;
+                        return otherSignerId !== openRoleDropdown && otherRoleId === role.id;
+                      }
                     });
 
                     return (
@@ -5641,7 +5979,10 @@ function Dashboard({ user, onLogout }) {
                         onClick={() => {
                           if (!isRoleTaken) {
                             updateSignerRole(openRoleDropdown, role.id, role.roleName);
-                            setOpenRoleDropdown(null);
+                            // Para SA cerrar el dropdown, para FV dejarlo abierto
+                            if (!isFV) {
+                              setOpenRoleDropdown(null);
+                            }
                           }
                         }}
                         disabled={isRoleTaken}
@@ -5671,7 +6012,40 @@ function Dashboard({ user, onLogout }) {
                         }}
                       >
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {/* Checkbox para tipo FV */}
+                          {isFV && (
+                            <div style={{
+                              width: '16px',
+                              height: '16px',
+                              border: '2px solid ' + (isSelected ? '#4f46e5' : '#d1d5db'),
+                              borderRadius: '0.25rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: isSelected ? '#4f46e5' : 'white',
+                              transition: 'all 0.15s'
+                            }}>
+                              {isSelected && (
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                          )}
                           {role.roleName}
+                          {/* Indicador de rol exclusivo para FV */}
+                          {isFV && isExclusiveRole && !isRoleTaken && (
+                            <span style={{
+                              fontSize: '0.75rem',
+                              color: '#f59e0b',
+                              fontWeight: '500',
+                              backgroundColor: '#fef3c7',
+                              padding: '0.125rem 0.375rem',
+                              borderRadius: '0.25rem'
+                            }}>
+                              Único
+                            </span>
+                          )}
                           {isRoleTaken && (
                             <span style={{
                               fontSize: '0.75rem',

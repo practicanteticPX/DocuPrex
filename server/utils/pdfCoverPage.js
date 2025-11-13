@@ -436,9 +436,18 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       });
 
       // Rol del firmante (si existe) - al lado del nombre con guión
-      if (signer.role_name) {
+      // Soporta múltiples roles separados por " / "
+      let roleText = '';
+      if (signer.role_names && Array.isArray(signer.role_names) && signer.role_names.length > 0) {
+        // Usar el array de roles si existe (nuevo sistema)
+        roleText = ` - ${signer.role_names.join(' / ')}`;
+      } else if (signer.role_name) {
+        // Fallback al rol singular para compatibilidad (sistema antiguo)
+        roleText = ` - ${signer.role_name}`;
+      }
+
+      if (roleText) {
         const nameWidth = fontBold.widthOfTextAtSize(displayName, 10);
-        const roleText = ` - ${signer.role_name}`;
         currentPage.drawText(roleText, {
           x: margin + nameWidth,
           y: yPosition,
