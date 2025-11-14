@@ -290,10 +290,9 @@ function Dashboard({ user, onLogout }) {
       });
 
       if (signersWithoutRoles.length > 0) {
-        const docTypeName = selectedDocumentType.code === 'FV'
-          ? 'Legalización de Facturas'
-          : 'Solicitud de Anticipo';
-        setError(`Para ${docTypeName}, todos los firmantes deben tener al menos 1 rol asignado`);
+        const errorMsg = 'Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado';
+        setError(errorMsg);
+        showNotif('Error de validación', errorMsg, 'error');
         return; // Bloquear el avance
       }
     }
@@ -309,7 +308,9 @@ function Dashboard({ user, onLogout }) {
       });
 
       if (signersWithoutRoles.length > 0) {
-        setError('Para Solicitud de Anticipos, todos los firmantes deben tener al menos 1 rol asignado');
+        const errorMsg = 'Para Solicitud de Anticipos, todos los firmantes deben tener al menos 1 rol asignado';
+        setError(errorMsg);
+        showNotif('Error de validación', errorMsg, 'error');
         return; // Bloquear el avance
       }
     }
@@ -325,7 +326,9 @@ function Dashboard({ user, onLogout }) {
       });
 
       if (signersWithoutRoles.length > 0) {
-        setError('Todos los firmantes deben tener al menos 1 rol asignado');
+        const errorMsg = 'Todos los firmantes deben tener al menos 1 rol asignado';
+        setError(errorMsg);
+        showNotif('Error de validación', errorMsg, 'error');
         return; // Bloquear el avance
       }
     }
@@ -1274,7 +1277,7 @@ function Dashboard({ user, onLogout }) {
    * Seleccionar todos los firmantes
    */
   const selectAllSigners = () => {
-    setSelectedSigners(availableSigners.map(s => s.id));
+    setSelectedSigners(availableSigners.map(s => ({ userId: s.id, roleId: null, roleName: null })));
   };
 
   /**
@@ -1356,9 +1359,13 @@ function Dashboard({ user, onLogout }) {
           }
         } else {
           // Para otros tipos (SA): un solo rol
-          // Si se está quitando el rol (roleId null), volver a ID simple
+          // Si se está quitando el rol (roleId null), mantener como objeto con roleId: null
           if (!roleId) {
-            return signerId;
+            return {
+              userId: signerId,
+              roleId: null,
+              roleName: null
+            };
           }
           // Asignar o actualizar rol
           return {
@@ -1398,11 +1405,19 @@ function Dashboard({ user, onLogout }) {
           }, ...prev]);
         } else {
           // Agregar sin rol si no se encuentra el rol (no debería pasar)
-          setSelectedSigners(prev => [user.id, ...prev]);
+          setSelectedSigners(prev => [{
+            userId: user.id,
+            roleId: null,
+            roleName: null
+          }, ...prev]);
         }
       } else {
         // Para otros tipos de documentos, agregar sin rol
-        setSelectedSigners(prev => [user.id, ...prev]);
+        setSelectedSigners(prev => [{
+          userId: user.id,
+          roleId: null,
+          roleName: null
+        }, ...prev]);
       }
     } else {
       // Quitar al usuario actual de la lista de firmantes
