@@ -1657,11 +1657,13 @@ function Dashboard({ user, onLogout }) {
       return newFiles;
     });
 
+    // Limpiar el input file para permitir seleccionar el mismo archivo nuevamente
+    const fileInput = document.getElementById('file-input-zapsign');
+    if (fileInput) fileInput.value = '';
+
     // Si no quedan archivos, limpiar también selectedFile
     if (selectedFiles.length === 1) {
       setSelectedFile(null);
-      const fileInput = document.getElementById('file-input');
-      if (fileInput) fileInput.value = '';
     }
   };
 
@@ -1671,7 +1673,7 @@ function Dashboard({ user, onLogout }) {
   const clearAllFiles = () => {
     setSelectedFile(null);
     setSelectedFiles([]);
-    const fileInput = document.getElementById('file-input');
+    const fileInput = document.getElementById('file-input-zapsign');
     if (fileInput) fileInput.value = '';
   };
 
@@ -5468,11 +5470,17 @@ function Dashboard({ user, onLogout }) {
                           <div className="autocomplete-dropdown">
                             {(() => {
                               const existingIds = new Set(documentSigners.map(s => s.signer?.id).filter(Boolean));
-                              const filteredSigners = availableSigners.filter(s =>
-                                !existingIds.has(s.id) &&
-                                (s.name?.toLowerCase().includes(searchNewSigner.toLowerCase()) ||
-                                 s.email?.toLowerCase().includes(searchNewSigner.toLowerCase()))
-                              );
+                              // Dividir el término de búsqueda en palabras
+                              const searchWords = searchNewSigner.toLowerCase().trim().split(/\s+/);
+                              const filteredSigners = availableSigners.filter(s => {
+                                if (existingIds.has(s.id)) return false;
+                                const name = (s.name || '').toLowerCase();
+                                const email = (s.email || '').toLowerCase();
+                                // Todas las palabras deben encontrarse en el nombre o email
+                                return searchWords.every(word =>
+                                  name.includes(word) || email.includes(word)
+                                );
+                              });
 
                               if (filteredSigners.length === 0) {
                                 return (
