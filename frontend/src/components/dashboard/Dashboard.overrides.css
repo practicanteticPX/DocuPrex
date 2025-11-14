@@ -1066,9 +1066,10 @@ textarea.form-input:focus {
 /* Contenedor principal */
 .my-documents-section-clean {
   max-width: 1200px !important;
-  min-width: 750px !important;
+  width: 100% !important;
   margin: 0 auto !important;
   padding: 32px 24px !important;
+  box-sizing: border-box !important;
 }
 
 /* Grid de documentos */
@@ -1090,7 +1091,9 @@ textarea.form-input:focus {
   transition: all 0.2s ease !important;
   gap: 20px !important;
   min-height: 100px !important;
-  min-width: 700px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .my-doc-card-reference:hover {
