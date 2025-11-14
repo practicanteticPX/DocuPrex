@@ -4089,10 +4089,39 @@ function Dashboard({ user, onLogout }) {
                         <div className="doc-content-wrapper">
                           <div className="doc-header-row">
                             <h3 className="doc-title-reference">{doc.title}</h3>
-                            <div className="status-badge-clean" style={{
-                              color: statusConfig.color,
-                              backgroundColor: statusConfig.bg
-                            }}>
+                            <div
+                              className="status-badge-clean"
+                              style={{
+                                color: statusConfig.color,
+                                backgroundColor: statusConfig.bg,
+                                cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onClick={() => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                  if (rejectedSignature) {
+                                    setRejectionReasonPopup({
+                                      title: doc.title,
+                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                      reason: rejectedSignature.rejectionReason,
+                                      rejectedAt: rejectedSignature.rejectedAt
+                                    });
+                                  }
+                                }
+                              }}
+                              onMouseEnter={(e) => {
+                                if (statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason)) {
+                                  e.target.style.opacity = '0.8';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  e.target.style.opacity = '1';
+                                }
+                              }}
+                              title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
+                            >
                               {statusConfig.label}
                             </div>
                           </div>
@@ -4101,34 +4130,6 @@ function Dashboard({ user, onLogout }) {
                             <span className="doc-created-text">
                               Creado el {formatDateTime(doc.createdAt)} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
                             </span>
-
-                            {statusConfig.label === 'Rechazado' && (() => {
-                            const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
-                            if (!rejectedSignature) return null;
-
-                            return (
-                              <div className="rejection-info-compact">
-                                <span className="rejection-by-text">
-                                  Rechazado por {rejectedSignature.signer?.name || rejectedSignature.signer?.email}
-                                </span>
-                                <button
-                                  className="btn-view-reason"
-                                  onClick={() => setRejectionReasonPopup({
-                                    title: doc.title,
-                                    rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
-                                    reason: rejectedSignature.rejectionReason,
-                                    rejectedAt: rejectedSignature.rejectedAt
-                                  })}
-                                  title="Ver razón del rechazo"
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                    <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              </div>
-                            );
-                          })()}
                           </div>
 
                           
@@ -4389,10 +4390,39 @@ function Dashboard({ user, onLogout }) {
                         <div className="doc-content-wrapper">
                           <div className="doc-header-row">
                             <h3 className="doc-title-reference">{doc.title}</h3>
-                            <div className="status-badge-clean" style={{
-                              color: statusConfig.color,
-                              backgroundColor: statusConfig.bg
-                            }}>
+                            <div
+                              className="status-badge-clean"
+                              style={{
+                                color: statusConfig.color,
+                                backgroundColor: statusConfig.bg,
+                                cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onClick={() => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                  if (rejectedSignature) {
+                                    setRejectionReasonPopup({
+                                      title: doc.title,
+                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                      reason: rejectedSignature.rejectionReason,
+                                      rejectedAt: rejectedSignature.rejectedAt
+                                    });
+                                  }
+                                }
+                              }}
+                              onMouseEnter={(e) => {
+                                if (statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason)) {
+                                  e.target.style.opacity = '0.8';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  e.target.style.opacity = '1';
+                                }
+                              }}
+                              title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
+                            >
                               {statusConfig.label}
                             </div>
                           </div>
@@ -4401,34 +4431,6 @@ function Dashboard({ user, onLogout }) {
                             <span className="doc-created-text">
                               {doc.signedAt ? `Firmado el ${formatDateTime(doc.signedAt)}` : `Creado el ${formatDateTime(doc.createdAt)}`} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
                             </span>
-
-                            {doc.status === 'rejected' && (() => {
-                            const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
-                            if (!rejectedSignature) return null;
-
-                            return (
-                              <div className="rejection-info-compact">
-                                <span className="rejection-by-text">
-                                  Rechazado por {rejectedSignature.signer?.name || rejectedSignature.signer?.email}
-                                </span>
-                                <button
-                                  className="btn-view-reason"
-                                  onClick={() => setRejectionReasonPopup({
-                                    title: doc.title,
-                                    rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
-                                    reason: rejectedSignature.rejectionReason,
-                                    rejectedAt: rejectedSignature.rejectedAt
-                                  })}
-                                  title="Ver razón del rechazo"
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                    <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              </div>
-                            );
-                          })()}
                           </div>
 
                           
@@ -4654,37 +4656,40 @@ function Dashboard({ user, onLogout }) {
                             <div className="doc-header-row">
                               <h3 className="doc-title-reference">{doc.title}</h3>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {/* Botón para ver razón de rechazo si el documento fue rechazado */}
-                                {doc.status === 'rejected' && (() => {
-                                  const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
-                                  if (!rejectedSignature) return null;
-
-                                  return (
-                                    <button
-                                      className="btn-view-reason"
-                                      onClick={() => setRejectionReasonPopup({
+                              <div
+                                className="status-badge-clean"
+                                style={{
+                                  color: statusConfig.color,
+                                  backgroundColor: statusConfig.bg,
+                                  cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onClick={() => {
+                                  if (statusConfig.label === 'Rechazado') {
+                                    const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                    if (rejectedSignature) {
+                                      setRejectionReasonPopup({
                                         title: doc.title,
                                         rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
                                         reason: rejectedSignature.rejectionReason,
                                         rejectedAt: rejectedSignature.rejectedAt
-                                      })}
-                                      title="Ver razón del rechazo"
-                                    >
-                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                        <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      </svg>
-                                    </button>
-                                  );
-                                })()}
-
-                                <div className="status-badge-clean" style={{
-                                  color: statusConfig.color,
-                                  backgroundColor: statusConfig.bg
-                                }}>
-                                  {statusConfig.label}
-                                </div>
+                                      });
+                                    }
+                                  }
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason)) {
+                                    e.target.style.opacity = '0.8';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (statusConfig.label === 'Rechazado') {
+                                    e.target.style.opacity = '1';
+                                  }
+                                }}
+                                title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
+                              >
+                                {statusConfig.label}
                               </div>
                             </div>
 
@@ -4930,29 +4935,38 @@ function Dashboard({ user, onLogout }) {
                                 <h3 className="doc-title-reference">{doc.title}</h3>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  {/* Botón para ver razón de rechazo */}
-                                  {rejection?.rejectionReason && (
-                                    <button
-                                      className="btn-view-reason"
-                                      onClick={() => setRejectionReasonPopup({
-                                        title: doc.title,
-                                        rejectedBy: isRejectedByMe ? 'Tú' : (rejection.signer?.name || rejection.signer?.email),
-                                        reason: rejection.rejectionReason,
-                                        rejectedAt: rejection.rejectedAt
-                                      })}
-                                      title="Ver razón del rechazo"
-                                    >
-                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                        <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12 C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                        <path d="M12 15C13.6569 15 15 13.6569 15 12 C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      </svg>
-                                    </button>
-                                  )}
-
-                                  <div className="status-badge-clean" style={{
-                                    color: '#991B1B',
-                                    backgroundColor: '#FEE2E2'
-                                  }}>
+                                  {/* Badge clickeable para ver razón de rechazo */}
+                                  <div
+                                    className="status-badge-clean"
+                                    style={{
+                                      color: '#991B1B',
+                                      backgroundColor: '#FEE2E2',
+                                      cursor: rejection?.rejectionReason ? 'pointer' : 'default',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onClick={() => {
+                                      if (rejection?.rejectionReason) {
+                                        setRejectionReasonPopup({
+                                          title: doc.title,
+                                          rejectedBy: isRejectedByMe ? 'Tú' : (rejection.signer?.name || rejection.signer?.email),
+                                          reason: rejection.rejectionReason,
+                                          rejectedAt: rejection.rejectedAt
+                                        });
+                                      }
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (rejection?.rejectionReason) {
+                                        e.target.style.backgroundColor = '#FEE2E2';
+                                        e.target.style.opacity = '0.8';
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (rejection?.rejectionReason) {
+                                        e.target.style.opacity = '1';
+                                      }
+                                    }}
+                                    title={rejection?.rejectionReason ? 'Ver razón del rechazo' : ''}
+                                  >
                                     Rechazado
                                   </div>
                                 </div>
@@ -4994,20 +5008,6 @@ function Dashboard({ user, onLogout }) {
                                   </button>
                                 )}
                               </div>
-                            </div>
-
-                            <div className="doc-actions-clean">
-                              <button
-                                className="btn-action-clean"
-                                onClick={() => handleViewDocument(doc)}
-                                title="Ver documento"
-                                style={{marginTop: '-1.5vw'}}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              </button>
                             </div>
                           </div>
                         );

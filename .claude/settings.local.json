@@ -43,7 +43,12 @@
       "Bash(timeout:*)",
       "Bash(nul)",
       "Bash(find:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(docker-compose stop:*)",
+      "Bash(docker-compose run:*)",
+      "Bash(docker run:*)",
+      "Bash(docker start:*)",
+      "Bash(docker stop:*)"
     ],
     "deny": [],
     "ask": []

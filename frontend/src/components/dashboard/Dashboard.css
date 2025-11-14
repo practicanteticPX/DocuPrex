@@ -6434,7 +6434,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6536,10 +6538,9 @@
 .rejection-popup-reason-box {
   background: #FEF2F2;
   border: 1px solid #FECACA;
-  border-left: 3px solid #DC2626;
   border-radius: 8px;
   padding: 16px;
-  color: #991B1B;
+  color: #DC2626;
   font-size: 14px;
   line-height: 1.6;
   margin-top: 8px;
