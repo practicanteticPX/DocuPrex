@@ -1989,6 +1989,21 @@ function Dashboard({ user, onLogout }) {
                   rejectionReason
                 }
               }
+              documentSigners(documentId: $id) {
+                userId
+                orderPosition
+                user {
+                  id
+                  name
+                  email
+                }
+                signature {
+                  id
+                  status
+                  signedAt
+                  rejectedAt
+                }
+              }
             }
           `,
           variables: { id: notification.documentId }
@@ -2006,6 +2021,7 @@ function Dashboard({ user, onLogout }) {
       }
 
       const doc = response.data.data.document;
+      const signers = response.data.data.documentSigners || [];
 
       if (!doc) {
         console.error('Documento no encontrado');
@@ -2016,11 +2032,54 @@ function Dashboard({ user, onLogout }) {
       // Determinar la pestaña y el estado isPending según el tipo de notificación
       let targetTab = 'my-documents';
       let isPending = false;
+      let isWaiting = false;
 
       if (notification.type === 'signature_request') {
-        // Solicitud de firma -> pestaña de pendientes
+        // Solicitud de firma -> verificar estado real de la firma
         targetTab = 'pending';
-        isPending = true;
+
+        // Buscar la información del firmante actual
+        const currentUserSigner = signers.find(s => s.userId === user?.id);
+
+        if (currentUserSigner && currentUserSigner.signature) {
+          const sigStatus = currentUserSigner.signature.status;
+
+          if (sigStatus === 'pending') {
+            // Verificar si es el turno del usuario
+            // El usuario puede firmar si todos los anteriores ya firmaron
+            const previousSigners = signers.filter(
+              s => s.orderPosition < currentUserSigner.orderPosition
+            );
+
+            const allPreviousSigned = previousSigners.every(
+              s => s.signature && s.signature.status === 'signed'
+            );
+
+            if (allPreviousSigned) {
+              isPending = true; // Puede firmar/rechazar
+              isWaiting = false;
+            } else {
+              isPending = false; // No puede firmar aún
+              isWaiting = true; // Esperando turno
+            }
+          } else if (sigStatus === 'signed') {
+            // Ya firmó este documento
+            isPending = false;
+            isWaiting = false;
+            // Cambiar a pestaña de firmados
+            targetTab = 'signed';
+          } else if (sigStatus === 'rejected') {
+            // Ya rechazó este documento
+            isPending = false;
+            isWaiting = false;
+            // Cambiar a pestaña de rechazados
+            targetTab = 'rejected';
+          }
+        } else {
+          // El usuario no es firmante de este documento (no debería ocurrir)
+          isPending = false;
+          isWaiting = false;
+        }
       } else if (notification.type === 'document_signed') {
         // Documento firmado -> puede estar en "mis documentos" o "firmados"
         // Verificar si el usuario actual es el creador
@@ -2040,7 +2099,7 @@ function Dashboard({ user, onLogout }) {
 
       // Usar setTimeout para dar tiempo a que la interfaz actualice la pestaña
       setTimeout(() => {
-        handleViewDocument(doc, isPending);
+        handleViewDocument(doc, isPending, isWaiting);
       }, 100);
 
       // Opcionalmente, recargar la lista correspondiente en segundo plano
