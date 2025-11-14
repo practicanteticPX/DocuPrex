@@ -133,7 +133,7 @@
   color: #111827;
   transition: all 0.2s ease;
   font-family: inherit;
-  text-indent: 1.5vw;
+  text-indent: 21px;
 }
 
 .form-input:focus {

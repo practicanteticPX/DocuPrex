@@ -278,9 +278,8 @@ function Dashboard({ user, onLogout }) {
   const allStepsCompleted = () => completedSteps() === totalSteps();
 
   const handleNext = () => {
-    // Validar roles para FV y SA cuando se sale del paso 1 (Añadir firmantes)
-    if (activeStep === 1 && selectedDocumentType &&
-        (selectedDocumentType.code === 'FV' || selectedDocumentType.code === 'SA')) {
+    // Validar roles para FV cuando se sale del paso 1 (Añadir firmantes)
+    if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'FV') {
       const signersWithoutRoles = selectedSigners.filter(s => {
         if (typeof s === 'object') {
           const hasRoles = s.roleIds && s.roleIds.length > 0;
@@ -292,7 +291,6 @@ function Dashboard({ user, onLogout }) {
       if (signersWithoutRoles.length > 0) {
         const errorMsg = 'Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado';
         setError(errorMsg);
-        showNotif('Error de validación', errorMsg, 'error');
         return; // Bloquear el avance
       }
     }
@@ -310,7 +308,6 @@ function Dashboard({ user, onLogout }) {
       if (signersWithoutRoles.length > 0) {
         const errorMsg = 'Para Solicitud de Anticipos, todos los firmantes deben tener al menos 1 rol asignado';
         setError(errorMsg);
-        showNotif('Error de validación', errorMsg, 'error');
         return; // Bloquear el avance
       }
     }
@@ -664,10 +661,9 @@ function Dashboard({ user, onLogout }) {
       }
     }
 
-    // Limpiar error de roles FV/SA cuando todos los firmantes tienen roles
+    // Limpiar error de roles FV cuando todos los firmantes tienen roles
     if (error.includes('todos los firmantes deben tener al menos 1 rol')) {
-      if (selectedDocumentType &&
-          (selectedDocumentType.code === 'FV' || selectedDocumentType.code === 'SA')) {
+      if (selectedDocumentType && selectedDocumentType.code === 'FV') {
         const signersWithoutRoles = selectedSigners.filter(s => {
           if (typeof s === 'object') {
             const hasRoles = s.roleIds && s.roleIds.length > 0;
@@ -3322,22 +3318,24 @@ function Dashboard({ user, onLogout }) {
 
               {/* Content Card */}
               <div className="zapsign-content-card">
-                <div className="zapsign-header">
-                  <div className="header-content">
-                    <div>
-                      <h2 className="zapsign-title">Nuevo documento</h2>
-                      <p className="zapsign-subtitle">Completa los detalles y sube tu archivo para firmar.</p>
+                {activeStep !== 1 && (
+                  <div className="zapsign-header">
+                    <div className="header-content">
+                      <div>
+                        <h2 className="zapsign-title">Nuevo documento</h2>
+                        <p className="zapsign-subtitle">Completa los detalles y sube tu archivo para firmar.</p>
+                      </div>
+                      <button type="button" className="help-button">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 17H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span>Necesito ayuda</span>
+                      </button>
                     </div>
-                    <button type="button" className="help-button">
-                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M12 17H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      <span>Necesito ayuda</span>
-                    </button>
                   </div>
-                </div>
+                )}
 
                 <form onSubmit={handleUpload} className="zapsign-upload-form">
                   {/* Mensajes de estado */}
@@ -3398,6 +3396,7 @@ function Dashboard({ user, onLogout }) {
                                 onClick={() => {
                                   setSelectedDocumentType(null);
                                   setDocumentTypeRoles([]);
+                                  setSelectedSigners([]);
                                   setShowDocTypeDropdown(false);
                                 }}
                               >
@@ -3610,40 +3609,28 @@ function Dashboard({ user, onLogout }) {
                             </p>
                           </div>
 
-                          {/* Checkbox: Yo voy a firmar este documento */}
+                          {/* Switch: Voy a firmar este documento */}
                           <div style={{
                             marginBottom: '1.5rem',
                             padding: '1rem',
-                            backgroundColor: '#f8fafc',
+                            backgroundColor: '#fafafa',
                             borderRadius: '0.5rem',
                             border: '1px solid #e2e8f0'
                           }}>
                             <label style={{
                               display: 'flex',
                               alignItems: 'center',
+                              justifyContent: 'space-between',
                               cursor: 'pointer',
-                              gap: '0.75rem',
                               userSelect: 'none'
                             }}>
-                              <input
-                                type="checkbox"
-                                checked={willSignDocument}
-                                onChange={(e) => handleWillSignToggle(e.target.checked)}
-                                disabled={uploading}
-                                style={{
-                                  width: '18px',
-                                  height: '18px',
-                                  cursor: 'pointer',
-                                  accentColor: '#6366f1'
-                                }}
-                              />
                               <div style={{ flex: 1 }}>
                                 <span style={{
                                   fontSize: '0.9375rem',
                                   fontWeight: '500',
                                   color: '#1e293b'
                                 }}>
-                                  Yo voy a firmar este documento
+                                  Voy a firmar este documento
                                 </span>
                                 {selectedDocumentType && selectedDocumentType.code === 'SA' && (
                                   <span style={{
@@ -3655,6 +3642,33 @@ function Dashboard({ user, onLogout }) {
                                     Se te asignará automáticamente el rol de Solicitante
                                   </span>
                                 )}
+                              </div>
+                              {/* Switch Toggle */}
+                              <div
+                                onClick={() => !uploading && handleWillSignToggle(!willSignDocument)}
+                                style={{
+                                  position: 'relative',
+                                  width: '48px',
+                                  height: '24px',
+                                  backgroundColor: willSignDocument ? '#3b82f6' : '#cbd5e1',
+                                  borderRadius: '12px',
+                                  transition: 'background-color 0.3s ease',
+                                  cursor: uploading ? 'not-allowed' : 'pointer',
+                                  opacity: uploading ? 0.5 : 1,
+                                  flexShrink: 0
+                                }}
+                              >
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  left: willSignDocument ? '26px' : '2px',
+                                  width: '20px',
+                                  height: '20px',
+                                  backgroundColor: 'white',
+                                  borderRadius: '50%',
+                                  transition: 'left 0.3s ease',
+                                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                }} />
                               </div>
                             </label>
                           </div>
