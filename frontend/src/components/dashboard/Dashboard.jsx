@@ -294,6 +294,38 @@ function Dashboard({ user, onLogout }) {
       }
     }
 
+    // Validar roles para SA cuando se sale del paso 1 (Añadir firmantes)
+    if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'SA') {
+      const signersWithoutRoles = selectedSigners.filter(s => {
+        if (typeof s === 'object') {
+          const hasRole = s.roleId && s.roleId !== null;
+          return !hasRole;
+        }
+        return true; // Si es solo ID, no tiene roles
+      });
+
+      if (signersWithoutRoles.length > 0) {
+        setError('Para Solicitud de Anticipos, todos los firmantes deben tener al menos 1 rol asignado');
+        return; // Bloquear el avance
+      }
+    }
+
+    // Validar roles para documentos sin tipo específico cuando se sale del paso 1 (Añadir firmantes)
+    if (activeStep === 1 && selectedDocumentType === null && documentTypeRoles && documentTypeRoles.length > 0) {
+      const signersWithoutRoles = selectedSigners.filter(s => {
+        if (typeof s === 'object') {
+          const hasRole = s.roleId && s.roleId !== null;
+          return !hasRole;
+        }
+        return true; // Si es solo ID, no tiene roles
+      });
+
+      if (signersWithoutRoles.length > 0) {
+        setError('Todos los firmantes deben tener al menos 1 rol asignado');
+        return; // Bloquear el avance
+      }
+    }
+
     // Limpiar error si todo está bien
     setError('');
 
@@ -640,8 +672,38 @@ function Dashboard({ user, onLogout }) {
           setError('');
         }
       }
+
+      // Limpiar error de roles SA cuando todos los firmantes tienen roles
+      if (selectedDocumentType && selectedDocumentType.code === 'SA') {
+        const signersWithoutRoles = selectedSigners.filter(s => {
+          if (typeof s === 'object') {
+            const hasRole = s.roleId && s.roleId !== null;
+            return !hasRole;
+          }
+          return true;
+        });
+
+        if (signersWithoutRoles.length === 0) {
+          setError('');
+        }
+      }
+
+      // Limpiar error de roles para documentos sin tipo específico cuando todos los firmantes tienen roles
+      if (selectedDocumentType === null && documentTypeRoles && documentTypeRoles.length > 0) {
+        const signersWithoutRoles = selectedSigners.filter(s => {
+          if (typeof s === 'object') {
+            const hasRole = s.roleId && s.roleId !== null;
+            return !hasRole;
+          }
+          return true;
+        });
+
+        if (signersWithoutRoles.length === 0) {
+          setError('');
+        }
+      }
     }
-  }, [error, selectedFiles, documentTitle, selectedSigners, selectedDocumentType]);
+  }, [error, selectedFiles, documentTitle, selectedSigners, selectedDocumentType, documentTypeRoles]);
 
   // Cargar documentos rechazados al montar o cambiar de tab
   useEffect(() => {
