@@ -6411,22 +6411,16 @@
 .btn-view-reason {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  justify-content: center;
+  padding: 6px;
   background: #DC2626;
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
   white-space: nowrap;
-}
-
-.btn-view-reason:hover {
-  background: #B91C1C;
-  transform: translateY(-1px);
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .btn-view-reason svg {

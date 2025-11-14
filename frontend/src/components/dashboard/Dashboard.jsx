@@ -4119,12 +4119,12 @@ function Dashboard({ user, onLogout }) {
                                     reason: rejectedSignature.rejectionReason,
                                     rejectedAt: rejectedSignature.rejectedAt
                                   })}
+                                  title="Ver razón del rechazo"
                                 >
                                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
                                     <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                     <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                   </svg>
-                                  Ver razón
                                 </button>
                               </div>
                             );
@@ -4419,12 +4419,12 @@ function Dashboard({ user, onLogout }) {
                                     reason: rejectedSignature.rejectionReason,
                                     rejectedAt: rejectedSignature.rejectedAt
                                   })}
+                                  title="Ver razón del rechazo"
                                 >
                                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
                                     <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                     <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                   </svg>
-                                  Ver razón
                                 </button>
                               </div>
                             );
@@ -4654,35 +4654,37 @@ function Dashboard({ user, onLogout }) {
                             <div className="doc-header-row">
                               <h3 className="doc-title-reference">{doc.title}</h3>
 
-                              {/* Botón para ver razón de rechazo si el documento fue rechazado */}
-                              {doc.status === 'rejected' && (() => {
-                                const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
-                                if (!rejectedSignature) return null;
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {/* Botón para ver razón de rechazo si el documento fue rechazado */}
+                                {doc.status === 'rejected' && (() => {
+                                  const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                  if (!rejectedSignature) return null;
 
-                                return (
-                                  <button
-                                    className="btn-view-reason"
-                                    onClick={() => setRejectionReasonPopup({
-                                      title: doc.title,
-                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
-                                      reason: rejectedSignature.rejectionReason,
-                                      rejectedAt: rejectedSignature.rejectedAt
-                                    })}
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                      <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    Ver razón
-                                  </button>
-                                );
-                              })()}
+                                  return (
+                                    <button
+                                      className="btn-view-reason"
+                                      onClick={() => setRejectionReasonPopup({
+                                        title: doc.title,
+                                        rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                        reason: rejectedSignature.rejectionReason,
+                                        rejectedAt: rejectedSignature.rejectedAt
+                                      })}
+                                      title="Ver razón del rechazo"
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
+                                        <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    </button>
+                                  );
+                                })()}
 
-                              <div className="status-badge-clean" style={{
-                                color: statusConfig.color,
-                                backgroundColor: statusConfig.bg
-                              }}>
-                                {statusConfig.label}
+                                <div className="status-badge-clean" style={{
+                                  color: statusConfig.color,
+                                  backgroundColor: statusConfig.bg
+                                }}>
+                                  {statusConfig.label}
+                                </div>
                               </div>
                             </div>
 
@@ -4739,19 +4741,21 @@ function Dashboard({ user, onLogout }) {
                               </svg>
                             </button>
                             <button
-                              className={`btn-action-clean ${(doc.status === 'completed' || doc.documentType?.code === 'SA') ? 'disabled' : ''}`}
-                              onClick={() => !(doc.status === 'completed' || doc.documentType?.code === 'SA') && handleManageSigners(doc)}
+                              className={`btn-action-clean ${(doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 'disabled' : ''}`}
+                              onClick={() => !(doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') && handleManageSigners(doc)}
                               title={
                                 doc.status === 'completed'
                                   ? 'El documento está completado, no se pueden agregar firmantes'
-                                  : doc.documentType?.code === 'SA'
-                                    ? 'No se pueden modificar los firmantes de Solicitudes de Anticipo'
-                                    : 'Gestionar firmantes'
+                                  : doc.status === 'rejected'
+                                    ? 'El documento está rechazado, no se pueden modificar los firmantes'
+                                    : doc.documentType?.code === 'SA'
+                                      ? 'No se pueden modificar los firmantes de Solicitudes de Anticipo'
+                                      : 'Gestionar firmantes'
                               }
                               style={{
                                 marginTop: '-1.5vw',
-                                opacity: (doc.status === 'completed' || doc.documentType?.code === 'SA') ? 0.5 : 1,
-                                cursor: (doc.status === 'completed' || doc.documentType?.code === 'SA') ? 'not-allowed' : 'pointer'
+                                opacity: (doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 0.5 : 1,
+                                cursor: (doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 'not-allowed' : 'pointer'
                               }}
                             >
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4925,30 +4929,32 @@ function Dashboard({ user, onLogout }) {
                               <div className="doc-header-row">
                                 <h3 className="doc-title-reference">{doc.title}</h3>
 
-                                {/* Botón para ver razón de rechazo */}
-                                {rejection?.rejectionReason && (
-                                  <button
-                                    className="btn-view-reason"
-                                    onClick={() => setRejectionReasonPopup({
-                                      title: doc.title,
-                                      rejectedBy: isRejectedByMe ? 'Tú' : (rejection.signer?.name || rejection.signer?.email),
-                                      reason: rejection.rejectionReason,
-                                      rejectedAt: rejection.rejectedAt
-                                    })}
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                      <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M12 15C13.6569 15 15 13.6569 15 12 C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    Ver razón
-                                  </button>
-                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {/* Botón para ver razón de rechazo */}
+                                  {rejection?.rejectionReason && (
+                                    <button
+                                      className="btn-view-reason"
+                                      onClick={() => setRejectionReasonPopup({
+                                        title: doc.title,
+                                        rejectedBy: isRejectedByMe ? 'Tú' : (rejection.signer?.name || rejection.signer?.email),
+                                        reason: rejection.rejectionReason,
+                                        rejectedAt: rejection.rejectedAt
+                                      })}
+                                      title="Ver razón del rechazo"
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
+                                        <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12 C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <path d="M12 15C13.6569 15 15 13.6569 15 12 C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    </button>
+                                  )}
 
-                                <div className="status-badge-clean" style={{
-                                  color: '#991B1B',
-                                  backgroundColor: '#FEE2E2'
-                                }}>
-                                  Rechazado
+                                  <div className="status-badge-clean" style={{
+                                    color: '#991B1B',
+                                    backgroundColor: '#FEE2E2'
+                                  }}>
+                                    Rechazado
+                                  </div>
                                 </div>
                               </div>
 
