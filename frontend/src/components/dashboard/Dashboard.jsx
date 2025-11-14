@@ -278,8 +278,9 @@ function Dashboard({ user, onLogout }) {
   const allStepsCompleted = () => completedSteps() === totalSteps();
 
   const handleNext = () => {
-    // Validar roles para FV cuando se sale del paso 1 (Añadir firmantes)
-    if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'FV') {
+    // Validar roles para FV y SA cuando se sale del paso 1 (Añadir firmantes)
+    if (activeStep === 1 && selectedDocumentType &&
+        (selectedDocumentType.code === 'FV' || selectedDocumentType.code === 'SA')) {
       const signersWithoutRoles = selectedSigners.filter(s => {
         if (typeof s === 'object') {
           const hasRoles = s.roleIds && s.roleIds.length > 0;
@@ -289,7 +290,10 @@ function Dashboard({ user, onLogout }) {
       });
 
       if (signersWithoutRoles.length > 0) {
-        setError('Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado');
+        const docTypeName = selectedDocumentType.code === 'FV'
+          ? 'Legalización de Facturas'
+          : 'Solicitud de Anticipo';
+        setError(`Para ${docTypeName}, todos los firmantes deben tener al menos 1 rol asignado`);
         return; // Bloquear el avance
       }
     }
@@ -625,9 +629,10 @@ function Dashboard({ user, onLogout }) {
       }
     }
 
-    // Limpiar error de roles FV cuando todos los firmantes tienen roles
+    // Limpiar error de roles FV/SA cuando todos los firmantes tienen roles
     if (error.includes('todos los firmantes deben tener al menos 1 rol')) {
-      if (selectedDocumentType && selectedDocumentType.code === 'FV') {
+      if (selectedDocumentType &&
+          (selectedDocumentType.code === 'FV' || selectedDocumentType.code === 'SA')) {
         const signersWithoutRoles = selectedSigners.filter(s => {
           if (typeof s === 'object') {
             const hasRoles = s.roleIds && s.roleIds.length > 0;
