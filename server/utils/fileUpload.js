@@ -87,59 +87,9 @@ const uploadSinglePDF = upload.single('file');
  */
 const uploadMultiplePDFs = upload.array('files', 20);
 
-/**
- * Elimina un archivo del sistema de archivos
- * @param {string} filePath - Ruta del archivo a eliminar
- */
-const deleteFile = (filePath) => {
-  return new Promise((resolve, reject) => {
-    fs.unlink(filePath, (err) => {
-      if (err) {
-        console.error('Error al eliminar archivo:', err);
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-};
-
-/**
- * Obtiene el tamaño de un archivo
- * @param {string} filePath - Ruta del archivo
- * @returns {Promise<number>} Tamaño en bytes
- */
-const getFileSize = (filePath) => {
-  return new Promise((resolve, reject) => {
-    fs.stat(filePath, (err, stats) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(stats.size);
-      }
-    });
-  });
-};
-
-/**
- * Verifica si un archivo existe
- * @param {string} filePath - Ruta del archivo
- * @returns {Promise<boolean>}
- */
-const fileExists = (filePath) => {
-  return new Promise((resolve) => {
-    fs.access(filePath, fs.constants.F_OK, (err) => {
-      resolve(!err);
-    });
-  });
-};
-
 module.exports = {
   uploadSinglePDF,
   uploadMultiplePDFs,
-  deleteFile,
-  getFileSize,
-  fileExists,
   uploadDir,
   normalizeUserName,
   getUserUploadDir,

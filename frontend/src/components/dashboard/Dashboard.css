@@ -657,12 +657,13 @@
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
+  margin-top: 12px;
+  margin-bottom: 20px;
   background: #fef2f2;
   border: 1px solid #fecaca;
   border-radius: 10px;
   color: #dc2626;
   font-size: 14px;
-  animation: shake 0.5s ease;
 }
 
 .error-message svg {
@@ -5376,6 +5377,22 @@
   background-color: #fee2e2;
 }
 
+.pdf-viewer-action-btn.consecutivo {
+  color: #00a7ff;
+  background-color: transparent;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  min-width: 140px;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.pdf-viewer-action-btn.consecutivo:hover {
+  background-color: #e6f7ff;
+}
+
 .pdf-viewer-action-btn.close {
   padding: 8px;
   border: none;
@@ -5678,6 +5695,36 @@
 .sign-confirm-btn.confirm:hover {
   background-color: #059669;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.sign-confirm-btn.consecutivo-btn {
+  background-color: #00A7FF;
+}
+
+.sign-confirm-btn.consecutivo-btn:hover {
+  background-color: #0096E6;
+}
+
+/* Estilos específicos para modal de consecutivo */
+.sign-confirm-icon.consecutivo-icon {
+  background-color: #E6F7FF;
+  color: #00A7FF;
+}
+
+.reject-reason-input.consecutivo-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.reject-reason-input.consecutivo-input:focus {
+  border-color: #00A7FF;
+  box-shadow: 0 0 0 3px rgba(0, 167, 255, 0.1);
 }
 
 /* Responsive para el popup */
@@ -6411,22 +6458,16 @@
 .btn-view-reason {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  justify-content: center;
+  padding: 6px;
   background: #DC2626;
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
   white-space: nowrap;
-}
-
-.btn-view-reason:hover {
-  background: #B91C1C;
-  transform: translateY(-1px);
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .btn-view-reason svg {
@@ -6440,7 +6481,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6542,10 +6585,9 @@
 .rejection-popup-reason-box {
   background: #FEF2F2;
   border: 1px solid #FECACA;
-  border-left: 3px solid #DC2626;
   border-radius: 8px;
   padding: 16px;
-  color: #991B1B;
+  color: #DC2626;
   font-size: 14px;
   line-height: 1.6;
   margin-top: 8px;

@@ -25,14 +25,7 @@ pool.on('error', (err, client) => {
  */
 const query = (text, params) => pool.query(text, params);
 
-/**
- * Obtiene un cliente del pool para transacciones
- * @returns {Promise} Cliente de PostgreSQL
- */
-const getClient = () => pool.connect();
-
 module.exports = {
   query,
-  getClient,
   pool,
 };

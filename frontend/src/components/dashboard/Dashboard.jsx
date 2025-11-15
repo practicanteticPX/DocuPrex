@@ -69,7 +69,8 @@ function Dashboard({ user, onLogout }) {
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState('');
-  const [consecutivo, setConsecutivo] = useState(''); // Campo para Legalización de Facturas
+  const [consecutivo, setConsecutivo] = useState(''); // Campo guardado para Legalización de Facturas
+  const [tempConsecutivo, setTempConsecutivo] = useState(''); // Campo temporal mientras edita
   const [showConsecutivoModal, setShowConsecutivoModal] = useState(false); // Modal para agregar consecutivo
   const [showDescription, setShowDescription] = useState(false);
   const [showRejectSuccess, setShowRejectSuccess] = useState(false);
@@ -277,6 +278,26 @@ function Dashboard({ user, onLogout }) {
   const isLastStep = () => activeStep === totalSteps() - 1;
   const allStepsCompleted = () => completedSteps() === totalSteps();
 
+  /**
+   * Advances to the next step in the multi-step document upload form
+   *
+   * Triggered when user clicks "Next" button in the upload stepper. Validates step-specific
+   * requirements before advancing, with special validation for FV (Factura de Venta) documents
+   * which require role assignment for all signers.
+   *
+   * @returns {void}
+   *
+   * Business rules:
+   * - Step 0 -> Step 1: Requires files selected and document title entered
+   * - Step 1 -> Step 2: Requires at least one signer selected
+   * - For FV documents at step 1: All signers MUST have at least one role assigned
+   * - Advances to next incomplete step or next sequential step
+   *
+   * Side effects:
+   * - Shows error message if FV role validation fails
+   * - Clears any existing error messages
+   * - Updates activeStep state to advance the stepper
+   */
   const handleNext = () => {
     // Validar roles para FV cuando se sale del paso 1 (Añadir firmantes)
     if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'FV') {
@@ -289,7 +310,43 @@ function Dashboard({ user, onLogout }) {
       });
 
       if (signersWithoutRoles.length > 0) {
-        setError('Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado');
+        const errorMsg = 'Para Legalización de Facturas, todos los firmantes deben tener al menos 1 rol asignado';
+        setError(errorMsg);
+        return; // Bloquear el avance
+      }
+    }
+
+    // Validar roles para SA cuando se sale del paso 1 (Añadir firmantes)
+    if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'SA') {
+      const signersWithoutRoles = selectedSigners.filter(s => {
+        if (typeof s === 'object') {
+          const hasRole = s.roleId && s.roleId !== null;
+          return !hasRole;
+        }
+        return true; // Si es solo ID, no tiene roles
+      });
+
+      if (signersWithoutRoles.length > 0) {
+        const errorMsg = 'Para Solicitud de Anticipos, todos los firmantes deben tener al menos 1 rol asignado';
+        setError(errorMsg);
+        return; // Bloquear el avance
+      }
+    }
+
+    // Validar roles para documentos sin tipo específico cuando se sale del paso 1 (Añadir firmantes)
+    if (activeStep === 1 && selectedDocumentType === null && documentTypeRoles && documentTypeRoles.length > 0) {
+      const signersWithoutRoles = selectedSigners.filter(s => {
+        if (typeof s === 'object') {
+          const hasRole = s.roleId && s.roleId !== null;
+          return !hasRole;
+        }
+        return true; // Si es solo ID, no tiene roles
+      });
+
+      if (signersWithoutRoles.length > 0) {
+        const errorMsg = 'Todos los firmantes deben tener al menos 1 rol asignado';
+        setError(errorMsg);
+        showNotif('Error de validación', errorMsg, 'error');
         return; // Bloquear el avance
       }
     }
@@ -305,6 +362,7 @@ function Dashboard({ user, onLogout }) {
   };
 
   const handleBack = () => {
+    setError(''); // Limpiar error al retroceder
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
@@ -611,9 +669,9 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     if (!error) return; // Si no hay error, no hacer nada
 
-    // Limpiar error de "completa todos los campos" cuando hay archivos y título
-    if (error.includes('completa todos los campos')) {
-      if (selectedFiles && selectedFiles.length > 0 && documentTitle.trim().length > 0) {
+    // Limpiar error de "adjunta al menos un archivo" cuando se adjuntan archivos
+    if (error.includes('adjunta al menos un archivo')) {
+      if (selectedFiles && selectedFiles.length > 0) {
         setError('');
       }
     }
@@ -640,8 +698,38 @@ function Dashboard({ user, onLogout }) {
           setError('');
         }
       }
+
+      // Limpiar error de roles SA cuando todos los firmantes tienen roles
+      if (selectedDocumentType && selectedDocumentType.code === 'SA') {
+        const signersWithoutRoles = selectedSigners.filter(s => {
+          if (typeof s === 'object') {
+            const hasRole = s.roleId && s.roleId !== null;
+            return !hasRole;
+          }
+          return true;
+        });
+
+        if (signersWithoutRoles.length === 0) {
+          setError('');
+        }
+      }
+
+      // Limpiar error de roles para documentos sin tipo específico cuando todos los firmantes tienen roles
+      if (selectedDocumentType === null && documentTypeRoles && documentTypeRoles.length > 0) {
+        const signersWithoutRoles = selectedSigners.filter(s => {
+          if (typeof s === 'object') {
+            const hasRole = s.roleId && s.roleId !== null;
+            return !hasRole;
+          }
+          return true;
+        });
+
+        if (signersWithoutRoles.length === 0) {
+          setError('');
+        }
+      }
     }
-  }, [error, selectedFiles, documentTitle, selectedSigners, selectedDocumentType]);
+  }, [error, selectedFiles, documentTitle, selectedSigners, selectedDocumentType, documentTypeRoles]);
 
   // Cargar documentos rechazados al montar o cambiar de tab
   useEffect(() => {
@@ -1207,7 +1295,7 @@ function Dashboard({ user, onLogout }) {
    * Seleccionar todos los firmantes
    */
   const selectAllSigners = () => {
-    setSelectedSigners(availableSigners.map(s => s.id));
+    setSelectedSigners(availableSigners.map(s => ({ userId: s.id, roleId: null, roleName: null })));
   };
 
   /**
@@ -1289,9 +1377,13 @@ function Dashboard({ user, onLogout }) {
           }
         } else {
           // Para otros tipos (SA): un solo rol
-          // Si se está quitando el rol (roleId null), volver a ID simple
+          // Si se está quitando el rol (roleId null), mantener como objeto con roleId: null
           if (!roleId) {
-            return signerId;
+            return {
+              userId: signerId,
+              roleId: null,
+              roleName: null
+            };
           }
           // Asignar o actualizar rol
           return {
@@ -1331,11 +1423,19 @@ function Dashboard({ user, onLogout }) {
           }, ...prev]);
         } else {
           // Agregar sin rol si no se encuentra el rol (no debería pasar)
-          setSelectedSigners(prev => [user.id, ...prev]);
+          setSelectedSigners(prev => [{
+            userId: user.id,
+            roleId: null,
+            roleName: null
+          }, ...prev]);
         }
       } else {
         // Para otros tipos de documentos, agregar sin rol
-        setSelectedSigners(prev => [user.id, ...prev]);
+        setSelectedSigners(prev => [{
+          userId: user.id,
+          roleId: null,
+          roleName: null
+        }, ...prev]);
       }
     } else {
       // Quitar al usuario actual de la lista de firmantes
@@ -1579,11 +1679,13 @@ function Dashboard({ user, onLogout }) {
       return newFiles;
     });
 
+    // Limpiar el input file para permitir seleccionar el mismo archivo nuevamente
+    const fileInput = document.getElementById('file-input-zapsign');
+    if (fileInput) fileInput.value = '';
+
     // Si no quedan archivos, limpiar también selectedFile
     if (selectedFiles.length === 1) {
       setSelectedFile(null);
-      const fileInput = document.getElementById('file-input');
-      if (fileInput) fileInput.value = '';
     }
   };
 
@@ -1593,7 +1695,7 @@ function Dashboard({ user, onLogout }) {
   const clearAllFiles = () => {
     setSelectedFile(null);
     setSelectedFiles([]);
-    const fileInput = document.getElementById('file-input');
+    const fileInput = document.getElementById('file-input-zapsign');
     if (fileInput) fileInput.value = '';
   };
 
@@ -1636,13 +1738,37 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
-   * Subir documento REAL usando FormData
+   * Handles the document upload process with validation, signer assignment, and auto-signing
+   *
+   * Triggered when user submits the upload form. Validates file selection and signers,
+   * uploads document(s) to the server, assigns signers with their roles, and automatically
+   * signs the document if the current user is in the signer list.
+   *
+   * @param {Event} e - Form submission event
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If upload fails or signer assignment fails
+   *
+   * Business rules:
+   * - At least one file and one signer required
+   * - For FV document types, roles must be validated before upload (validated in handleNext)
+   * - For SA document types, uploader is automatically assigned as "Solicitante" role
+   * - Supports single file, multiple files, or unified PDF upload
+   * - Auto-signs if current user is in signer list
+   *
+   * Side effects:
+   * - Calls API_UPLOAD_URL, API_UPLOAD_UNIFIED_URL, or API_UPLOAD_MULTI_URL
+   * - Assigns signers via GraphQL mutation
+   * - Auto-signs via signDocument mutation if applicable
+   * - Resets form state on success
+   * - Reloads "My Documents" list
+   * - Shows success message for 5 seconds
    */
   const handleUpload = async (e) => {
     e.preventDefault();
 
     if (((selectedFiles?.length || 0) === 0 && !selectedFile)) {
-      setError('Por favor completa todos los campos');
+      setError('Por favor adjunta al menos un archivo');
       return;
     }
 
@@ -1939,6 +2065,33 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  /**
+   * Handles notification click to navigate to the related document and appropriate tab
+   *
+   * Triggered when user clicks on a notification in the notification dropdown. Fetches
+   * the related document, determines the correct tab based on notification type, and
+   * opens the document viewer.
+   *
+   * @param {Object} notification - Notification object containing type, documentId, and metadata
+   * @param {string} notification.type - Type of notification (signature_request, document_signed, document_rejected, document_deleted)
+   * @param {string} notification.documentId - ID of the related document
+   * @param {string} notification.documentTitle - Title of the document
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If document fetch fails
+   *
+   * Business rules:
+   * - 'signature_request' -> navigates to 'pending' tab
+   * - 'document_signed' -> navigates to 'my-documents' (if user is creator) or 'signed' tab
+   * - 'document_rejected' or 'document_rejected_by_other' -> navigates to 'rejected' tab
+   * - 'document_deleted' -> shows error notification and returns
+   *
+   * Side effects:
+   * - Fetches full document data via GraphQL query
+   * - Changes active tab based on notification type
+   * - Opens document viewer with handleViewDocument
+   * - May reload pending documents if navigating to pending tab
+   */
   const handleNotificationClick = async (notification) => {
     try {
       // Si la notificación es de documento eliminado, mostrar mensaje informativo
@@ -1989,6 +2142,21 @@ function Dashboard({ user, onLogout }) {
                   rejectionReason
                 }
               }
+              documentSigners(documentId: $id) {
+                userId
+                orderPosition
+                user {
+                  id
+                  name
+                  email
+                }
+                signature {
+                  id
+                  status
+                  signedAt
+                  rejectedAt
+                }
+              }
             }
           `,
           variables: { id: notification.documentId }
@@ -2006,6 +2174,7 @@ function Dashboard({ user, onLogout }) {
       }
 
       const doc = response.data.data.document;
+      const signers = response.data.data.documentSigners || [];
 
       if (!doc) {
         console.error('Documento no encontrado');
@@ -2016,11 +2185,54 @@ function Dashboard({ user, onLogout }) {
       // Determinar la pestaña y el estado isPending según el tipo de notificación
       let targetTab = 'my-documents';
       let isPending = false;
+      let isWaiting = false;
 
       if (notification.type === 'signature_request') {
-        // Solicitud de firma -> pestaña de pendientes
+        // Solicitud de firma -> verificar estado real de la firma
         targetTab = 'pending';
-        isPending = true;
+
+        // Buscar la información del firmante actual
+        const currentUserSigner = signers.find(s => s.userId === user?.id);
+
+        if (currentUserSigner && currentUserSigner.signature) {
+          const sigStatus = currentUserSigner.signature.status;
+
+          if (sigStatus === 'pending') {
+            // Verificar si es el turno del usuario
+            // El usuario puede firmar si todos los anteriores ya firmaron
+            const previousSigners = signers.filter(
+              s => s.orderPosition < currentUserSigner.orderPosition
+            );
+
+            const allPreviousSigned = previousSigners.every(
+              s => s.signature && s.signature.status === 'signed'
+            );
+
+            if (allPreviousSigned) {
+              isPending = true; // Puede firmar/rechazar
+              isWaiting = false;
+            } else {
+              isPending = false; // No puede firmar aún
+              isWaiting = true; // Esperando turno
+            }
+          } else if (sigStatus === 'signed') {
+            // Ya firmó este documento
+            isPending = false;
+            isWaiting = false;
+            // Cambiar a pestaña de firmados
+            targetTab = 'signed';
+          } else if (sigStatus === 'rejected') {
+            // Ya rechazó este documento
+            isPending = false;
+            isWaiting = false;
+            // Cambiar a pestaña de rechazados
+            targetTab = 'rejected';
+          }
+        } else {
+          // El usuario no es firmante de este documento (no debería ocurrir)
+          isPending = false;
+          isWaiting = false;
+        }
       } else if (notification.type === 'document_signed') {
         // Documento firmado -> puede estar en "mis documentos" o "firmados"
         // Verificar si el usuario actual es el creador
@@ -2040,7 +2252,7 @@ function Dashboard({ user, onLogout }) {
 
       // Usar setTimeout para dar tiempo a que la interfaz actualice la pestaña
       setTimeout(() => {
-        handleViewDocument(doc, isPending);
+        handleViewDocument(doc, isPending, isWaiting);
       }, 100);
 
       // Opcionalmente, recargar la lista correspondiente en segundo plano
@@ -2093,13 +2305,15 @@ function Dashboard({ user, onLogout }) {
   };
 
   const handleSaveConsecutivo = () => {
-    // Guardar el consecutivo - se enviará al firmar el documento
+    // Guardar el consecutivo temporal al campo permanente
+    setConsecutivo(tempConsecutivo);
     setShowConsecutivoModal(false);
   };
 
   const handleCancelConsecutivo = () => {
+    // Restaurar el valor guardado y descartar cambios temporales
+    setTempConsecutivo(consecutivo);
     setShowConsecutivoModal(false);
-    // No limpiar el consecutivo para que se mantenga si lo cierran sin guardar
   };
 
   const handleOpenRejectConfirm = () => {
@@ -2323,6 +2537,30 @@ function Dashboard({ user, onLogout }) {
 
   const clearModalSelectedSigners = () => setModalSelectedSigners([]);
 
+  /**
+   * Adds multiple selected signers to a document in bulk
+   *
+   * Triggered when user clicks "Add Selected" after selecting multiple signers from
+   * the available signers list in the manage signers modal. Assigns all selected users
+   * as signers and auto-signs if the current user is among them.
+   *
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If signer assignment mutation fails
+   *
+   * Business rules:
+   * - Only active if document is being managed and signers are selected
+   * - Adds all selected signers in a single batch operation
+   * - Auto-signs document if current user is in the selected list
+   *
+   * Side effects:
+   * - Calls assignSigners GraphQL mutation with array of user IDs
+   * - Auto-signs via signDocument mutation if current user included
+   * - Refreshes document signer list via handleManageSigners
+   * - Reloads "My Documents" list
+   * - Clears modal selections on success
+   * - Shows error notification on failure
+   */
   const handleAddSignersToDocument = async () => {
     if (!managingDocument || modalSelectedSigners.length === 0) return;
     try {
@@ -2416,6 +2654,26 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  /**
+   * Initiates the process to remove a signer from a document
+   *
+   * Triggered when user clicks the remove button next to a signer in the manage signers
+   * modal. Validates removal constraints and opens a confirmation modal with appropriate
+   * warning if removing the last pending signer from a partially signed document.
+   *
+   * @param {string} signerId - ID of the signer to remove
+   * @returns {void}
+   *
+   * Business rules:
+   * - Validates that document is being managed and signer exists
+   * - Special warning if removing last pending signer when others have already signed
+   * - Removal would change document status if last pending signer removed
+   *
+   * Side effects:
+   * - Opens confirmation modal with signer details
+   * - Sets isLastPending flag if this removal would affect document completion
+   * - Actual removal happens in confirmRemoveSignerAction after user confirms
+   */
   // Eliminar firmante
   const handleRemoveSigner = (signerId) => {
     if (!managingDocument) return;
@@ -2606,6 +2864,29 @@ function Dashboard({ user, onLogout }) {
     setDragOverSignerIndex(null);
   };
 
+  /**
+   * Saves the new signing order after user reorders signers via drag-and-drop
+   *
+   * Triggered when user clicks "Save Order" button after reordering signers in the
+   * manage signers modal. Updates the signing sequence on the server and refreshes
+   * the document list.
+   *
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If reordering mutation fails
+   *
+   * Business rules:
+   * - Only active if a document is being managed and not currently saving
+   * - Signing order determines the sequence in which users must sign
+   * - Changes are persisted via GraphQL reorderSigners mutation
+   *
+   * Side effects:
+   * - Calls reorderSigners GraphQL mutation with new order array
+   * - Refreshes managingDocument data via handleManageSigners
+   * - Reloads "My Documents" list
+   * - Shows success modal on completion
+   * - Shows error notification on failure
+   */
   // Guardar el nuevo orden en el servidor
   const handleSaveOrder = async () => {
     if (!managingDocument || savingOrder) return;
@@ -2648,6 +2929,35 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  /**
+   * Adds a single signer to a document with optional role assignment
+   *
+   * Triggered when user adds a signer from the available signers list in the manage
+   * signers modal. For FV (Factura de Venta) documents, prompts for role selection
+   * before adding. For other document types, adds signer directly.
+   *
+   * @param {string} userId - ID of the user to add as signer
+   * @param {Object|null} rolesData - Optional role data for FV documents
+   * @param {Array<string>} rolesData.roleIds - Array of role IDs
+   * @param {Array<string>} rolesData.roleNames - Array of role names
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If signer assignment mutation fails
+   *
+   * Business rules:
+   * - For FV documents without rolesData: opens role selection modal instead of adding
+   * - For FV documents with rolesData: adds signer with specified roles
+   * - For non-FV documents: adds signer without role requirements
+   * - Prevents adding if already processing a signer addition
+   *
+   * Side effects:
+   * - For FV without roles: sets pendingSignerForRoles and opens role modal
+   * - For valid additions: calls assignSigners GraphQL mutation
+   * - Refreshes document signer list via handleManageSigners
+   * - Reloads "My Documents" list
+   * - Clears modal search and selections on success
+   * - Shows error notification on failure
+   */
   // Función para agregar un nuevo firmante
   const handleAddSingleSigner = async (userId, rolesData = null) => {
     if (!managingDocument || addingSignerId) return;
@@ -3181,24 +3491,26 @@ function Dashboard({ user, onLogout }) {
 
               {/* Content Card */}
               <div className="zapsign-content-card">
-                <div className="zapsign-header">
-                  <div className="header-content">
-                    <div>
-                      <h2 className="zapsign-title">Nuevo documento</h2>
-                      <p className="zapsign-subtitle">Completa los detalles y sube tu archivo para firmar.</p>
+                {activeStep !== 1 && (
+                  <div className="zapsign-header">
+                    <div className="header-content">
+                      <div>
+                        <h2 className="zapsign-title">Nuevo documento</h2>
+                        <p className="zapsign-subtitle">Completa los detalles y sube tu archivo para firmar.</p>
+                      </div>
+                      <button type="button" className="help-button">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 17H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span>Necesito ayuda</span>
+                      </button>
                     </div>
-                    <button type="button" className="help-button">
-                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M12 17H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      <span>Necesito ayuda</span>
-                    </button>
                   </div>
-                </div>
+                )}
 
-                <form onSubmit={handleUpload} className="zapsign-upload-form">
+                <form onSubmit={(e) => e.preventDefault()} className="zapsign-upload-form">
                   {/* Mensajes de estado */}
                   {uploadSuccess && (
                     <div className="success-message">
@@ -3209,7 +3521,7 @@ function Dashboard({ user, onLogout }) {
                     </div>
                   )}
 
-                  {error && (
+                  {error && activeStep !== 1 && (
                     <div className="error-message">
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3257,6 +3569,7 @@ function Dashboard({ user, onLogout }) {
                                 onClick={() => {
                                   setSelectedDocumentType(null);
                                   setDocumentTypeRoles([]);
+                                  setSelectedSigners([]);
                                   setShowDocTypeDropdown(false);
                                 }}
                               >
@@ -3469,40 +3782,38 @@ function Dashboard({ user, onLogout }) {
                             </p>
                           </div>
 
-                          {/* Checkbox: Yo voy a firmar este documento */}
+                          {/* Mensaje de error específico para este paso */}
+                          {error && (
+                            <div className="error-message">
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              <span>{error}</span>
+                            </div>
+                          )}
+
+                          {/* Switch: Voy a firmar este documento */}
                           <div style={{
                             marginBottom: '1.5rem',
                             padding: '1rem',
-                            backgroundColor: '#f8fafc',
+                            backgroundColor: '#fafafa',
                             borderRadius: '0.5rem',
                             border: '1px solid #e2e8f0'
                           }}>
                             <label style={{
                               display: 'flex',
                               alignItems: 'center',
+                              justifyContent: 'space-between',
                               cursor: 'pointer',
-                              gap: '0.75rem',
                               userSelect: 'none'
                             }}>
-                              <input
-                                type="checkbox"
-                                checked={willSignDocument}
-                                onChange={(e) => handleWillSignToggle(e.target.checked)}
-                                disabled={uploading}
-                                style={{
-                                  width: '18px',
-                                  height: '18px',
-                                  cursor: 'pointer',
-                                  accentColor: '#6366f1'
-                                }}
-                              />
                               <div style={{ flex: 1 }}>
                                 <span style={{
                                   fontSize: '0.9375rem',
                                   fontWeight: '500',
                                   color: '#1e293b'
                                 }}>
-                                  Yo voy a firmar este documento
+                                  Voy a firmar este documento
                                 </span>
                                 {selectedDocumentType && selectedDocumentType.code === 'SA' && (
                                   <span style={{
@@ -3514,6 +3825,33 @@ function Dashboard({ user, onLogout }) {
                                     Se te asignará automáticamente el rol de Solicitante
                                   </span>
                                 )}
+                              </div>
+                              {/* Switch Toggle */}
+                              <div
+                                onClick={() => !uploading && handleWillSignToggle(!willSignDocument)}
+                                style={{
+                                  position: 'relative',
+                                  width: '48px',
+                                  height: '24px',
+                                  backgroundColor: willSignDocument ? '#3b82f6' : '#cbd5e1',
+                                  borderRadius: '12px',
+                                  transition: 'background-color 0.3s ease',
+                                  cursor: uploading ? 'not-allowed' : 'pointer',
+                                  opacity: uploading ? 0.5 : 1,
+                                  flexShrink: 0
+                                }}
+                              >
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  left: willSignDocument ? '26px' : '2px',
+                                  width: '20px',
+                                  height: '20px',
+                                  backgroundColor: 'white',
+                                  borderRadius: '50%',
+                                  transition: 'left 0.3s ease',
+                                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                }} />
                               </div>
                             </label>
                           </div>
@@ -3932,10 +4270,39 @@ function Dashboard({ user, onLogout }) {
                         <div className="doc-content-wrapper">
                           <div className="doc-header-row">
                             <h3 className="doc-title-reference">{doc.title}</h3>
-                            <div className="status-badge-clean" style={{
-                              color: statusConfig.color,
-                              backgroundColor: statusConfig.bg
-                            }}>
+                            <div
+                              className="status-badge-clean"
+                              style={{
+                                color: statusConfig.color,
+                                backgroundColor: statusConfig.bg,
+                                cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onClick={() => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                  if (rejectedSignature) {
+                                    setRejectionReasonPopup({
+                                      title: doc.title,
+                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                      reason: rejectedSignature.rejectionReason,
+                                      rejectedAt: rejectedSignature.rejectedAt
+                                    });
+                                  }
+                                }
+                              }}
+                              onMouseEnter={(e) => {
+                                if (statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason)) {
+                                  e.target.style.opacity = '0.8';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  e.target.style.opacity = '1';
+                                }
+                              }}
+                              title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
+                            >
                               {statusConfig.label}
                             </div>
                           </div>
@@ -3944,34 +4311,6 @@ function Dashboard({ user, onLogout }) {
                             <span className="doc-created-text">
                               Creado el {formatDateTime(doc.createdAt)} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
                             </span>
-
-                            {statusConfig.label === 'Rechazado' && (() => {
-                            const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
-                            if (!rejectedSignature) return null;
-
-                            return (
-                              <div className="rejection-info-compact">
-                                <span className="rejection-by-text">
-                                  Rechazado por {rejectedSignature.signer?.name || rejectedSignature.signer?.email}
-                                </span>
-                                <button
-                                  className="btn-view-reason"
-                                  onClick={() => setRejectionReasonPopup({
-                                    title: doc.title,
-                                    rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
-                                    reason: rejectedSignature.rejectionReason,
-                                    rejectedAt: rejectedSignature.rejectedAt
-                                  })}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                    <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                  Ver razón
-                                </button>
-                              </div>
-                            );
-                          })()}
                           </div>
 
                           
@@ -4232,10 +4571,39 @@ function Dashboard({ user, onLogout }) {
                         <div className="doc-content-wrapper">
                           <div className="doc-header-row">
                             <h3 className="doc-title-reference">{doc.title}</h3>
-                            <div className="status-badge-clean" style={{
-                              color: statusConfig.color,
-                              backgroundColor: statusConfig.bg
-                            }}>
+                            <div
+                              className="status-badge-clean"
+                              style={{
+                                color: statusConfig.color,
+                                backgroundColor: statusConfig.bg,
+                                cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onClick={() => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                  if (rejectedSignature) {
+                                    setRejectionReasonPopup({
+                                      title: doc.title,
+                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                      reason: rejectedSignature.rejectionReason,
+                                      rejectedAt: rejectedSignature.rejectedAt
+                                    });
+                                  }
+                                }
+                              }}
+                              onMouseEnter={(e) => {
+                                if (statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason)) {
+                                  e.target.style.opacity = '0.8';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (statusConfig.label === 'Rechazado') {
+                                  e.target.style.opacity = '1';
+                                }
+                              }}
+                              title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
+                            >
                               {statusConfig.label}
                             </div>
                           </div>
@@ -4244,34 +4612,6 @@ function Dashboard({ user, onLogout }) {
                             <span className="doc-created-text">
                               {doc.signedAt ? `Firmado el ${formatDateTime(doc.signedAt)}` : `Creado el ${formatDateTime(doc.createdAt)}`} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
                             </span>
-
-                            {doc.status === 'rejected' && (() => {
-                            const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
-                            if (!rejectedSignature) return null;
-
-                            return (
-                              <div className="rejection-info-compact">
-                                <span className="rejection-by-text">
-                                  Rechazado por {rejectedSignature.signer?.name || rejectedSignature.signer?.email}
-                                </span>
-                                <button
-                                  className="btn-view-reason"
-                                  onClick={() => setRejectionReasonPopup({
-                                    title: doc.title,
-                                    rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
-                                    reason: rejectedSignature.rejectionReason,
-                                    rejectedAt: rejectedSignature.rejectedAt
-                                  })}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                    <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                  Ver razón
-                                </button>
-                              </div>
-                            );
-                          })()}
                           </div>
 
                           
@@ -4497,34 +4837,39 @@ function Dashboard({ user, onLogout }) {
                             <div className="doc-header-row">
                               <h3 className="doc-title-reference">{doc.title}</h3>
 
-                              {/* Botón para ver razón de rechazo si el documento fue rechazado */}
-                              {doc.status === 'rejected' && (() => {
-                                const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
-                                if (!rejectedSignature) return null;
-
-                                return (
-                                  <button
-                                    className="btn-view-reason"
-                                    onClick={() => setRejectionReasonPopup({
-                                      title: doc.title,
-                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
-                                      reason: rejectedSignature.rejectionReason,
-                                      rejectedAt: rejectedSignature.rejectedAt
-                                    })}
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                      <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    Ver razón
-                                  </button>
-                                );
-                              })()}
-
-                              <div className="status-badge-clean" style={{
-                                color: statusConfig.color,
-                                backgroundColor: statusConfig.bg
-                              }}>
+                              <div
+                                className="status-badge-clean"
+                                style={{
+                                  color: statusConfig.color,
+                                  backgroundColor: statusConfig.bg,
+                                  cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onClick={() => {
+                                  if (statusConfig.label === 'Rechazado') {
+                                    const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                    if (rejectedSignature) {
+                                      setRejectionReasonPopup({
+                                        title: doc.title,
+                                        rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                        reason: rejectedSignature.rejectionReason,
+                                        rejectedAt: rejectedSignature.rejectedAt
+                                      });
+                                    }
+                                  }
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason)) {
+                                    e.target.style.opacity = '0.8';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (statusConfig.label === 'Rechazado') {
+                                    e.target.style.opacity = '1';
+                                  }
+                                }}
+                                title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
+                              >
                                 {statusConfig.label}
                               </div>
                             </div>
@@ -4582,19 +4927,21 @@ function Dashboard({ user, onLogout }) {
                               </svg>
                             </button>
                             <button
-                              className={`btn-action-clean ${(doc.status === 'completed' || doc.documentType?.code === 'SA') ? 'disabled' : ''}`}
-                              onClick={() => !(doc.status === 'completed' || doc.documentType?.code === 'SA') && handleManageSigners(doc)}
+                              className={`btn-action-clean ${(doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 'disabled' : ''}`}
+                              onClick={() => !(doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') && handleManageSigners(doc)}
                               title={
                                 doc.status === 'completed'
                                   ? 'El documento está completado, no se pueden agregar firmantes'
-                                  : doc.documentType?.code === 'SA'
-                                    ? 'No se pueden modificar los firmantes de Solicitudes de Anticipo'
-                                    : 'Gestionar firmantes'
+                                  : doc.status === 'rejected'
+                                    ? 'El documento está rechazado, no se pueden modificar los firmantes'
+                                    : doc.documentType?.code === 'SA'
+                                      ? 'No se pueden modificar los firmantes de Solicitudes de Anticipo'
+                                      : 'Gestionar firmantes'
                               }
                               style={{
                                 marginTop: '-1.5vw',
-                                opacity: (doc.status === 'completed' || doc.documentType?.code === 'SA') ? 0.5 : 1,
-                                cursor: (doc.status === 'completed' || doc.documentType?.code === 'SA') ? 'not-allowed' : 'pointer'
+                                opacity: (doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 0.5 : 1,
+                                cursor: (doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 'not-allowed' : 'pointer'
                               }}
                             >
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4768,30 +5115,41 @@ function Dashboard({ user, onLogout }) {
                               <div className="doc-header-row">
                                 <h3 className="doc-title-reference">{doc.title}</h3>
 
-                                {/* Botón para ver razón de rechazo */}
-                                {rejection?.rejectionReason && (
-                                  <button
-                                    className="btn-view-reason"
-                                    onClick={() => setRejectionReasonPopup({
-                                      title: doc.title,
-                                      rejectedBy: isRejectedByMe ? 'Tú' : (rejection.signer?.name || rejection.signer?.email),
-                                      reason: rejection.rejectionReason,
-                                      rejectedAt: rejection.rejectedAt
-                                    })}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {/* Badge clickeable para ver razón de rechazo */}
+                                  <div
+                                    className="status-badge-clean"
+                                    style={{
+                                      color: '#991B1B',
+                                      backgroundColor: '#FEE2E2',
+                                      cursor: rejection?.rejectionReason ? 'pointer' : 'default',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onClick={() => {
+                                      if (rejection?.rejectionReason) {
+                                        setRejectionReasonPopup({
+                                          title: doc.title,
+                                          rejectedBy: isRejectedByMe ? 'Tú' : (rejection.signer?.name || rejection.signer?.email),
+                                          reason: rejection.rejectionReason,
+                                          rejectedAt: rejection.rejectedAt
+                                        });
+                                      }
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (rejection?.rejectionReason) {
+                                        e.target.style.backgroundColor = '#FEE2E2';
+                                        e.target.style.opacity = '0.8';
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (rejection?.rejectionReason) {
+                                        e.target.style.opacity = '1';
+                                      }
+                                    }}
+                                    title={rejection?.rejectionReason ? 'Ver razón del rechazo' : ''}
                                   >
-                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width: '16px', height: '16px'}}>
-                                      <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M12 15C13.6569 15 15 13.6569 15 12 C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    Ver razón
-                                  </button>
-                                )}
-
-                                <div className="status-badge-clean" style={{
-                                  color: '#991B1B',
-                                  backgroundColor: '#FEE2E2'
-                                }}>
-                                  Rechazado
+                                    Rechazado
+                                  </div>
                                 </div>
                               </div>
 
@@ -4831,20 +5189,6 @@ function Dashboard({ user, onLogout }) {
                                   </button>
                                 )}
                               </div>
-                            </div>
-
-                            <div className="doc-actions-clean">
-                              <button
-                                className="btn-action-clean"
-                                onClick={() => handleViewDocument(doc)}
-                                title="Ver documento"
-                                style={{marginTop: '-1.5vw'}}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              </button>
                             </div>
                           </div>
                         );
@@ -4894,14 +5238,11 @@ function Dashboard({ user, onLogout }) {
                   {viewingDocument && viewingDocument.documentType && viewingDocument.documentType.code === 'FV' && (
                     <button
                       className="pdf-viewer-action-btn consecutivo"
-                      onClick={() => setShowConsecutivoModal(true)}
-                      title="Agregar consecutivo"
-                      style={{
-                        backgroundColor: '#F59E0B',
-                        color: 'white'
+                      onClick={() => {
+                        setTempConsecutivo(consecutivo);
+                        setShowConsecutivoModal(true);
                       }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#D97706'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = '#F59E0B'}
+                      title="Agregar consecutivo"
                     >
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M9 5H7C6.46957 5 5.96086 5.21071 5.58579 5.58579C5.21071 5.96086 5 6.46957 5 7V19C5 19.5304 5.21071 20.0391 5.58579 20.4142C5.96086 20.7893 6.46957 21 7 21H17C17.5304 21 18.0391 20.7893 18.4142 20.4142C18.7893 20.0391 19 19.5304 19 19V7C19 6.46957 18.7893 5.96086 18.4142 5.58579C18.0391 5.21071 17.5304 5 17 5H15M9 5C9 5.53043 9.21071 6.03914 9.58579 6.41421C9.96086 6.78929 10.4696 7 11 7H13C13.5304 7 14.0391 6.78929 14.4142 6.41421C14.7893 6.03914 15 5.53043 15 5M9 5C9 4.46957 9.21071 3.96086 9.58579 3.58579C9.96086 3.21071 10.4696 3 11 3H13C13.5304 3 14.0391 3.21071 14.4142 3.58579C14.7893 3.96086 15 4.46957 15 5M12 12H15M12 16H15M9 12H9.01M9 16H9.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -5153,8 +5494,8 @@ function Dashboard({ user, onLogout }) {
           {showConsecutivoModal && (
             <div className="sign-confirm-overlay" onClick={handleCancelConsecutivo}>
               <div className="sign-confirm-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="sign-confirm-icon" style={{backgroundColor: '#FEF3C7'}}>
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{color: '#F59E0B'}}>
+                <div className="sign-confirm-icon consecutivo-icon">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M9 5H7C6.46957 5 5.96086 5.21071 5.58579 5.58579C5.21071 5.96086 5 6.46957 5 7V19C5 19.5304 5.21071 20.0391 5.58579 20.4142C5.96086 20.7893 6.46957 21 7 21H17C17.5304 21 18.0391 20.7893 18.4142 20.4142C18.7893 20.0391 19 19.5304 19 19V7C19 6.46957 18.7893 5.96086 18.4142 5.58579C18.0391 5.21071 17.5304 5 17 5H15M9 5C9 5.53043 9.21071 6.03914 9.58579 6.41421C9.96086 6.78929 10.4696 7 11 7H13C13.5304 7 14.0391 6.78929 14.4142 6.41421C14.7893 6.03914 15 5.53043 15 5M9 5C9 4.46957 9.21071 3.96086 9.58579 3.58579C9.96086 3.21071 10.4696 3 11 3H13C13.5304 3 14.0391 3.21071 14.4142 3.58579C14.7893 3.96086 15 4.46957 15 5M12 12H15M12 16H15M9 12H9.01M9 16H9.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
@@ -5165,31 +5506,11 @@ function Dashboard({ user, onLogout }) {
                 <div className="reject-reason-container">
                   <input
                     type="text"
-                    className="reject-reason-input"
-                    placeholder="Ej: FV-2025-0001"
-                    value={consecutivo}
-                    onChange={(e) => setConsecutivo(e.target.value)}
+                    className="reject-reason-input consecutivo-input"
+                    value={tempConsecutivo}
+                    onChange={(e) => setTempConsecutivo(e.target.value)}
                     maxLength="100"
-                    style={{
-                      padding: '12px 16px',
-                      fontSize: '15px',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      transition: 'border-color 0.2s ease'
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = '#F59E0B'}
-                    onBlur={(e) => e.target.style.borderColor = '#D1D5DB'}
                   />
-                  <p style={{
-                    fontSize: '13px',
-                    color: '#6B7280',
-                    marginTop: '8px',
-                    marginBottom: '0',
-                    textAlign: 'left'
-                  }}>
-                    {consecutivo.length}/100 caracteres
-                  </p>
                 </div>
                 <div className="sign-confirm-actions">
                   <button
@@ -5199,13 +5520,8 @@ function Dashboard({ user, onLogout }) {
                     Cancelar
                   </button>
                   <button
-                    className="sign-confirm-btn confirm"
+                    className="sign-confirm-btn confirm consecutivo-btn"
                     onClick={handleSaveConsecutivo}
-                    style={{
-                      backgroundColor: '#F59E0B'
-                    }}
-                    onMouseEnter={(e) => e.target.style.backgroundColor = '#D97706'}
-                    onMouseLeave={(e) => e.target.style.backgroundColor = '#F59E0B'}
                   >
                     Guardar
                   </button>
@@ -5313,11 +5629,17 @@ function Dashboard({ user, onLogout }) {
                           <div className="autocomplete-dropdown">
                             {(() => {
                               const existingIds = new Set(documentSigners.map(s => s.signer?.id).filter(Boolean));
-                              const filteredSigners = availableSigners.filter(s =>
-                                !existingIds.has(s.id) &&
-                                (s.name?.toLowerCase().includes(searchNewSigner.toLowerCase()) ||
-                                 s.email?.toLowerCase().includes(searchNewSigner.toLowerCase()))
-                              );
+                              // Dividir el término de búsqueda en palabras
+                              const searchWords = searchNewSigner.toLowerCase().trim().split(/\s+/);
+                              const filteredSigners = availableSigners.filter(s => {
+                                if (existingIds.has(s.id)) return false;
+                                const name = (s.name || '').toLowerCase();
+                                const email = (s.email || '').toLowerCase();
+                                // Todas las palabras deben encontrarse en el nombre o email
+                                return searchWords.every(word =>
+                                  name.includes(word) || email.includes(word)
+                                );
+                              });
 
                               if (filteredSigners.length === 0) {
                                 return (
@@ -6110,8 +6432,6 @@ function Dashboard({ user, onLogout }) {
               borderRadius: '0.5rem',
               boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
               zIndex: 9999,
-              maxHeight: '280px',
-              overflowY: 'auto',
               padding: '0.5rem'
             }}
           >

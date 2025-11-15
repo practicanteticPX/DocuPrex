@@ -94,7 +94,8 @@ BEGIN
         (doc_type_id, 'Aprobador', 'APROBADOR', 2, true, 'Persona que aprueba la solicitud'),
         (doc_type_id, 'Negociaciones', 'NEGOCIACIONES', 3, true, 'Área de negociaciones'),
         (doc_type_id, 'Área Financiera', 'AREA_FINANCIERA', 4, true, 'Área financiera'),
-        (doc_type_id, 'Gerencia Ejecutiva', 'GERENCIA_EJECUTIVA', 5, false, 'Gerencia ejecutiva (opcional)')
+        (doc_type_id, 'Gerencia Ejecutiva', 'GERENCIA_EJECUTIVA', 5, false, 'Gerencia ejecutiva (opcional)'),
+        (doc_type_id, 'Tesorería', 'TESORERIA', 6, true, 'Área de tesorería')
     ON CONFLICT (document_type_id, role_code) DO NOTHING;
 END $$;
 

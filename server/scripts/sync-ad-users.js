@@ -71,11 +71,12 @@ function searchUsers(client) {
           const name = getAttr('displayName') || getAttr('cn') || getAttr('name') || null;
           const username = getAttr('sAMAccountName') || null;
 
-          // Solo agregar si tiene datos mínimos Y email real
-          if (name && username && email) {
+          // Solo agregar si tiene datos mínimos Y email válido (no vacío, no nulo, formato válido)
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (name && username && email && email.trim() !== '' && emailRegex.test(email.trim())) {
             users.push({
               name: name,
-              email: email.toLowerCase(),
+              email: email.toLowerCase().trim(),
               username: username
             });
           }

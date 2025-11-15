@@ -14,7 +14,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en
 
 const resolvers = {
   Query: {
-    // Obtener usuario autenticado
     me: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -26,7 +25,6 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Obtener todos los usuarios (solo admin)
     users: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
       if (user.role !== 'admin') throw new Error('No autorizado');
@@ -35,7 +33,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener un usuario por ID
     user: async (_, { id }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -43,7 +40,6 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Obtener todos los documentos
     documents: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -57,7 +53,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener un documento por ID
     document: async (_, { id }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -71,7 +66,6 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Obtener documentos del usuario autenticado
     myDocuments: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -92,7 +86,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener documentos pendientes de firma
     pendingDocuments: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -147,7 +140,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener documentos firmados por el usuario
     signedDocuments: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -170,7 +162,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener documentos rechazados por el usuario autenticado
     rejectedByMeDocuments: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -195,7 +186,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener documentos rechazados por otros firmantes
     rejectedByOthersDocuments: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -231,7 +221,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener documentos por estado
     documentsByStatus: async (_, { status }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -246,7 +235,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener firmas de un documento
     signatures: async (_, { documentId }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -268,7 +256,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener firmantes de un documento con orden y estado
     documentSigners: async (_, { documentId }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -321,7 +308,6 @@ const resolvers = {
       }));
     },
 
-    // Obtener firmas del usuario
     mySignatures: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -336,7 +322,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener notificaciones del usuario
     notifications: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -351,7 +336,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener conteo de notificaciones no leídas
     unreadNotificationsCount: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -364,7 +348,6 @@ const resolvers = {
       return parseInt(result.rows[0].count) || 0;
     },
 
-    // Obtener usuarios disponibles para seleccionar como firmantes (incluye el usuario actual para autofirma)
     availableSigners: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -382,7 +365,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener todos los tipos de documentos activos
     documentTypes: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -395,7 +377,6 @@ const resolvers = {
       return result.rows;
     },
 
-    // Obtener un tipo de documento por ID
     documentType: async (_, { id }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -406,7 +387,6 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Obtener roles de un tipo de documento
     documentTypeRoles: async (_, { documentTypeId }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -421,16 +401,28 @@ const resolvers = {
   },
 
   Mutation: {
-    // Login con autenticación local y fallback a Active Directory
+    /**
+     * Authenticates a user using local credentials or Active Directory (LDAP)
+     *
+     * BUSINESS RULE: Local authentication takes precedence over LDAP. If a user has a local
+     * password_hash, LDAP authentication is skipped entirely.
+     * BUSINESS RULE: LDAP users are automatically created in the database on first login.
+     * BUSINESS RULE: Existing LDAP users have their name and email synchronized from AD on each login.
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.email - User's email address or username
+     * @param {string} args.password - User's password
+     * @returns {Promise<{token: string, user: Object}>} JWT token and user object
+     * @throws {Error} When credentials are invalid or authentication fails
+     */
     login: async (_, { email, password }) => {
       try {
-        // Primero intentar autenticación local
         const localUserResult = await query(
           'SELECT * FROM users WHERE email = $1 AND password_hash IS NOT NULL',
           [email]
         );
 
-        // Si existe usuario local con password_hash, validar contraseña
         if (localUserResult.rows.length > 0) {
           const localUser = localUserResult.rows[0];
           const validPassword = await bcrypt.compare(password, localUser.password_hash);
@@ -450,11 +442,9 @@ const resolvers = {
           throw new Error('Usuario o contraseña inválidos');
         }
 
-        // Si no hay usuario local, intentar con Active Directory
         const username = email.includes('@') ? email.split('@')[0] : email;
         const ldapUser = await authenticateUser(username, password);
 
-        // Buscar o crear usuario desde AD
         let result = await query(
           'SELECT * FROM users WHERE email = $1 OR ad_username = $2',
           [ldapUser.email, ldapUser.username]
@@ -463,7 +453,6 @@ const resolvers = {
         let user = result.rows[0];
 
         if (!user) {
-          // Crear nuevo usuario desde AD
           const insertResult = await query(
             `INSERT INTO users (name, email, ad_username, role, is_active)
             VALUES ($1, $2, $3, $4, $5)
@@ -473,7 +462,6 @@ const resolvers = {
           user = insertResult.rows[0];
           console.log('✓ Nuevo usuario creado desde AD:', user.ad_username);
         } else {
-          // Actualizar información del usuario
           const updateResult = await query(
             'UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING *',
             [ldapUser.name, ldapUser.email, user.id]
@@ -495,7 +483,21 @@ const resolvers = {
       }
     },
 
-    // Registro local
+    /**
+     * Registers a new local user with email and password
+     *
+     * BUSINESS RULE: Email must be unique across all users.
+     * BUSINESS RULE: Password is hashed with bcrypt (10 rounds) before storage.
+     * BUSINESS RULE: New users default to 'user' role and active status.
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.name - User's full name
+     * @param {string} args.email - User's email address (must be unique)
+     * @param {string} args.password - User's password (will be hashed)
+     * @returns {Promise<{token: string, user: Object}>} JWT token and user object
+     * @throws {Error} When email is already registered
+     */
     register: async (_, { name, email, password }) => {
       const existingUser = await query(
         'SELECT * FROM users WHERE email = $1',
@@ -525,7 +527,6 @@ const resolvers = {
       return { token, user };
     },
 
-    // Actualizar usuario
     updateUser: async (_, { id, name, email }, { user }) => {
       if (!user) throw new Error('No autenticado');
       if (user.id !== id && user.role !== 'admin') {
@@ -540,7 +541,6 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Eliminar usuario
     deleteUser: async (_, { id }, { user }) => {
       if (!user) throw new Error('No autenticado');
       if (user.role !== 'admin') throw new Error('No autorizado');
@@ -549,7 +549,6 @@ const resolvers = {
       return true;
     },
 
-    // Actualizar preferencias de notificaciones por correo
     updateEmailNotifications: async (_, { enabled }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -561,7 +560,6 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Subir documento (metadata, el archivo se sube por REST)
     uploadDocument: async (_, { title, description }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -574,7 +572,23 @@ const resolvers = {
       };
     },
 
-    // Actualizar documento
+    /**
+     * Updates document metadata (title, description, or status)
+     *
+     * BUSINESS RULE: Only document owner or admin can update documents.
+     * BUSINESS RULE: Null values are ignored (COALESCE preserves existing values).
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.id - UUID of the document
+     * @param {string} [args.title] - New title (optional)
+     * @param {string} [args.description] - New description (optional)
+     * @param {string} [args.status] - New status (optional)
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user
+     * @returns {Promise<Object>} Updated document object
+     * @throws {Error} When unauthorized or document not found
+     */
     updateDocument: async (_, { id, title, description, status }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -599,9 +613,36 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Asignar firmantes a un documento
+    /**
+     * Assigns signers to a document with role assignments and sequential ordering
+     *
+     * BUSINESS RULE: Document owner is ALWAYS placed first in signing order when they add themselves.
+     * BUSINESS RULE: Maximum of 3 roles can be assigned to any single signer.
+     * BUSINESS RULE: Cannot add signers to completed documents.
+     * BUSINESS RULE: When owner adds themselves to existing signers, all positions shift down by 1.
+     * BUSINESS RULE: Only the FIRST signer receives email notification (sequential workflow).
+     * BUSINESS RULE: Supports both legacy (singular) and new (array) role assignment formats.
+     *
+     * Sequential ordering notes:
+     * - New signers are appended to the end of existing signers
+     * - Owner insertion at position 1 causes automatic position increment for existing signers
+     * - Positions are 1-indexed
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.documentId - UUID of the document
+     * @param {Array<Object>} args.signerAssignments - Array of signer assignments
+     * @param {string} args.signerAssignments[].userId - UUID of user to assign
+     * @param {Array<string>} [args.signerAssignments[].roleIds] - Array of role UUIDs (max 3)
+     * @param {Array<string>} [args.signerAssignments[].roleNames] - Array of role names (max 3)
+     * @param {string} [args.signerAssignments[].roleId] - Legacy: single role UUID
+     * @param {string} [args.signerAssignments[].roleName] - Legacy: single role name
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user
+     * @returns {Promise<boolean>} True if assignment succeeds
+     * @throws {Error} When unauthorized, document not found, completed, or role limit exceeded
+     */
     assignSigners: async (_, { documentId, signerAssignments }, { user }) => {
-      // Extraer userIds para compatibilidad con lógica existente
       const userIds = signerAssignments.map(sa => sa.userId);
       if (!user) throw new Error('No autenticado');
 
@@ -613,12 +654,10 @@ const resolvers = {
         throw new Error('No autorizado');
       }
 
-      // Verificar que el documento no esté completado
       if (doc.status === 'completed') {
         throw new Error('No se pueden agregar firmantes a un documento que ya ha sido firmado completamente');
       }
 
-      // Verificar si hay firmantes existentes
       const existingSignersResult = await query(
         'SELECT user_id, order_position, role_name, role_names FROM document_signers WHERE document_id = $1 ORDER BY order_position ASC',
         [documentId]
@@ -626,7 +665,6 @@ const resolvers = {
 
       // Función helper para normalizar roles (soportar legacy y nuevo formato)
       const normalizeRoles = (assignment) => {
-        // Priorizar nuevo formato (arrays)
         let roleIds = assignment.roleIds || [];
         let roleNames = assignment.roleNames || [];
 
@@ -641,7 +679,6 @@ const resolvers = {
         return { roleIds, roleNames };
       };
 
-      // Validar máximo 3 roles por firmante
       for (const assignment of signerAssignments) {
         const { roleIds, roleNames } = normalizeRoles(assignment);
 
@@ -654,11 +691,9 @@ const resolvers = {
       const isOwner = doc.uploaded_by === user.id;
       const ownerInNewSigners = userIds.includes(user.id);
 
-      // Si el propietario se está agregando y hay firmantes existentes, reorganizar
       if (hasExistingSigners && isOwner && ownerInNewSigners) {
         console.log(`👤 Propietario agregándose como firmante - reorganizando posiciones...`);
 
-        // Mover todos los firmantes existentes una posición hacia abajo
         await query(
           `UPDATE document_signers
            SET order_position = order_position + 1
@@ -666,7 +701,6 @@ const resolvers = {
           [documentId]
         );
 
-        // Insertar al propietario en posición 1
         const ownerAssignment = signerAssignments.find(sa => sa.userId === user.id);
         const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
 
@@ -685,7 +719,6 @@ const resolvers = {
           ]
         );
 
-        // Crear firma pendiente para el propietario
         await query(
           `INSERT INTO signatures (document_id, signer_id, status, signature_type)
            VALUES ($1, $2, 'pending', 'digital')
@@ -693,7 +726,6 @@ const resolvers = {
           [documentId, user.id]
         );
 
-        // Insertar los demás firmantes (sin el propietario) al final
         const otherUserIds = userIds.filter(id => id !== user.id);
         const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
 
@@ -725,7 +757,6 @@ const resolvers = {
           );
         }
       } else if (hasExistingSigners) {
-        // Hay firmantes existentes pero el propietario no está en la lista
         const maxPosition = Math.max(...existingSignersResult.rows.map(r => r.order_position));
 
         for (let i = 0; i < userIds.length; i++) {
@@ -757,7 +788,6 @@ const resolvers = {
         }
       } else {
         // No hay firmantes existentes - primera asignación
-        // Si el propietario está en la lista, va primero
         let startPosition = 1;
 
         if (isOwner && ownerInNewSigners) {
@@ -787,7 +817,6 @@ const resolvers = {
           startPosition = 2;
         }
 
-        // Insertar los demás firmantes
         const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
         for (let i = 0; i < otherUserIds.length; i++) {
           const assignment = signerAssignments.find(sa => sa.userId === otherUserIds[i]);
@@ -816,7 +845,6 @@ const resolvers = {
         }
       }
 
-      // Recalcular el estado del documento basado en todas las firmas
       const statusResult = await query(
         `SELECT
           COUNT(*) as total,
@@ -834,7 +862,6 @@ const resolvers = {
       const pending = parseInt(stats.pending);
       const rejected = parseInt(stats.rejected);
 
-      // Determinar el nuevo estado del documento
       let newStatus = 'pending';
 
       if (rejected > 0) {
@@ -851,7 +878,6 @@ const resolvers = {
         newStatus = 'pending';
       }
 
-      // Actualizar el estado del documento
       await query(
         'UPDATE documents SET status = $1 WHERE id = $2',
         [newStatus, documentId]
@@ -859,7 +885,6 @@ const resolvers = {
 
       // ========== CREAR NOTIFICACIONES Y ENVIAR EMAILS A FIRMANTES ==========
       try {
-        // Obtener información del documento y del creador
         const docResult = await query(
           'SELECT d.title, u.name as creator_name FROM documents d JOIN users u ON d.uploaded_by = u.id WHERE d.id = $1',
           [documentId]
@@ -882,13 +907,11 @@ const resolvers = {
           // EMAILS: Enviar SOLO al PRIMER firmante (respetar orden secuencial)
           if (userIds.length > 0) {
             const firstSignerId = userIds[0];
-            // Solo enviar si el primer firmante no es el creador
             if (firstSignerId !== user.id) {
               try {
                 const signerResult = await query('SELECT name, email, email_notifications FROM users WHERE id = $1', [firstSignerId]);
                 if (signerResult.rows.length > 0) {
                   const signer = signerResult.rows[0];
-                  // Solo enviar si el usuario tiene notificaciones activadas
                   if (signer.email_notifications) {
                     await notificarAsignacionFirmante({
                       email: signer.email,
@@ -922,7 +945,6 @@ const resolvers = {
           console.log(`📋 Generando página de portada para documento ${documentId}...`);
         }
 
-        // Obtener información completa del documento y uploader
         const docInfoResult = await query(
           `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
           FROM documents d
@@ -938,7 +960,6 @@ const resolvers = {
 
         const docInfo = docInfoResult.rows[0];
 
-        // Obtener lista completa de firmantes con su orden y estado actual
         const signersResult = await query(
           `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                   COALESCE(s.status, 'pending') as status,
@@ -993,39 +1014,53 @@ const resolvers = {
       return true;
     },
 
-    // Eliminar firmante
+    /**
+     * Removes a signer from a document and reorders remaining signers
+     *
+     * BUSINESS RULE: Cannot remove signers from completed documents.
+     * BUSINESS RULE: Cannot remove signer who has already signed the document.
+     * BUSINESS RULE: Document must have at least one signer at all times.
+     * BUSINESS RULE: After removal, all signers with higher positions shift down by 1.
+     * BUSINESS RULE: If removed signer was current in sequence, next signer is notified.
+     *
+     * Edge case: If the removed signer had pending signature and there were signed signers
+     * before them, the next pending signer is automatically notified.
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.documentId - UUID of the document
+     * @param {string} args.userId - UUID of signer to remove
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user (must be owner or admin)
+     * @returns {Promise<boolean>} True if removal succeeds
+     * @throws {Error} When unauthorized, signer not found, already signed, or last signer
+     */
     removeSigner: async (_, { documentId, userId }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
-      // Verificar que el documento exista
       const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
       if (docResult.rows.length === 0) throw new Error('Documento no encontrado');
 
       const doc = docResult.rows[0];
 
-      // Verificar que el usuario sea el creador o admin
       if (doc.uploaded_by !== user.id && user.role !== 'admin') {
         throw new Error('No autorizado para eliminar firmantes de este documento');
       }
 
-      // Verificar que el documento no esté completado
       if (doc.status === 'completed') {
         throw new Error('No se pueden eliminar firmantes de un documento que ya ha sido firmado completamente');
       }
 
-      // Contar el total de firmantes
       const countResult = await query(
         'SELECT COUNT(*) as total FROM document_signers WHERE document_id = $1',
         [documentId]
       );
       const totalSigners = parseInt(countResult.rows[0].total);
 
-      // Restricción: No se puede eliminar si es el único firmante
       if (totalSigners <= 1) {
         throw new Error('No se puede eliminar el único firmante del documento. Un documento debe tener al menos un firmante.');
       }
 
-      // Verificar el estado de la firma del usuario
       const signatureResult = await query(
         'SELECT status FROM signatures WHERE document_id = $1 AND signer_id = $2',
         [documentId, userId]
@@ -1037,12 +1072,10 @@ const resolvers = {
 
       const signatureStatus = signatureResult.rows[0].status;
 
-      // Restricción: No se puede eliminar un firmante que ya firmó
       if (signatureStatus === 'signed') {
         throw new Error('No se puede eliminar un firmante que ya ha firmado el documento');
       }
 
-      // Obtener el order_position del firmante a eliminar
       const positionResult = await query(
         'SELECT order_position FROM document_signers WHERE document_id = $1 AND user_id = $2',
         [documentId, userId]
@@ -1054,19 +1087,16 @@ const resolvers = {
 
       const removedPosition = positionResult.rows[0].order_position;
 
-      // Eliminar el firmante de document_signers
       await query(
         'DELETE FROM document_signers WHERE document_id = $1 AND user_id = $2',
         [documentId, userId]
       );
 
-      // Eliminar la firma pendiente
       await query(
         'DELETE FROM signatures WHERE document_id = $1 AND signer_id = $2',
         [documentId, userId]
       );
 
-      // Reordenar los order_position de los firmantes restantes
       await query(
         `UPDATE document_signers
          SET order_position = order_position - 1
@@ -1074,7 +1104,6 @@ const resolvers = {
         [documentId, removedPosition]
       );
 
-      // Eliminar notificación de signature_request para este usuario
       try {
         await query(
           `DELETE FROM notifications
@@ -1086,7 +1115,6 @@ const resolvers = {
         console.error('Error al eliminar notificación:', notifError);
       }
 
-      // Recalcular el estado del documento
       const statusResult = await query(
         `SELECT
           COUNT(*) as total,
@@ -1104,7 +1132,6 @@ const resolvers = {
       const pending = parseInt(stats.pending);
       const rejected = parseInt(stats.rejected);
 
-      // Determinar el nuevo estado del documento
       let newStatus = 'pending';
 
       if (rejected > 0) {
@@ -1117,7 +1144,6 @@ const resolvers = {
         newStatus = 'pending';
       }
 
-      // Actualizar el estado del documento
       await query(
         'UPDATE documents SET status = $1 WHERE id = $2',
         [newStatus, documentId]
@@ -1126,7 +1152,6 @@ const resolvers = {
       // Si el firmante eliminado era el que debía firmar ahora, notificar al siguiente
       if (signatureStatus === 'pending' && signed > 0) {
         try {
-          // Obtener el siguiente firmante en orden
           const nextSignerResult = await query(
             `SELECT u.id, u.name, u.email, u.email_notifications, ds.order_position
              FROM document_signers ds
@@ -1142,7 +1167,6 @@ const resolvers = {
             const nextSigner = nextSignerResult.rows[0];
             const nextPosition = nextSigner.order_position;
 
-            // Verificar si todos los anteriores han firmado
             const previousSignedResult = await query(
               `SELECT COUNT(*) as count
                FROM document_signers ds
@@ -1158,7 +1182,6 @@ const resolvers = {
 
             // Si todos los anteriores han firmado, es el turno de este firmante
             if (previousCount === expectedPreviousCount) {
-              // Crear notificación si no existe
               const existingNotif = await query(
                 `SELECT id FROM notifications
                  WHERE document_id = $1 AND user_id = $2 AND type = 'signature_request'`,
@@ -1173,7 +1196,6 @@ const resolvers = {
                   [nextSigner.id, 'signature_request', documentId, user.id, docTitle]
                 );
 
-                // Enviar email al siguiente firmante solo si tiene notificaciones activadas
                 if (nextSigner.email_notifications) {
                   try {
                     await notificarAsignacionFirmante({
@@ -1198,11 +1220,9 @@ const resolvers = {
         }
       }
 
-      // Actualizar la página de portada del PDF
       try {
         console.log(`📋 Actualizando página de portada del documento ${documentId}...`);
 
-        // Obtener información completa del documento
         const docInfoResult = await query(
           `SELECT d.*, u.name as uploader_name
           FROM documents d
@@ -1214,7 +1234,6 @@ const resolvers = {
         if (docInfoResult.rows.length > 0) {
           const docInfo = docInfoResult.rows[0];
 
-          // Obtener lista actualizada de firmantes
           const signersResult = await query(
             `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
@@ -1242,7 +1261,6 @@ const resolvers = {
               uploadedBy: docInfo.uploader_name || 'Sistema'
             };
 
-            // Actualizar la página de portada
             await updateSignersPage(pdfPath, signers, documentInfo);
             console.log('✅ Página de portada actualizada exitosamente');
           }
@@ -1254,27 +1272,50 @@ const resolvers = {
       return true;
     },
 
-    // Reordenar firmantes
+    /**
+     * Reorders signers in a document's signing sequence
+     *
+     * BUSINESS RULE: Cannot reorder signers in completed documents.
+     * BUSINESS RULE: Cannot move signed/rejected signers BEFORE their current position.
+     * BUSINESS RULE: New order must contain exactly the same user IDs as current signers.
+     * BUSINESS RULE: Signers who lose their turn have notifications removed.
+     * BUSINESS RULE: Signers who gain their turn receive new notifications and emails.
+     *
+     * Sequential ordering validation:
+     * - A signer is "in turn" only if ALL previous signers have signed
+     * - Moving a signed signer forward is allowed (doesn't affect completed signature)
+     * - Moving a signed signer backward is prohibited (would break sequence integrity)
+     *
+     * Notification management:
+     * - Previous "in turn" signers are compared with new "in turn" signers
+     * - Only signers who transition from "not in turn" to "in turn" get notified
+     * - Signers who transition from "in turn" to "not in turn" have notifications deleted
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.documentId - UUID of the document
+     * @param {Array<string>} args.newOrder - Array of user IDs in desired order
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user (must be owner or admin)
+     * @returns {Promise<boolean>} True if reordering succeeds
+     * @throws {Error} When unauthorized, completed, invalid order, or moving signed signer backward
+     */
     reorderSigners: async (_, { documentId, newOrder }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
-      // Verificar que el documento exista
       const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
       if (docResult.rows.length === 0) throw new Error('Documento no encontrado');
 
       const doc = docResult.rows[0];
 
-      // Verificar que el usuario sea el creador o admin
       if (doc.uploaded_by !== user.id && user.role !== 'admin') {
         throw new Error('No autorizado para reordenar firmantes de este documento');
       }
 
-      // Verificar que el documento no esté completado
       if (doc.status === 'completed') {
         throw new Error('No se pueden reordenar firmantes de un documento completado');
       }
 
-      // Obtener los firmantes actuales con su estado
       const signersResult = await query(
         `SELECT ds.user_id, ds.order_position, s.status, u.name, u.email, u.email_notifications
          FROM document_signers ds
@@ -1305,7 +1346,6 @@ const resolvers = {
         const oldPosition = signer.order_position;
         const newPosition = i + 1; // Las posiciones empiezan en 1
 
-        // Si el firmante ya firmó o rechazó, no se puede mover antes de su posición actual
         if ((signer.status === 'signed' || signer.status === 'rejected') && newPosition < oldPosition) {
           throw new Error(`No se puede mover a ${signer.name || signer.email} antes de su posición actual porque ya ha ${signer.status === 'signed' ? 'firmado' : 'rechazado'}`);
         }
@@ -1324,7 +1364,6 @@ const resolvers = {
 
       const previousInTurn = [];
       for (const signer of previousInTurnResult.rows) {
-        // Verificar si es su turno (todos los anteriores han firmado)
         const previousSignedCount = await query(
           `SELECT COUNT(*) as count
            FROM document_signers ds
@@ -1345,7 +1384,6 @@ const resolvers = {
         }
       }
 
-      // Actualizar las posiciones de los firmantes
       for (let i = 0; i < newOrder.length; i++) {
         const userId = newOrder[i];
         const newPosition = i + 1;
@@ -1371,7 +1409,6 @@ const resolvers = {
 
       const newInTurn = [];
       for (const signer of newInTurnResult.rows) {
-        // Verificar si es su turno (todos los anteriores han firmado)
         const previousSignedCount = await query(
           `SELECT COUNT(*) as count
            FROM document_signers ds
@@ -1404,7 +1441,6 @@ const resolvers = {
       console.log(`   - Notificaciones a eliminar: [${usersToRemoveNotifications.join(', ')}]`);
 
       for (const userId of usersToRemoveNotifications) {
-        // Obtener nombre del usuario para el log
         const userInfo = await query('SELECT name FROM users WHERE id = $1', [userId]);
         const userName = userInfo.rows.length > 0 ? userInfo.rows[0].name : userId;
 
@@ -1416,7 +1452,6 @@ const resolvers = {
         console.log(`🗑️ Notificación eliminada para ${userName} (ya no está en turno)`);
       }
 
-      // Obtener información del documento para las notificaciones
       const docInfoForNotif = await query(
         'SELECT title, uploaded_by FROM documents WHERE id = $1',
         [documentId]
@@ -1424,12 +1459,9 @@ const resolvers = {
       const docTitle = docInfoForNotif.rows.length > 0 ? docInfoForNotif.rows[0].title : 'Documento';
       const docCreatorId = docInfoForNotif.rows.length > 0 ? docInfoForNotif.rows[0].uploaded_by : user.id;
 
-      // Crear/verificar notificaciones para TODOS los que ahora están en turno
-      // (no solo los nuevos, sino también los que vuelven a estar en turno)
       for (const userId of newInTurn) {
         const signerInfo = newInTurnResult.rows.find(s => s.user_id === userId);
 
-        // Verificar si ya existe una notificación
         const existingNotif = await query(
           `SELECT id FROM notifications
            WHERE document_id = $1 AND user_id = $2 AND type = 'signature_request'`,
@@ -1437,7 +1469,6 @@ const resolvers = {
         );
 
         if (existingNotif.rows.length === 0) {
-          // Crear notificación con toda la información necesaria
           await query(
             `INSERT INTO notifications (user_id, document_id, type, actor_id, document_title, created_at)
              VALUES ($1, $2, 'signature_request', $3, $4, NOW())`,
@@ -1447,10 +1478,8 @@ const resolvers = {
           const signerName = signerInfo ? signerInfo.name : userId;
           console.log(`✅ Notificación creada para ${signerName} (posición ${signerInfo ? signerInfo.order_position : '?'}) - ahora está en turno`);
 
-          // Enviar correo si tiene habilitadas las notificaciones
           if (signerInfo && signerInfo.email_notifications) {
             try {
-              // Obtener nombre del creador del documento
               const creatorResult = await query('SELECT name FROM users WHERE id = $1', [docCreatorId]);
               const creatorName = creatorResult.rows.length > 0 ? creatorResult.rows[0].name : 'Administrador';
 
@@ -1475,10 +1504,7 @@ const resolvers = {
         }
       }
 
-      // Actualizar la hoja de informe de firmas en el PDF
       try {
-        const { updateSignersPage } = require('../utils/pdfCoverPage');
-
         const docInfo = await query(
           `SELECT d.*, u.name as uploader_name
            FROM documents d
@@ -1521,7 +1547,21 @@ const resolvers = {
       return true;
     },
 
-    // Eliminar documento
+    /**
+     * Deletes a document and its associated file from the file system
+     *
+     * BUSINESS RULE: Only document owner or admin can delete documents.
+     * BUSINESS RULE: All notifications related to the document are deleted (cascade).
+     * BUSINESS RULE: Physical PDF file is deleted from uploads directory.
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.id - UUID of the document to delete
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user
+     * @returns {Promise<boolean>} True if deletion succeeds
+     * @throws {Error} When unauthorized or document not found
+     */
     deleteDocument: async (_, { id }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -1535,7 +1575,6 @@ const resolvers = {
 
       // ========== ELIMINAR TODAS LAS NOTIFICACIONES DEL DOCUMENTO ==========
       try {
-        // Eliminar todas las notificaciones relacionadas con este documento
         await query(
           `DELETE FROM notifications WHERE document_id = $1`,
           [id]
@@ -1547,7 +1586,6 @@ const resolvers = {
         // No lanzamos el error para que no falle la eliminación
       }
 
-      // Eliminar archivo físico
       const fs = require('fs');
       const path = require('path');
       // file_path ya incluye 'uploads/', así que lo quitamos para construir la ruta correcta
@@ -1567,7 +1605,30 @@ const resolvers = {
       return true;
     },
 
-    // Rechazar documento
+    /**
+     * Rejects a document with a reason, halting the signing workflow
+     *
+     * BUSINESS RULE: Signer must be next in sequential order to reject (same as signing).
+     * BUSINESS RULE: If not first signer, previous signer MUST have signed before rejection is allowed.
+     * BUSINESS RULE: Document status changes to 'rejected' immediately on any rejection.
+     * BUSINESS RULE: All pending signature_request notifications are deleted (workflow halted).
+     * BUSINESS RULE: Document creator receives rejection notification and email.
+     * BUSINESS RULE: Rejector does NOT receive notification (they initiated the action).
+     *
+     * Sequential validation:
+     * - First signer (position 1) can reject immediately
+     * - Subsequent signers can only reject after previous signer has signed
+     * - This prevents out-of-order rejections that would violate workflow
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.documentId - UUID of the document
+     * @param {string} [args.reason] - Reason for rejection (optional)
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user (must be assigned signer)
+     * @returns {Promise<boolean>} True if rejection succeeds
+     * @throws {Error} When unauthorized, not in sequence, or not assigned to document
+     */
     rejectDocument: async (_, { documentId, reason }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -1609,13 +1670,11 @@ const resolvers = {
 
       const now = new Date().toISOString();
 
-      // Actualizar la firma del usuario a rechazada con la razón y fecha
       await query(
         'UPDATE signatures SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3 WHERE document_id = $4 AND signer_id = $5',
         ['rejected', reason || '', now, documentId, user.id]
       );
 
-      // Recalcular el estado del documento basado en todas las firmas
       const statusResult = await query(
         `SELECT
           COUNT(*) as total,
@@ -1632,7 +1691,6 @@ const resolvers = {
       const signed = parseInt(stats.signed);
       const rejected = parseInt(stats.rejected);
 
-      // Determinar el nuevo estado del documento
       let newStatus = 'pending';
 
       if (rejected > 0) {
@@ -1646,7 +1704,6 @@ const resolvers = {
         newStatus = 'in_progress';
       }
 
-      // Actualizar el estado del documento
       await query(
         'UPDATE documents SET status = $1 WHERE id = $2',
         [newStatus, documentId]
@@ -1663,7 +1720,6 @@ const resolvers = {
           [documentId]
         );
 
-        // Obtener información del documento y del usuario que rechazó
         const docResult = await query(
           'SELECT title, uploaded_by FROM documents WHERE id = $1',
           [documentId]
@@ -1672,7 +1728,6 @@ const resolvers = {
         if (docResult.rows.length > 0) {
           const doc = docResult.rows[0];
 
-          // Obtener información del usuario que rechazó
           const rejectorResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
           const rejectorName = rejectorResult.rows.length > 0 ? rejectorResult.rows[0].name : 'Usuario';
 
@@ -1693,7 +1748,6 @@ const resolvers = {
               if (creatorResult.rows.length > 0) {
                 const creator = creatorResult.rows[0];
 
-                // Solo enviar si el creador tiene notificaciones activadas
                 if (creator.email_notifications) {
                   console.log('📧 Documento rechazado, enviando correo al creador...');
 
@@ -1721,7 +1775,6 @@ const resolvers = {
         // No lanzamos el error para que no falle el rechazo
       }
 
-      // Auditoría
       await query(
         'INSERT INTO audit_log (user_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5)',
         [user.id, 'reject', 'document', documentId, JSON.stringify({ reason })]
@@ -1731,7 +1784,6 @@ const resolvers = {
       try {
         console.log(`📋 Actualizando página de firmantes para documento ${documentId}...`);
 
-        // Obtener información del documento
         const docInfoResult = await query(
           `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
           FROM documents d
@@ -1744,7 +1796,6 @@ const resolvers = {
         if (docInfoResult.rows.length > 0) {
           const docInfo = docInfoResult.rows[0];
 
-          // Obtener firmantes con estados actualizados
           const signersResult = await query(
             `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
@@ -1771,7 +1822,6 @@ const resolvers = {
             documentTypeName: docInfo.document_type_name || null
           };
 
-          // Actualizar la página de firmantes
           await updateSignersPage(pdfPath, signers, documentInfo);
 
           console.log('✅ Página de firmantes actualizada después de rechazar');
@@ -1784,11 +1834,39 @@ const resolvers = {
       return true;
     },
 
-    // Firmar documento
+    /**
+     * Signs a document with digital signature data and optional consecutive number
+     *
+     * BUSINESS RULE: Document OWNER can sign at ANY position, bypassing sequential order.
+     * BUSINESS RULE: Non-owners MUST wait for previous signer to complete before signing.
+     * BUSINESS RULE: When document is completed, creator receives notification and email.
+     * BUSINESS RULE: If not completed, NEXT signer in sequence is automatically notified.
+     * BUSINESS RULE: Current signer's signature_request notification is deleted after signing.
+     * BUSINESS RULE: Document status becomes 'completed' when all signers have signed.
+     *
+     * Sequential validation (NON-OWNERS ONLY):
+     * - First signer (position 1) can sign immediately
+     * - Subsequent signers must wait for signer at (position - 1) to complete
+     * - Owner exception: Owner can sign regardless of position to approve their own documents
+     *
+     * Status transitions:
+     * - pending → in_progress (after first signature)
+     * - in_progress → completed (after last signature)
+     * - Any state → rejected (if rejection count > 0)
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.documentId - UUID of the document
+     * @param {string} args.signatureData - Base64 signature image data
+     * @param {string} [args.consecutivo] - Optional consecutive/tracking number
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user (must be assigned signer)
+     * @returns {Promise<Object>} Signature record
+     * @throws {Error} When unauthorized, not in sequence (non-owner), or not assigned to document
+     */
     signDocument: async (_, { documentId, signatureData, consecutivo }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
-      // Verificar si el usuario es el propietario del documento
       const docOwnerCheck = await query(
         'SELECT uploaded_by FROM documents WHERE id = $1',
         [documentId]
@@ -1814,7 +1892,6 @@ const resolvers = {
 
       const currentOrder = orderCheck.rows[0].order_position;
 
-      // Si no es el primer firmante (order_position > 1), validar que el anterior haya firmado
       // EXCEPCIÓN: Si el usuario es el propietario del documento, puede firmar sin importar el orden
       if (currentOrder > 1 && !isOwner) {
         const previousSignerCheck = await query(
@@ -1837,7 +1914,6 @@ const resolvers = {
         }
       }
 
-      // Verificar si ya existe una firma para este documento y usuario
       const existingSignature = await query(
         `SELECT * FROM signatures WHERE document_id = $1 AND signer_id = $2`,
         [documentId, user.id]
@@ -1845,7 +1921,6 @@ const resolvers = {
 
       let result;
       if (existingSignature.rows.length > 0) {
-        // Ya existe, actualizarla
         result = await query(
           `UPDATE signatures
           SET status = 'signed',
@@ -1857,7 +1932,6 @@ const resolvers = {
           [signatureData, consecutivo || null, documentId, user.id]
         );
       } else {
-        // No existe, crear una nueva
         result = await query(
           `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, consecutivo, signed_at)
           VALUES ($1, $2, 'signed', $3, 'digital', $4, CURRENT_TIMESTAMP)
@@ -1870,7 +1944,6 @@ const resolvers = {
         throw new Error('Error al registrar la firma');
       }
 
-      // Recalcular el estado del documento basado en todas las firmas
       const statusResult = await query(
         `SELECT
           COUNT(*) as total,
@@ -1888,7 +1961,6 @@ const resolvers = {
       const pending = parseInt(stats.pending);
       const rejected = parseInt(stats.rejected);
 
-      // Determinar el nuevo estado del documento
       let newStatus = 'pending';
       let shouldSetCompletedAt = false;
 
@@ -1907,7 +1979,6 @@ const resolvers = {
         newStatus = 'pending';
       }
 
-      // Actualizar el estado del documento
       if (shouldSetCompletedAt) {
         await query(
           'UPDATE documents SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -1922,7 +1993,6 @@ const resolvers = {
 
       // ========== GESTIONAR NOTIFICACIONES INTERNAS ==========
       try {
-        // Obtener información del documento
         const docResult = await query(
           'SELECT title, uploaded_by, file_path FROM documents WHERE id = $1',
           [documentId]
@@ -1962,18 +2032,15 @@ const resolvers = {
               [documentId, currentOrder + 1]
             );
 
-            // Si hay un siguiente firmante, crear notificación de signature_request y enviar email
             if (nextSignerResult.rows.length > 0) {
               const nextSigner = nextSignerResult.rows[0];
 
-              // Crear notificación interna
               await query(
                 `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
                  VALUES ($1, $2, $3, $4, $5)`,
                 [nextSigner.user_id, 'signature_request', documentId, doc.uploaded_by, doc.title]
               );
 
-              // Enviar email al siguiente firmante solo si tiene notificaciones activadas
               if (nextSigner.email_notifications) {
                 try {
                   const creatorResult = await query('SELECT name FROM users WHERE id = $1', [doc.uploaded_by]);
@@ -1998,7 +2065,6 @@ const resolvers = {
 
           // 4. Si el documento fue COMPLETADO, gestionar notificaciones especiales
           if (newStatus === 'completed') {
-            // Eliminar todas las notificaciones de document_signed para el creador
             // ya que ahora tendrá una notificación de documento completado
             await query(
               `DELETE FROM notifications
@@ -2008,7 +2074,6 @@ const resolvers = {
               [documentId, doc.uploaded_by]
             );
 
-            // Crear notificación de documento completado para el creador
             await query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
                VALUES ($1, $2, $3, $4, $5)`,
@@ -2019,7 +2084,6 @@ const resolvers = {
           // ========== ENVIAR CORREO AL CREADOR SI DOCUMENTO COMPLETADO ==========
           if (newStatus === 'completed') {
             try {
-              // Obtener información del creador
               const creatorResult = await query(
                 `SELECT email, name, email_notifications FROM users WHERE id = $1`,
                 [doc.uploaded_by]
@@ -2028,14 +2092,12 @@ const resolvers = {
               if (creatorResult.rows.length > 0) {
                 const creator = creatorResult.rows[0];
 
-                // Solo enviar si el creador tiene notificaciones activadas
                 if (creator.email_notifications) {
                   console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
                   // Construir URL de descarga usando la ruta de la API
                   const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
 
-                  // Enviar correo solo al creador
                   await notificarDocumentoFirmadoCompleto({
                     emails: [creator.email],
                     nombreDocumento: doc.title,
@@ -2059,7 +2121,6 @@ const resolvers = {
         // No lanzamos el error para que no falle la firma
       }
 
-      // Auditoría
       await query(
         'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
         [user.id, 'sign', 'document', documentId]
@@ -2069,7 +2130,6 @@ const resolvers = {
       try {
         console.log(`📋 Actualizando página de firmantes para documento ${documentId}...`);
 
-        // Obtener información del documento
         const docInfoResult = await query(
           `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
           FROM documents d
@@ -2082,7 +2142,6 @@ const resolvers = {
         if (docInfoResult.rows.length > 0) {
           const docInfo = docInfoResult.rows[0];
 
-          // Obtener firmantes con estados actualizados
           const signersResult = await query(
             `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
                     COALESCE(s.status, 'pending') as status,
@@ -2109,7 +2168,6 @@ const resolvers = {
             documentTypeName: docInfo.document_type_name || null
           };
 
-          // Actualizar la página de firmantes
           await updateSignersPage(pdfPath, signers, documentInfo);
 
           console.log('✅ Página de firmantes actualizada después de firmar');
@@ -2122,7 +2180,19 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Marcar notificación como leída
+    /**
+     * Marks a single notification as read
+     *
+     * BUSINESS RULE: Users can only mark their own notifications as read.
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {string} args.notificationId - UUID of the notification
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user
+     * @returns {Promise<Object>} Updated notification object
+     * @throws {Error} When notification not found or not owned by user
+     */
     markNotificationAsRead: async (_, { notificationId }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -2138,7 +2208,19 @@ const resolvers = {
       return result.rows[0];
     },
 
-    // Marcar todas las notificaciones como leídas
+    /**
+     * Marks all unread notifications as read for the current user
+     *
+     * BUSINESS RULE: Only affects notifications owned by the authenticated user.
+     * BUSINESS RULE: Only updates notifications where is_read = FALSE.
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} __ - Arguments (unused)
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user
+     * @returns {Promise<boolean>} True if update succeeds
+     * @throws {Error} When not authenticated
+     */
     markAllNotificationsAsRead: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -2182,7 +2264,6 @@ const resolvers = {
           email: parent.uploaded_by_email
         };
       }
-      // Si no, hacer la consulta
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.uploaded_by]);
       return result.rows[0];
     },
