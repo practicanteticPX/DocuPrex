@@ -69,7 +69,8 @@ function Dashboard({ user, onLogout }) {
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState('');
-  const [consecutivo, setConsecutivo] = useState(''); // Campo para Legalización de Facturas
+  const [consecutivo, setConsecutivo] = useState(''); // Campo guardado para Legalización de Facturas
+  const [tempConsecutivo, setTempConsecutivo] = useState(''); // Campo temporal mientras edita
   const [showConsecutivoModal, setShowConsecutivoModal] = useState(false); // Modal para agregar consecutivo
   const [showDescription, setShowDescription] = useState(false);
   const [showRejectSuccess, setShowRejectSuccess] = useState(false);
@@ -2233,13 +2234,15 @@ function Dashboard({ user, onLogout }) {
   };
 
   const handleSaveConsecutivo = () => {
-    // Guardar el consecutivo - se enviará al firmar el documento
+    // Guardar el consecutivo temporal al campo permanente
+    setConsecutivo(tempConsecutivo);
     setShowConsecutivoModal(false);
   };
 
   const handleCancelConsecutivo = () => {
+    // Restaurar el valor guardado y descartar cambios temporales
+    setTempConsecutivo(consecutivo);
     setShowConsecutivoModal(false);
-    setConsecutivo(''); // Limpiar el campo al cancelar
   };
 
   const handleOpenRejectConfirm = () => {
@@ -5068,7 +5071,10 @@ function Dashboard({ user, onLogout }) {
                   {viewingDocument && viewingDocument.documentType && viewingDocument.documentType.code === 'FV' && (
                     <button
                       className="pdf-viewer-action-btn consecutivo"
-                      onClick={() => setShowConsecutivoModal(true)}
+                      onClick={() => {
+                        setTempConsecutivo(consecutivo);
+                        setShowConsecutivoModal(true);
+                      }}
                       title="Agregar consecutivo"
                     >
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -5334,8 +5340,8 @@ function Dashboard({ user, onLogout }) {
                   <input
                     type="text"
                     className="reject-reason-input consecutivo-input"
-                    value={consecutivo}
-                    onChange={(e) => setConsecutivo(e.target.value)}
+                    value={tempConsecutivo}
+                    onChange={(e) => setTempConsecutivo(e.target.value)}
                     maxLength="100"
                   />
                 </div>
