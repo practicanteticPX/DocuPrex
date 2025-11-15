@@ -719,12 +719,15 @@ const resolvers = {
           ]
         );
 
+        // Auto-firmar al propietario cuando se agrega en posición 1
         await query(
-          `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-           VALUES ($1, $2, 'pending', 'digital')
-           ON CONFLICT (document_id, signer_id) DO NOTHING`,
+          `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+           VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
+           ON CONFLICT (document_id, signer_id) DO UPDATE
+           SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
           [documentId, user.id]
         );
+        console.log(`✅ Auto-firma aplicada al propietario (posición 1)`);
 
         const otherUserIds = userIds.filter(id => id !== user.id);
         const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
@@ -808,11 +811,13 @@ const resolvers = {
             ]
           );
 
+          // Auto-firmar al propietario cuando se agrega en posición 1
           await query(
-            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-             VALUES ($1, $2, 'pending', 'digital')`,
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+             VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
             [documentId, user.id]
           );
+          console.log(`✅ Auto-firma aplicada al propietario (posición 1)`);
 
           startPosition = 2;
         }

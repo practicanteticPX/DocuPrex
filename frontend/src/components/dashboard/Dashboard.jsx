@@ -5711,7 +5711,7 @@ function Dashboard({ user, onLogout }) {
                       marginBottom: '20px',
                       padding: '16px',
                       backgroundColor: '#f9fafb',
-                      border: '2px solid #4f46e5',
+                      border: '2px solid #9CA3AF',
                       borderRadius: '8px'
                     }}>
                       <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -5767,8 +5767,8 @@ function Dashboard({ user, onLogout }) {
                                 width: '100%',
                                 padding: '10px 12px',
                                 marginBottom: '8px',
-                                backgroundColor: isSelected ? '#eef2ff' : (isRoleTaken ? '#f9fafb' : 'white'),
-                                border: isSelected ? '2px solid #4f46e5' : '1px solid #d1d5db',
+                                backgroundColor: isSelected ? '#F3F4F6' : (isRoleTaken ? '#f9fafb' : 'white'),
+                                border: isSelected ? '2px solid #6B7280' : '1px solid #d1d5db',
                                 borderRadius: '6px',
                                 cursor: isRoleTaken ? 'not-allowed' : 'pointer',
                                 display: 'flex',
@@ -5782,12 +5782,12 @@ function Dashboard({ user, onLogout }) {
                               <div style={{
                                 width: '18px',
                                 height: '18px',
-                                border: '2px solid ' + (isSelected ? '#4f46e5' : '#d1d5db'),
+                                border: '2px solid ' + (isSelected ? '#6B7280' : '#d1d5db'),
                                 borderRadius: '4px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                backgroundColor: isSelected ? '#4f46e5' : 'white',
+                                backgroundColor: isSelected ? '#6B7280' : 'white',
                                 flexShrink: 0
                               }}>
                                 {isSelected && (
@@ -5797,7 +5797,7 @@ function Dashboard({ user, onLogout }) {
                                 )}
                               </div>
 
-                              <span style={{ flex: 1, textAlign: 'left', fontSize: '14px', color: isSelected ? '#4f46e5' : '#374151', fontWeight: isSelected ? '500' : '400' }}>
+                              <span style={{ flex: 1, textAlign: 'left', fontSize: '14px', color: isSelected ? '#374151' : '#374151', fontWeight: isSelected ? '600' : '400' }}>
                                 {role.roleName}
                               </span>
 
@@ -5852,7 +5852,7 @@ function Dashboard({ user, onLogout }) {
                             padding: '8px 16px',
                             border: 'none',
                             borderRadius: '6px',
-                            backgroundColor: (addingSignerId || selectedRolesForNewSigner.length === 0) ? '#9ca3af' : '#4f46e5',
+                            backgroundColor: (addingSignerId || selectedRolesForNewSigner.length === 0) ? '#9ca3af' : '#6B7280',
                             color: 'white',
                             fontSize: '14px',
                             cursor: (addingSignerId || selectedRolesForNewSigner.length === 0) ? 'not-allowed' : 'pointer',
@@ -5969,7 +5969,7 @@ function Dashboard({ user, onLogout }) {
                   onClick={handleSaveOrder}
                   disabled={savingOrder}
                   style={{
-                    backgroundColor: '#6366f1',
+                    backgroundColor: '#6B7280',
                     color: 'white',
                     minWidth: '160px',
                     transform: 'none',
@@ -6046,7 +6046,7 @@ function Dashboard({ user, onLogout }) {
                 className="delete-btn-confirm"
                 onClick={() => setInvalidPositionModal(false)}
                 style={{
-                  background: '#4f46e5',
+                  background: '#6B7280',
                   color: 'white',
                   width: '100%'
                 }}
@@ -6554,8 +6554,8 @@ function Dashboard({ user, onLogout }) {
                           borderRadius: '0.375rem',
                           cursor: isRoleTaken ? 'not-allowed' : 'pointer',
                           fontSize: '0.875rem',
-                          color: isSelected ? '#4f46e5' : (isRoleTaken ? '#9ca3af' : '#374151'),
-                          fontWeight: isSelected ? '500' : '400',
+                          color: isSelected ? '#374151' : (isRoleTaken ? '#9ca3af' : '#374151'),
+                          fontWeight: isSelected ? '600' : '400',
                           marginBottom: '0.25rem',
                           display: 'flex',
                           alignItems: 'center',
@@ -6576,12 +6576,12 @@ function Dashboard({ user, onLogout }) {
                             <div style={{
                               width: '16px',
                               height: '16px',
-                              border: '2px solid ' + (isSelected ? '#4f46e5' : '#d1d5db'),
+                              border: '2px solid ' + (isSelected ? '#6B7280' : '#d1d5db'),
                               borderRadius: '0.25rem',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              backgroundColor: isSelected ? '#4f46e5' : 'white',
+                              backgroundColor: isSelected ? '#6B7280' : 'white',
                               transition: 'all 0.15s'
                             }}>
                               {isSelected && (

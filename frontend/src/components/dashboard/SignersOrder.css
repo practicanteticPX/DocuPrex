@@ -84,9 +84,9 @@
 }
 
 .search-input-modern:focus {
-  border-color: #6366F1;
+  border-color: #9CA3AF;
   background: white;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
 }
 
 .search-input-modern:disabled {
@@ -209,7 +209,7 @@
 }
 
 .dropdown-item:hover .add-indicator {
-  color: #6366F1;
+  color: #6B7280;
   transform: scale(1.1);
 }
 
@@ -281,8 +281,8 @@
 
 /* Tag "Tú" */
 .you-tag {
-  background: #EEF2FF;
-  color: #6366F1;
+  background: #F3F4F6;
+  color: #6B7280;
   font-size: 11px;
   font-weight: 700;
   padding: 3px 8px;
@@ -355,8 +355,8 @@
 .signers-count {
   font-size: 13px;
   font-weight: 600;
-  color: #6366F1;
-  background: #EEF2FF;
+  color: #6B7280;
+  background: #F3F4F6;
   padding: 6px 12px;
   border-radius: 8px;
 }
@@ -494,8 +494,8 @@
 
 /* Caja de información moderna */
 .info-box-modern {
-  background: #EEF2FF;
-  border: 1.5px solid #C7D2FE;
+  background: #F3F4F6;
+  border: 1.5px solid #D1D5DB;
   border-radius: 10px;
   padding: 14px 16px;
   display: flex;
@@ -506,14 +506,14 @@
 .info-box-modern svg {
   width: 20px;
   height: 20px;
-  color: #6366F1;
+  color: #6B7280;
   flex-shrink: 0;
   margin-top: 1px;
 }
 
 .info-box-modern p {
   font-size: 13px;
-  color: #4338CA;
+  color: #374151;
   margin: 0;
   line-height: 1.6;
 }
@@ -634,14 +634,14 @@
 }
 
 .signer-item-available:hover {
-  border-color: #6366F1;
+  border-color: #9CA3AF;
   background: #F9FAFB;
 }
 
 .signer-item-available:hover .add-signer-btn {
-  background: #6366F1;
+  background: #6B7280;
   color: white;
-  border-color: #6366F1;
+  border-color: #6B7280;
 }
 
 .signer-info {
@@ -800,8 +800,8 @@
 
 .selected-signer-row.dragging {
   opacity: 0.5;
-  border-color: #6366F1;
-  background: #F5F3FF;
+  border-color: #9CA3AF;
+  background: #F3F4F6;
 }
 
 .selected-signer-row.locked-position {
@@ -844,7 +844,7 @@
   font-weight: 700;
   font-size: 14px;
   color: white;
-  background: #6366F1;
+  background: #6B7280;
   border-radius: 50%;
   z-index: 10;
 }
@@ -953,8 +953,8 @@
 
 /* Caja de información */
 .order-info-box {
-  background: #EEF2FF;
-  border: 1px solid #C7D2FE;
+  background: #F3F4F6;
+  border: 1px solid #D1D5DB;
   border-radius: 8px;
   padding: 12px;
   display: flex;
@@ -965,14 +965,14 @@
 .order-info-box svg {
   width: 20px;
   height: 20px;
-  color: #6366F1;
+  color: #6B7280;
   flex-shrink: 0;
   margin-top: 2px;
 }
 
 .order-info-box p {
   font-size: 12px;
-  color: #4338CA;
+  color: #374151;
   margin: 0;
   line-height: 1.5;
 }

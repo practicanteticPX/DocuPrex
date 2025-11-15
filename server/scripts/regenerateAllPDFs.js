@@ -5,9 +5,9 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Usar DATABASE_URL si está disponible, sino usar variables individuales
 const connectionConfig = process.env.DATABASE_URL
-  ? { connectionString: process.env.DATABASE_URL.replace('postgres-db', 'localhost') }
+  ? { connectionString: process.env.DATABASE_URL }
   : {
-      host: process.env.DB_HOST || 'localhost',
+      host: process.env.DB_HOST || 'postgres-db',
       port: process.env.DB_PORT || 5432,
       database: process.env.DB_NAME || 'firmas_db',
       user: process.env.DB_USER || 'postgres',

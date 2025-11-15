@@ -6659,8 +6659,8 @@
 
 .filter-search-input:focus {
   outline: none;
-  border-color: #6366F1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: #9CA3AF;
+  box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
 }
 
 .filter-search-input::placeholder {
@@ -6669,7 +6669,7 @@
 
 .clear-search-btn {
   position: absolute;
-  left: 720px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   width: 28px;
