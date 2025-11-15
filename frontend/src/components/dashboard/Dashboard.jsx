@@ -277,6 +277,26 @@ function Dashboard({ user, onLogout }) {
   const isLastStep = () => activeStep === totalSteps() - 1;
   const allStepsCompleted = () => completedSteps() === totalSteps();
 
+  /**
+   * Advances to the next step in the multi-step document upload form
+   *
+   * Triggered when user clicks "Next" button in the upload stepper. Validates step-specific
+   * requirements before advancing, with special validation for FV (Factura de Venta) documents
+   * which require role assignment for all signers.
+   *
+   * @returns {void}
+   *
+   * Business rules:
+   * - Step 0 -> Step 1: Requires files selected and document title entered
+   * - Step 1 -> Step 2: Requires at least one signer selected
+   * - For FV documents at step 1: All signers MUST have at least one role assigned
+   * - Advances to next incomplete step or next sequential step
+   *
+   * Side effects:
+   * - Shows error message if FV role validation fails
+   * - Clears any existing error messages
+   * - Updates activeStep state to advance the stepper
+   */
   const handleNext = () => {
     // Validar roles para FV cuando se sale del paso 1 (Añadir firmantes)
     if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'FV') {
@@ -1636,7 +1656,31 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
-   * Subir documento REAL usando FormData
+   * Handles the document upload process with validation, signer assignment, and auto-signing
+   *
+   * Triggered when user submits the upload form. Validates file selection and signers,
+   * uploads document(s) to the server, assigns signers with their roles, and automatically
+   * signs the document if the current user is in the signer list.
+   *
+   * @param {Event} e - Form submission event
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If upload fails or signer assignment fails
+   *
+   * Business rules:
+   * - At least one file and one signer required
+   * - For FV document types, roles must be validated before upload (validated in handleNext)
+   * - For SA document types, uploader is automatically assigned as "Solicitante" role
+   * - Supports single file, multiple files, or unified PDF upload
+   * - Auto-signs if current user is in signer list
+   *
+   * Side effects:
+   * - Calls API_UPLOAD_URL, API_UPLOAD_UNIFIED_URL, or API_UPLOAD_MULTI_URL
+   * - Assigns signers via GraphQL mutation
+   * - Auto-signs via signDocument mutation if applicable
+   * - Resets form state on success
+   * - Reloads "My Documents" list
+   * - Shows success message for 5 seconds
    */
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -1939,6 +1983,33 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  /**
+   * Handles notification click to navigate to the related document and appropriate tab
+   *
+   * Triggered when user clicks on a notification in the notification dropdown. Fetches
+   * the related document, determines the correct tab based on notification type, and
+   * opens the document viewer.
+   *
+   * @param {Object} notification - Notification object containing type, documentId, and metadata
+   * @param {string} notification.type - Type of notification (signature_request, document_signed, document_rejected, document_deleted)
+   * @param {string} notification.documentId - ID of the related document
+   * @param {string} notification.documentTitle - Title of the document
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If document fetch fails
+   *
+   * Business rules:
+   * - 'signature_request' -> navigates to 'pending' tab
+   * - 'document_signed' -> navigates to 'my-documents' (if user is creator) or 'signed' tab
+   * - 'document_rejected' or 'document_rejected_by_other' -> navigates to 'rejected' tab
+   * - 'document_deleted' -> shows error notification and returns
+   *
+   * Side effects:
+   * - Fetches full document data via GraphQL query
+   * - Changes active tab based on notification type
+   * - Opens document viewer with handleViewDocument
+   * - May reload pending documents if navigating to pending tab
+   */
   const handleNotificationClick = async (notification) => {
     try {
       // Si la notificación es de documento eliminado, mostrar mensaje informativo
@@ -2323,6 +2394,30 @@ function Dashboard({ user, onLogout }) {
 
   const clearModalSelectedSigners = () => setModalSelectedSigners([]);
 
+  /**
+   * Adds multiple selected signers to a document in bulk
+   *
+   * Triggered when user clicks "Add Selected" after selecting multiple signers from
+   * the available signers list in the manage signers modal. Assigns all selected users
+   * as signers and auto-signs if the current user is among them.
+   *
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If signer assignment mutation fails
+   *
+   * Business rules:
+   * - Only active if document is being managed and signers are selected
+   * - Adds all selected signers in a single batch operation
+   * - Auto-signs document if current user is in the selected list
+   *
+   * Side effects:
+   * - Calls assignSigners GraphQL mutation with array of user IDs
+   * - Auto-signs via signDocument mutation if current user included
+   * - Refreshes document signer list via handleManageSigners
+   * - Reloads "My Documents" list
+   * - Clears modal selections on success
+   * - Shows error notification on failure
+   */
   const handleAddSignersToDocument = async () => {
     if (!managingDocument || modalSelectedSigners.length === 0) return;
     try {
@@ -2416,6 +2511,26 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  /**
+   * Initiates the process to remove a signer from a document
+   *
+   * Triggered when user clicks the remove button next to a signer in the manage signers
+   * modal. Validates removal constraints and opens a confirmation modal with appropriate
+   * warning if removing the last pending signer from a partially signed document.
+   *
+   * @param {string} signerId - ID of the signer to remove
+   * @returns {void}
+   *
+   * Business rules:
+   * - Validates that document is being managed and signer exists
+   * - Special warning if removing last pending signer when others have already signed
+   * - Removal would change document status if last pending signer removed
+   *
+   * Side effects:
+   * - Opens confirmation modal with signer details
+   * - Sets isLastPending flag if this removal would affect document completion
+   * - Actual removal happens in confirmRemoveSignerAction after user confirms
+   */
   // Eliminar firmante
   const handleRemoveSigner = (signerId) => {
     if (!managingDocument) return;
@@ -2606,6 +2721,29 @@ function Dashboard({ user, onLogout }) {
     setDragOverSignerIndex(null);
   };
 
+  /**
+   * Saves the new signing order after user reorders signers via drag-and-drop
+   *
+   * Triggered when user clicks "Save Order" button after reordering signers in the
+   * manage signers modal. Updates the signing sequence on the server and refreshes
+   * the document list.
+   *
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If reordering mutation fails
+   *
+   * Business rules:
+   * - Only active if a document is being managed and not currently saving
+   * - Signing order determines the sequence in which users must sign
+   * - Changes are persisted via GraphQL reorderSigners mutation
+   *
+   * Side effects:
+   * - Calls reorderSigners GraphQL mutation with new order array
+   * - Refreshes managingDocument data via handleManageSigners
+   * - Reloads "My Documents" list
+   * - Shows success modal on completion
+   * - Shows error notification on failure
+   */
   // Guardar el nuevo orden en el servidor
   const handleSaveOrder = async () => {
     if (!managingDocument || savingOrder) return;
@@ -2648,6 +2786,35 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  /**
+   * Adds a single signer to a document with optional role assignment
+   *
+   * Triggered when user adds a signer from the available signers list in the manage
+   * signers modal. For FV (Factura de Venta) documents, prompts for role selection
+   * before adding. For other document types, adds signer directly.
+   *
+   * @param {string} userId - ID of the user to add as signer
+   * @param {Object|null} rolesData - Optional role data for FV documents
+   * @param {Array<string>} rolesData.roleIds - Array of role IDs
+   * @param {Array<string>} rolesData.roleNames - Array of role names
+   * @returns {Promise<void>}
+   *
+   * @throws {Error} If signer assignment mutation fails
+   *
+   * Business rules:
+   * - For FV documents without rolesData: opens role selection modal instead of adding
+   * - For FV documents with rolesData: adds signer with specified roles
+   * - For non-FV documents: adds signer without role requirements
+   * - Prevents adding if already processing a signer addition
+   *
+   * Side effects:
+   * - For FV without roles: sets pendingSignerForRoles and opens role modal
+   * - For valid additions: calls assignSigners GraphQL mutation
+   * - Refreshes document signer list via handleManageSigners
+   * - Reloads "My Documents" list
+   * - Clears modal search and selections on success
+   * - Shows error notification on failure
+   */
   // Función para agregar un nuevo firmante
   const handleAddSingleSigner = async (userId, rolesData = null) => {
     if (!managingDocument || addingSignerId) return;

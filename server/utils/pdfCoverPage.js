@@ -14,15 +14,12 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
   try {
     console.log(`📄 Agregando página de información de firmantes a: ${path.basename(pdfPath)}`);
 
-    // Leer el PDF original
     const existingPdfBytes = await fs.readFile(pdfPath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
 
-    // Cargar fuentes
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    // Constantes de página
     const width = 595.28;
     const height = 841.89;
     const margin = 60;
@@ -30,8 +27,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     // Ordenar firmantes por order_position PRIMERO para usar en marca de agua
     const sortedSigners = [...signers].sort((a, b) => a.order_position - b.order_position);
 
-    // Crear la primera página de firmantes
-    let coverPage = pdfDoc.addPage([width, height]); // A4 en puntos
+    let coverPage = pdfDoc.addPage([width, height]);
     let yPosition = height - 70;
 
     // ========== FONDO BLANCO LIMPIO ==========
@@ -40,7 +36,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       y: 0,
       width: width,
       height: height,
-      color: rgb(1, 1, 1), // Fondo blanco
+      color: rgb(1, 1, 1),
     });
 
     // ========== MARCA DE AGUA DE FONDO (ESTADO GENERAL DEL DOCUMENTO) ==========
@@ -94,7 +90,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
-    // Fecha y hora de actualización (formato UTC-0500) - línea 1
     coverPage.drawText('Fechas y horas en UTC-0500 (America/Bogota)', {
       x: margin,
       y: yPosition,
@@ -105,7 +100,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 14;
 
-    // Fecha y hora de actualización - línea 2
     const generatedDate = new Date().toLocaleString('es-CO', {
       timeZone: 'America/Bogota',
       day: '2-digit',
@@ -127,7 +121,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
-    // Borde inferior para separar el header
     coverPage.drawRectangle({
       x: margin,
       y: yPosition,
@@ -139,7 +132,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     yPosition -= 25;
 
     // ========== INFORMACIÓN DEL DOCUMENTO - ESTILO ZAPSIGN (SIN CAJA) ==========
-    // Estado del documento
     coverPage.drawText('Estado:', {
       x: margin,
       y: yPosition,
@@ -150,11 +142,11 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 16;
 
-    let statusColor = rgb(0.5, 0.5, 0.5); // Gris para pendiente
+    let statusColor = rgb(0.5, 0.5, 0.5);
     if (documentStatus === 'FIRMADO') {
-      statusColor = rgb(0.13, 0.59, 0.25); // Verde
+      statusColor = rgb(0.13, 0.59, 0.25);
     } else if (documentStatus === 'RECHAZADO') {
-      statusColor = rgb(0.8, 0.1, 0.1); // Rojo
+      statusColor = rgb(0.8, 0.1, 0.1);
     }
 
     coverPage.drawText(documentStatus, {
@@ -167,7 +159,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
-    // Documento (título asignado al subir)
     coverPage.drawText('Documento:', {
       x: margin,
       y: yPosition,
@@ -194,7 +185,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
-    // Fecha de creación
     coverPage.drawText('Fecha de creación:', {
       x: margin,
       y: yPosition,
@@ -227,7 +217,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
-    // Tipo de documento (si existe)
     if (documentInfo.documentTypeName) {
       coverPage.drawText('Tipo de documento:', {
         x: margin,
@@ -250,7 +239,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       yPosition -= 25;
     }
 
-    // Rechazado por / Acción realizada por (si aplica)
     const rejectedSigner = sortedSigners.find(s => s.status === 'rejected');
     if (rejectedSigner) {
       coverPage.drawText('Rechazado por:', {
@@ -274,7 +262,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       yPosition -= 25;
 
-      // Fecha de rechazo
       if (rejectedSigner.rejected_at) {
         coverPage.drawText('Fecha/hora de rechazo:', {
           x: margin,
@@ -308,7 +295,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 25;
       }
 
-      // Motivo del rechazo
       if (rejectedSigner.rejection_reason) {
         coverPage.drawText('Motivo:', {
           x: margin,
@@ -340,7 +326,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 10;
 
-    // Borde inferior para separar la información del documento
     coverPage.drawRectangle({
       x: margin,
       y: yPosition,
@@ -352,7 +337,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     yPosition -= 25;
 
     // ========== FIRMANTES - ESTILO ZAPSIGN ==========
-    // Título de la sección
     const signedCount = sortedSigners.filter(s => s.status === 'signed').length;
     const totalSigners = sortedSigners.length;
 
@@ -364,7 +348,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       color: rgb(0.05, 0.05, 0.05),
     });
 
-    // Contador de firmas (ej: "2 de 3 Firmas")
     const counterText = `${signedCount} de ${totalSigners} Firmas`;
     const counterWidth = fontRegular.widthOfTextAtSize(counterText, 9);
     coverPage.drawText(counterText, {
@@ -377,25 +360,21 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 30;
 
-    // Variable para la página actual (sortedSigners ya fue declarado arriba)
     let currentPage = coverPage;
-    let signersInCurrentPage = 0; // Contador de firmantes en la página actual
+    let signersInCurrentPage = 0;
     const MAX_SIGNERS_PER_PAGE = 3; // Máximo 3 firmantes por página para más espacio
-    let totalSignerPages = 1; // Contador de páginas de firmantes creadas
+    let totalSignerPages = 1;
 
-    // Dibujar cada firmante en estilo ZapSign (limpio y minimalista)
     for (let i = 0; i < sortedSigners.length; i++) {
       const signer = sortedSigners[i];
 
-      // Crear nueva página si ya hay 3 firmantes en la página actual
       if (signersInCurrentPage >= MAX_SIGNERS_PER_PAGE) {
         const newPage = pdfDoc.addPage([width, height]);
         currentPage = newPage;
         yPosition = height - margin;
         signersInCurrentPage = 0;
-        totalSignerPages++; // Incrementar el contador de páginas
+        totalSignerPages++;
 
-        // Aplicar fondo blanco a la nueva página
         newPage.drawRectangle({
           x: 0,
           y: 0,
@@ -404,7 +383,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
           color: rgb(1, 1, 1),
         });
 
-        // Agregar también la marca de agua a las nuevas páginas
         newPage.drawText(watermarkText, {
           x: (width - watermarkRotatedWidth) / 2,
           y: watermarkY,
@@ -416,7 +394,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         });
       }
 
-      // Línea separadora entre firmantes
       if (i > 0) {
         currentPage.drawRectangle({
           x: margin,
@@ -428,22 +405,20 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 15;
       }
 
-      // Determinar texto y color del badge de estado
       let statusText = 'Firma pendiente';
-      let statusBadgeColor = rgb(0.95, 0.95, 0.95); // Gris claro
+      let statusBadgeColor = rgb(0.95, 0.95, 0.95);
       let statusTextColor = rgb(0.3, 0.3, 0.3);
 
       if (signer.status === 'signed') {
         statusText = 'Firmado';
-        statusBadgeColor = rgb(0.82, 0.95, 0.84); // Verde claro ZapSign
+        statusBadgeColor = rgb(0.82, 0.95, 0.84);
         statusTextColor = rgb(0.13, 0.59, 0.25);
       } else if (signer.status === 'rejected') {
         statusText = 'Rechazado';
-        statusBadgeColor = rgb(0.98, 0.85, 0.85); // Rojo claro
+        statusBadgeColor = rgb(0.98, 0.85, 0.85);
         statusTextColor = rgb(0.8, 0.1, 0.1);
       }
 
-      // Nombre del firmante (en mayúsculas, estilo ZapSign)
       const signerName = (signer.name || 'Sin nombre').toUpperCase();
       const maxNameLength = 50;
       const displayName = signerName.length > maxNameLength
@@ -458,7 +433,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         color: rgb(0.05, 0.05, 0.05),
       });
 
-      // Rol del firmante (si existe) - al lado del nombre con guión
       // Soporta múltiples roles separados por " / "
       let roleText = '';
       if (signer.role_names && Array.isArray(signer.role_names) && signer.role_names.length > 0) {
@@ -476,20 +450,18 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
           y: yPosition,
           size: 10,
           font: fontRegular,
-          color: rgb(0.5, 0.5, 0.5), // Gris
+          color: rgb(0.5, 0.5, 0.5),
         });
       }
 
-      // Badge de estado a la derecha del nombre (alineado a la misma altura)
       const badgePadding = 8;
       const badgeTextWidth = fontBold.widthOfTextAtSize(statusText, 8);
       const badgeWidth = badgeTextWidth + (badgePadding * 2);
       const badgeHeight = 16;
       const badgeRadius = badgeHeight / 2;
       const badgeX = width - margin - badgeWidth;
-      const badgeY = yPosition + 3; // Alineado con el nombre
+      const badgeY = yPosition + 3;
 
-      // Rectángulo central del badge
       currentPage.drawRectangle({
         x: badgeX + badgeRadius,
         y: badgeY - badgeHeight / 2,
@@ -498,7 +470,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         color: statusBadgeColor,
       });
 
-      // Círculos de los extremos
       currentPage.drawCircle({
         x: badgeX + badgeRadius,
         y: badgeY,
@@ -513,7 +484,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         color: statusBadgeColor,
       });
 
-      // Texto del badge
       currentPage.drawText(statusText, {
         x: badgeX + badgePadding,
         y: badgeY - 2.5,
@@ -524,7 +494,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       yPosition -= 18;
 
-      // Fecha y hora de firma/rechazo (si existe)
       let dateTimeText = '';
       if (signer.status === 'signed' && signer.signed_at) {
         const signedDate = new Date(signer.signed_at);
@@ -563,7 +532,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 18;
       }
 
-      // Email (sin título, directamente el correo)
       const signerEmail = signer.email || 'No disponible';
       currentPage.drawText(`${signerEmail}`, {
         x: margin,
@@ -587,20 +555,19 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 18;
       }
 
-      // Razón de rechazo (si el firmante rechazó el documento)
       if (signer.status === 'rejected' && signer.rejection_reason) {
         currentPage.drawText(`Razón de rechazo: ${signer.rejection_reason}`, {
           x: margin,
           y: yPosition,
           size: 9,
           font: fontRegular,
-          color: rgb(0.86, 0.26, 0.26), // Color rojo para destacar el rechazo
+          color: rgb(0.86, 0.26, 0.26),
         });
         yPosition -= 18;
       }
 
-      yPosition -= 12; // Espaciado entre firmantes
-      signersInCurrentPage++; // Incrementar el contador de firmantes en la página
+      yPosition -= 12;
+      signersInCurrentPage++;
     }
 
     // ========== FOOTER MINIMALISTA (SIN CAJA) ==========
@@ -614,7 +581,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       // Patrón: "nombre-1762877271658-951648300.pdf" -> "nombre.pdf"
       // Busca: -[números]-[números].pdf al final del nombre
       const fileNameClean = fileName.replace(/-\d+-\d+\.pdf$/i, '.pdf');
-      // Remover extensión .pdf si existe
       const fileNameWithoutExt = fileNameClean.replace(/\.pdf$/i, '');
       // Establecer el título del PDF (sin mostrar SignerPages, solo guardarlo internamente como Subject)
       pdfDoc.setTitle(fileNameWithoutExt);
@@ -624,7 +590,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       console.log('⚠️  No se pudieron guardar metadatos (no crítico)');
     }
 
-    // Guardar el PDF modificado
     const pdfBytes = await pdfDoc.save();
     await fs.writeFile(pdfPath, pdfBytes);
 
@@ -648,7 +613,6 @@ async function updateSignersPage(pdfPath, signers, documentInfo) {
   try {
     console.log(`🔄 Actualizando páginas de firmantes en: ${path.basename(pdfPath)}`);
 
-    // Leer el PDF existente
     const existingPdfBytes = await fs.readFile(pdfPath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
 
@@ -680,7 +644,6 @@ async function updateSignersPage(pdfPath, signers, documentInfo) {
       console.log('⚠️  No se pudieron leer metadatos, asumiendo 1 página de firmantes');
     }
 
-    // Eliminar las páginas de firmantes al final del documento
     let pagesToRemove = 0;
     for (let i = 0; i < signerPagesToRemove && pageCount > 1; i++) {
       try {
@@ -697,11 +660,9 @@ async function updateSignersPage(pdfPath, signers, documentInfo) {
       console.log(`🗑️  ${pagesToRemove} página(s) de firmantes eliminada(s)`);
     }
 
-    // Guardar el PDF sin las páginas de firmantes
     const pdfBytesWithoutSigners = await pdfDoc.save();
     await fs.writeFile(pdfPath, pdfBytesWithoutSigners);
 
-    // Ahora agregar las nuevas páginas con estados actualizados
     await addCoverPageWithSigners(pdfPath, signers, documentInfo);
 
     console.log(`✅ Páginas de firmantes actualizadas exitosamente`);
