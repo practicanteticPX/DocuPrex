@@ -402,35 +402,35 @@
 }
 
 .selected-signer-card:hover {
-  border-color: #A855F7;
-  background: #FAF5FF;
-  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.15);
+  border-color: #D1D5DB;
+  background: #F9FAFB;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .selected-signer-card.dragging {
   opacity: 0.4;
   transform: scale(0.98);
-  border-color: #A855F7;
-  background: #F5F3FF;
-  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
+  border-color: #9CA3AF;
+  background: #F3F4F6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Indicador visual al arrastrar sobre otro elemento */
 .selected-signer-card.drag-over {
-  background: #FAF5FF;
-  border: 2px dashed #A855F7;
+  background: #F3F4F6;
+  border: 2px dashed #9CA3AF;
   transform: translateY(-2px);
 }
 
 .selected-signer-card.locked {
   cursor: default;
-  border-color: #10B981;
-  background: #F0FDF4;
+  border-color: #D1D5DB;
+  background: #F3F4F6;
 }
 
 .selected-signer-card.locked:hover {
-  border-color: #10B981;
-  background: #F0FDF4;
+  border-color: #D1D5DB;
+  background: #F3F4F6;
   box-shadow: none;
 }
 

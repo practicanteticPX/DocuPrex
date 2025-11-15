@@ -341,6 +341,7 @@ function Dashboard({ user, onLogout }) {
   };
 
   const handleBack = () => {
+    setError(''); // Limpiar error al retroceder
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
@@ -3350,7 +3351,7 @@ function Dashboard({ user, onLogout }) {
                     </div>
                   )}
 
-                  {error && (
+                  {error && activeStep !== 1 && (
                     <div className="error-message">
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3610,6 +3611,16 @@ function Dashboard({ user, onLogout }) {
                               Selecciona los usuarios que deben firmar este documento. El orden es importante.
                             </p>
                           </div>
+
+                          {/* Mensaje de error específico para este paso */}
+                          {error && (
+                            <div className="error-message">
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              <span>{error}</span>
+                            </div>
+                          )}
 
                           {/* Switch: Voy a firmar este documento */}
                           <div style={{
