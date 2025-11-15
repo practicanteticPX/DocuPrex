@@ -264,9 +264,6 @@ function Dashboard({ user, onLogout }) {
   // Estado para modal de posición inválida
   const [invalidPositionModal, setInvalidPositionModal] = useState(false);
 
-  // Estado para modal de éxito al guardar orden
-  const [saveOrderSuccessModal, setSaveOrderSuccessModal] = useState(false);
-
   // Estados para Stepper funcional de MUI (3 pasos)
   const steps = ['Cargar documentos', 'Añadir firmantes', 'Enviar'];
   const [activeStep, setActiveStep] = useState(0);
@@ -2920,7 +2917,11 @@ function Dashboard({ user, onLogout }) {
       await handleManageSigners(managingDocument);
       await loadMyDocuments();
 
-      setSaveOrderSuccessModal(true);
+      // Cerrar el modal de gestión de firmantes
+      setManagingDocument(null);
+
+      // Mostrar notificación de éxito
+      showNotif('Éxito', 'Orden de firmantes guardado correctamente', 'success');
     } catch (err) {
       console.error('Error al reordenar firmantes:', err);
       showNotif('Error', err.message || 'No se pudo reordenar los firmantes', 'error');
@@ -5976,7 +5977,7 @@ function Dashboard({ user, onLogout }) {
                     transition: 'opacity 0.2s ease'
                   }}
                 >
-                  {savingOrder ? 'Guardando...' : 'Guardar Cambios'}
+                  {savingOrder ? 'Guardando...' : 'Guardar Orden'}
                 </button>
               )}
             </div>
@@ -6050,36 +6051,6 @@ function Dashboard({ user, onLogout }) {
                   color: 'white',
                   width: '100%'
                 }}
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de éxito al guardar orden */}
-      {saveOrderSuccessModal && (
-        <div className="delete-modal-overlay" onClick={() => setSaveOrderSuccessModal(false)} style={{backdropFilter: 'blur(4px)', backgroundColor: 'rgba(0, 0, 0, 0.3)'}}>
-          <div className="delete-modal-minimal" onClick={(e) => e.stopPropagation()}>
-            {/* Icono de check circular verde */}
-            <div className="success-icon-circle">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-
-            {/* Título y descripción */}
-            <h2 className="delete-modal-title" style={{textAlign: 'center'}}>Éxito</h2>
-            <p className="delete-modal-description" style={{textAlign: 'center'}}>
-              Orden de firmantes actualizado exitosamente
-            </p>
-
-            {/* Botón único */}
-            <div className="delete-modal-buttons" style={{justifyContent: 'center'}}>
-              <button
-                className="success-btn-confirm"
-                onClick={() => setSaveOrderSuccessModal(false)}
               >
                 Entendido
               </button>
@@ -6226,7 +6197,7 @@ function Dashboard({ user, onLogout }) {
             </div>
             <h3 className="notification-title">{notificationData.title}</h3>
             <p className="notification-message">{notificationData.message}</p>
-            <button className="notification-button" onClick={() => setShowNotification(false)}>
+            <button className={`notification-button ${notificationData.type}`} onClick={() => setShowNotification(false)}>
               Entendido
             </button>
           </div>

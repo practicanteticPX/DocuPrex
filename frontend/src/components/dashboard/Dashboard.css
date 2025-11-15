@@ -1515,6 +1515,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1525,11 +1526,15 @@
 .notification-modal {
   background: white;
   border-radius: 12px;
-  padding: 24px;
+  padding: 32px 40px;
   max-width: 400px;
   width: 90%;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 @keyframes slideUp {
@@ -1579,6 +1584,7 @@
   color: #111827;
   margin: 0 0 8px 0;
   text-align: center;
+  width: 100%;
 }
 
 .notification-message {
@@ -1587,12 +1593,13 @@
   line-height: 1.6;
   margin: 0 0 20px 0;
   text-align: center;
+  width: 100%;
 }
 
 .notification-button {
   width: 100%;
   padding: 12px 20px;
-  background: #6366F1;
+  background: #6B7280;
   color: white;
   border: none;
   border-radius: 8px;
@@ -1603,8 +1610,40 @@
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
 
+.notification-button.success {
+  background: #10B981;
+}
+
+.notification-button.success:hover {
+  background: #059669;
+}
+
+.notification-button.error {
+  background: #EF4444;
+}
+
+.notification-button.error:hover {
+  background: #DC2626;
+}
+
+.notification-button.warning {
+  background: #F59E0B;
+}
+
+.notification-button.warning:hover {
+  background: #D97706;
+}
+
+.notification-button.info {
+  background: #3B82F6;
+}
+
+.notification-button.info:hover {
+  background: #2563EB;
+}
+
 .notification-button:hover {
-  background: #4F46E5;
+  background: #4B5563;
 }
 
 .notification-button:active {
