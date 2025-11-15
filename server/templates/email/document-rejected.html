@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documento Rechazado</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      background-color: #f3f4f6;
+      font-family: 'Poppins', Arial, sans-serif;
+    }
+    .container {
+      width: 100%;
+      max-width: 448px;
+      margin: 0 auto;
+      background-color: #ffffff;
+    }
+    .content {
+      padding: 32px;
+      text-align: center;
+    }
+    .icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 24px auto;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 32px;
+      font-weight: bold;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #111827;
+      margin: 0 0 16px 0;
+    }
+    p {
+      font-size: 16px;
+      color: #6b7280;
+      line-height: 1.5;
+      margin: 0 0 16px 0;
+    }
+    .document-info {
+      background-color: #fef2f2;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 24px 0;
+      border-left: 4px solid #ef4444;
+    }
+    .document-info p {
+      margin: 8px 0;
+      text-align: left;
+    }
+    .document-info strong {
+      color: #374151;
+      font-weight: 600;
+    }
+    .rejection-reason {
+      background-color: #f3f4f6;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      border-left: 3px solid #ef4444;
+    }
+    .rejection-reason p {
+      margin: 0;
+      text-align: left;
+      color: #374151;
+      font-style: italic;
+    }
+    .warning-badge {
+      background-color: #fee2e2;
+      color: #dc2626;
+      padding: 8px 16px;
+      border-radius: 24px;
+      font-weight: 600;
+      font-size: 14px;
+      display: inline-block;
+      margin: 16px 0;
+    }
+    .button {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-decoration: none;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 16px 0;
+      transition: all 0.3s ease;
+    }
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+    }
+    .footer {
+      background-color: #f9fafb;
+      padding: 24px;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+    }
+    .footer p {
+      font-size: 14px;
+      color: #9ca3af;
+      margin: 8px 0;
+    }
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="content">
+      <div class="icon">❌</div>
+
+      <h1>Documento Rechazado</h1>
+
+      <div class="warning-badge">Firma rechazada</div>
+
+      <p>Hola {{creadorDocumento}},</p>
+
+      <p>Te informamos que el documento <strong>"{{nombreDocumento}}"</strong> ha sido rechazado por <strong>{{nombreFirmante}}</strong>.</p>
+
+      <div class="document-info">
+        <p><strong>Documento:</strong> {{nombreDocumento}}</p>
+        <p><strong>Rechazado por:</strong> {{nombreFirmante}}</p>
+        <p><strong>Fecha:</strong> {{fechaRechazo}}</p>
+      </div>
+
+      <div class="rejection-reason">
+        <p><strong>Razón del rechazo:</strong></p>
+        <p>"{{razonRechazo}}"</p>
+      </div>
+
+      <p>El documento permanecerá disponible para revisión en el sistema.</p>
+
+      <a href="{{documentoUrl}}" class="button">Ver Documento</a>
+
+      <p style="font-size: 14px; color: #9ca3af; margin-top: 32px;">
+        Puedes contactar directamente con el firmante para obtener más detalles sobre el rechazo.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p><strong>DocuPrex</strong> - Sistema de Firmas Electrónicas</p>
+      <p>© 2025 Todos los derechos reservados</p>
+      <p>
+        Si tienes alguna pregunta, contacta a
+        <a href="mailto:soporte@docuprex.com">soporte@docuprex.com</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
