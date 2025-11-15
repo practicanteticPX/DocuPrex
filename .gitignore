@@ -1,1 +1,62 @@
-nul
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# PostgreSQL data files (archivos internos de la BD, no código)
+bd/pg_*
+bd/base/
+bd/global/
+bd/pg_wal/
+bd/pg_stat/
+bd/pg_stat_tmp/
+bd/pg_subtrans/
+bd/pg_notify/
+bd/pg_serial/
+bd/pg_snapshots/
+bd/pg_commit_ts/
+bd/pg_multixact/
+bd/pg_dynshmem/
+bd/pg_replslot/
+bd/pg_tblspc/
+bd/pg_twophase/
+bd/pg_logical/
+bd/*.conf
+bd/*.log
+bd/postmaster.pid
+bd/postmaster.opts
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Coverage
+coverage/
+.nyc_output/
