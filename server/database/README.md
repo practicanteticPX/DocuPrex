@@ -90,7 +90,7 @@ docker-compose exec -T postgres-db psql -U postgres -d firmas_db < server\databa
 
 ✅ **Datos Iniciales**:
 - Tipo de documento: "Solicitud de Anticipo" (código: SA)
-- 5 roles para SA: Solicitante, Aprobador, Negociaciones, Área Financiera, Gerencia Ejecutiva
+- 6 roles para SA: Solicitante, Aprobador, Negociaciones, Área Financiera, Gerencia Ejecutiva, Tesorería
 
 ---
 
@@ -106,7 +106,7 @@ docker-compose exec postgres-db psql -U postgres -d firmas_db
 # Verificar tipo de documento SA
 SELECT * FROM document_types WHERE code = 'SA';
 
-# Verificar roles de SA (debería mostrar 5)
+# Verificar roles de SA (debería mostrar 6)
 SELECT role_name, order_position FROM document_type_roles dtr
 JOIN document_types dt ON dtr.document_type_id = dt.id
 WHERE dt.code = 'SA'
@@ -124,7 +124,7 @@ ORDER BY order_position;
 Tablas: 8 (users, document_types, document_type_roles, documents, document_signers, signatures, notifications, audit_log)
 Vistas: 3 (v_documents_with_signatures, v_pending_documents_by_user, v_documents_with_details)
 Tipo SA: 1 registro
-Roles SA: 5 registros (Solicitante, Aprobador, Negociaciones, Área Financiera, Gerencia Ejecutiva)
+Roles SA: 6 registros (Solicitante, Aprobador, Negociaciones, Área Financiera, Gerencia Ejecutiva, Tesorería)
 ```
 
 ---

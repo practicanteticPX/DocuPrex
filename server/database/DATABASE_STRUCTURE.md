@@ -133,6 +133,7 @@ audit_log (📝)
 3. **Negociaciones** (NEGOCIACIONES) - Orden 3 - Obligatorio
 4. **Área Financiera** (AREA_FINANCIERA) - Orden 4 - Obligatorio
 5. **Gerencia Ejecutiva** (GERENCIA_EJECUTIVA) - Orden 5 - Opcional
+6. **Tesorería** (TESORERIA) - Orden 6 - Obligatorio
 
 ---
 
@@ -361,6 +362,7 @@ Al ejecutar el schema completo, se crean automáticamente:
 3. **Negociaciones** (orden 3) - Obligatorio
 4. **Área Financiera** (orden 4) - Obligatorio
 5. **Gerencia Ejecutiva** (orden 5) - Opcional
+6. **Tesorería** (orden 6) - Obligatorio
 
 ---
 

@@ -648,9 +648,9 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     if (!error) return; // Si no hay error, no hacer nada
 
-    // Limpiar error de "completa todos los campos" cuando hay archivos y título
-    if (error.includes('completa todos los campos')) {
-      if (selectedFiles && selectedFiles.length > 0 && documentTitle.trim().length > 0) {
+    // Limpiar error de "adjunta al menos un archivo" cuando se adjuntan archivos
+    if (error.includes('adjunta al menos un archivo')) {
+      if (selectedFiles && selectedFiles.length > 0) {
         setError('');
       }
     }
@@ -1723,7 +1723,7 @@ function Dashboard({ user, onLogout }) {
     e.preventDefault();
 
     if (((selectedFiles?.length || 0) === 0 && !selectedFile)) {
-      setError('Por favor completa todos los campos');
+      setError('Por favor adjunta al menos un archivo');
       return;
     }
 
@@ -3340,7 +3340,7 @@ function Dashboard({ user, onLogout }) {
                   </div>
                 )}
 
-                <form onSubmit={handleUpload} className="zapsign-upload-form">
+                <form onSubmit={(e) => e.preventDefault()} className="zapsign-upload-form">
                   {/* Mensajes de estado */}
                   {uploadSuccess && (
                     <div className="success-message">
@@ -6290,8 +6290,6 @@ function Dashboard({ user, onLogout }) {
               borderRadius: '0.5rem',
               boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
               zIndex: 9999,
-              maxHeight: '280px',
-              overflowY: 'auto',
               padding: '0.5rem'
             }}
           >
