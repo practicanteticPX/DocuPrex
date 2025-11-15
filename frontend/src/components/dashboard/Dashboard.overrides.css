@@ -602,15 +602,17 @@ textarea.form-input:focus {
 .sign-confirm-overlay {
   position: fixed !important;
   z-index: 10001 !important;
-  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-color: rgba(0, 0, 0, 0.3) !important;
   backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
 }
 
 .sign-confirm-modal {
   background-color: white !important;
-  border-radius: 16px !important;
-  padding: 32px !important;
-  max-width: 440px !important;
+  border-radius: 20px !important;
+  padding: 40px !important;
+  max-width: 500px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
 }
 
 .sign-confirm-icon {
@@ -1802,4 +1804,48 @@ label[for="document-type"] span {
 
 .custom-select-dropdown::-webkit-scrollbar-thumb:hover {
   background: #9CA3AF !important;
+}
+
+/* ========================================
+   ESTILOS PARA MODAL DE CONSECUTIVO (AZUL)
+   ======================================== */
+
+/* Icono del modal de consecutivo - Azul */
+.sign-confirm-icon.consecutivo-icon {
+  background-color: #E6F7FF !important;
+  color: #00A7FF !important;
+}
+
+/* Botón Guardar del modal de consecutivo - Azul */
+.sign-confirm-btn.confirm.consecutivo-btn {
+  background-color: #00A7FF !important;
+  color: white !important;
+}
+
+.sign-confirm-btn.confirm.consecutivo-btn:hover {
+  background-color: #0096E6 !important;
+}
+
+/* Input del consecutivo */
+.reject-reason-input.consecutivo-input {
+  width: 100% !important;
+  padding: 12px 16px !important;
+  font-size: 15px !important;
+  border: 1px solid #D1D5DB !important;
+  border-radius: 8px !important;
+  outline: none !important;
+  transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
+  min-height: auto !important;
+  resize: none !important;
+  background-color: white !important;
+  line-height: 1.5 !important;
+  margin-bottom: 24px !important;
+  box-shadow: none !important;
+}
+
+.reject-reason-input.consecutivo-input:focus {
+  border-color: #374151 !important;
+  background-color: #F9FAFB !important;
+  box-shadow: none !important;
 }
