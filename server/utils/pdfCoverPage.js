@@ -555,17 +555,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 18;
       }
 
-      if (signer.status === 'rejected' && signer.rejection_reason) {
-        currentPage.drawText(`Razón de rechazo: ${signer.rejection_reason}`, {
-          x: margin,
-          y: yPosition,
-          size: 9,
-          font: fontRegular,
-          color: rgb(0.86, 0.26, 0.26),
-        });
-        yPosition -= 18;
-      }
-
       yPosition -= 12;
       signersInCurrentPage++;
     }

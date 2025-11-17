@@ -4426,8 +4426,14 @@ function Dashboard({ user, onLogout }) {
                                 return '#F59E0B';
                               };
 
+                              const getSignerStatusText = (status) => {
+                                if (status === 'signed') return 'Firmado';
+                                if (status === 'rejected') return 'Rechazado';
+                                return 'Pendiente';
+                              };
+
                               return (
-                                <div key={sig.id} className="signer-item-horizontal">
+                                <div key={sig.id} className="signer-item-horizontal" title={getSignerStatusText(sig.status)}>
                                   <span
                                     className="signer-dot"
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
@@ -4779,8 +4785,14 @@ function Dashboard({ user, onLogout }) {
                                 return '#F59E0B';
                               };
 
+                              const getSignerStatusText = (status) => {
+                                if (status === 'signed') return 'Firmado';
+                                if (status === 'rejected') return 'Rechazado';
+                                return 'Pendiente';
+                              };
+
                               return (
-                                <div key={sig.id} className="signer-item-horizontal">
+                                <div key={sig.id} className="signer-item-horizontal" title={getSignerStatusText(sig.status)}>
                                   <span
                                     className="signer-dot"
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
@@ -5093,8 +5105,14 @@ function Dashboard({ user, onLogout }) {
                                   return '#F59E0B';
                                 };
 
+                                const getSignerStatusText = (status) => {
+                                  if (status === 'signed') return 'Firmado';
+                                  if (status === 'rejected') return 'Rechazado';
+                                  return 'Pendiente';
+                                };
+
                                 return (
-                                  <div key={sig.id} className="signer-item-horizontal">
+                                  <div key={sig.id} className="signer-item-horizontal" title={getSignerStatusText(sig.status)}>
                                     <span
                                       className="signer-dot"
                                       style={{ backgroundColor: getSignerStatusColor(sig.status) }}
@@ -5424,8 +5442,14 @@ function Dashboard({ user, onLogout }) {
                                     return '#F59E0B';
                                   };
 
+                                  const getSignerStatusText = (status) => {
+                                    if (status === 'signed') return 'Firmado';
+                                    if (status === 'rejected') return 'Rechazado';
+                                    return 'Pendiente';
+                                  };
+
                                   return (
-                                    <div key={sig.id} className="signer-item-horizontal">
+                                    <div key={sig.id} className="signer-item-horizontal" title={getSignerStatusText(sig.status)}>
                                       <span
                                         className="signer-dot"
                                         style={{ backgroundColor: getSignerStatusColor(sig.status) }}
