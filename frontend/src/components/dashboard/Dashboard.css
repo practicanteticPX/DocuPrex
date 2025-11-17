@@ -1548,7 +1548,7 @@
   }
 }
 
-.notification-icon {
+.modal-alert-icon {
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -1558,27 +1558,27 @@
   margin: 0 auto 16px;
 }
 
-.notification-icon.info {
+.modal-alert-icon.info {
   background: #EFF6FF;
   color: #3B82F6;
 }
 
-.notification-icon.success {
+.modal-alert-icon.success {
   background: #ECFDF5;
   color: #10B981;
 }
 
-.notification-icon.warning {
+.modal-alert-icon.warning {
   background: #FEF3C7;
   color: #F59E0B;
 }
 
-.notification-icon.error {
+.modal-alert-icon.error {
   background: #FEE2E2;
   color: #DC2626;
 }
 
-.notification-title {
+.modal-alert-title {
   font-size: 18px;
   font-weight: 600;
   color: #111827;
@@ -1587,7 +1587,7 @@
   width: 100%;
 }
 
-.notification-message {
+.modal-alert-message {
   font-size: 14px;
   color: #6B7280;
   line-height: 1.6;
@@ -1596,7 +1596,7 @@
   width: 100%;
 }
 
-.notification-button {
+.modal-alert-button {
   width: 100%;
   padding: 12px 20px;
   background: #6B7280;
@@ -1610,43 +1610,43 @@
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
 
-.notification-button.success {
+.modal-alert-button.success {
   background: #10B981;
 }
 
-.notification-button.success:hover {
+.modal-alert-button.success:hover {
   background: #059669;
 }
 
-.notification-button.error {
+.modal-alert-button.error {
   background: #EF4444;
 }
 
-.notification-button.error:hover {
+.modal-alert-button.error:hover {
   background: #DC2626;
 }
 
-.notification-button.warning {
+.modal-alert-button.warning {
   background: #F59E0B;
 }
 
-.notification-button.warning:hover {
+.modal-alert-button.warning:hover {
   background: #D97706;
 }
 
-.notification-button.info {
+.modal-alert-button.info {
   background: #3B82F6;
 }
 
-.notification-button.info:hover {
+.modal-alert-button.info:hover {
   background: #2563EB;
 }
 
-.notification-button:hover {
+.modal-alert-button:hover {
   background: #4B5563;
 }
 
-.notification-button:active {
+.modal-alert-button:active {
   transform: scale(0.98);
 }
 

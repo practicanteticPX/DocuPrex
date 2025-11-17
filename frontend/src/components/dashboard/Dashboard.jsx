@@ -3645,7 +3645,7 @@ function Dashboard({ user, onLogout }) {
                             id="document-title"
                             value={documentTitle}
                             onChange={(e) => setDocumentTitle(e.target.value)}
-                            placeholder={selectedDocumentType ? "Concepto del anticipo..." : "Ej: Solicitud de anticipo..."}
+                            placeholder={selectedDocumentType?.code === 'FV' ? "Concepto de la factura..." : selectedDocumentType ? "Concepto del anticipo..." : ""}
                             className="form-input"
                             style={{ flex: 1 }}
                             disabled={uploading}
@@ -3794,19 +3794,26 @@ function Dashboard({ user, onLogout }) {
                           )}
 
                           {/* Switch: Voy a firmar este documento */}
-                          <div style={{
-                            marginBottom: '1.5rem',
-                            padding: '1rem',
-                            backgroundColor: '#fafafa',
-                            borderRadius: '0.5rem',
-                            border: '1px solid #e2e8f0'
-                          }}>
-                            <label style={{
+                          <div
+                            onClick={() => !uploading && handleWillSignToggle(!willSignDocument)}
+                            style={{
+                              marginBottom: '1.5rem',
+                              padding: '1rem',
+                              backgroundColor: '#fafafa',
+                              borderRadius: '0.5rem',
+                              border: '1px solid #e2e8f0',
+                              cursor: uploading ? 'not-allowed' : 'pointer',
+                              transition: 'background-color 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => !uploading && (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fafafa'}
+                          >
+                            <div style={{
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              cursor: 'pointer',
-                              userSelect: 'none'
+                              userSelect: 'none',
+                              pointerEvents: 'none'
                             }}>
                               <div style={{ flex: 1 }}>
                                 <span style={{
@@ -3829,7 +3836,6 @@ function Dashboard({ user, onLogout }) {
                               </div>
                               {/* Switch Toggle */}
                               <div
-                                onClick={() => !uploading && handleWillSignToggle(!willSignDocument)}
                                 style={{
                                   position: 'relative',
                                   width: '48px',
@@ -3837,7 +3843,6 @@ function Dashboard({ user, onLogout }) {
                                   backgroundColor: willSignDocument ? '#3b82f6' : '#cbd5e1',
                                   borderRadius: '12px',
                                   transition: 'background-color 0.3s ease',
-                                  cursor: uploading ? 'not-allowed' : 'pointer',
                                   opacity: uploading ? 0.5 : 1,
                                   flexShrink: 0
                                 }}
@@ -3854,7 +3859,7 @@ function Dashboard({ user, onLogout }) {
                                   boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
                                 }} />
                               </div>
-                            </label>
+                            </div>
                           </div>
 
                           {/* Sección de usuarios disponibles */}
@@ -5806,9 +5811,9 @@ function Dashboard({ user, onLogout }) {
                               {isExclusiveRole && !isRoleTaken && (
                                 <span style={{
                                   fontSize: '11px',
-                                  color: '#f59e0b',
+                                  color: '#667eea',
                                   fontWeight: '500',
-                                  backgroundColor: '#fef3c7',
+                                  backgroundColor: '#eff2fd',
                                   padding: '2px 8px',
                                   borderRadius: '4px'
                                 }}>
@@ -6173,7 +6178,7 @@ function Dashboard({ user, onLogout }) {
       {showNotification && (
         <div className="notification-modal-overlay" onClick={() => setShowNotification(false)}>
           <div className="notification-modal" onClick={(e) => e.stopPropagation()}>
-            <div className={`notification-icon ${notificationData.type}`}>
+            <div className={`modal-alert-icon ${notificationData.type}`}>
               {notificationData.type === 'info' && (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M13 16H12V12H11M12 8H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -6195,9 +6200,9 @@ function Dashboard({ user, onLogout }) {
                 </svg>
               )}
             </div>
-            <h3 className="notification-title">{notificationData.title}</h3>
-            <p className="notification-message">{notificationData.message}</p>
-            <button className={`notification-button ${notificationData.type}`} onClick={() => setShowNotification(false)}>
+            <h3 className="modal-alert-title">{notificationData.title}</h3>
+            <p className="modal-alert-message">{notificationData.message}</p>
+            <button className={`modal-alert-button ${notificationData.type}`} onClick={() => setShowNotification(false)}>
               Entendido
             </button>
           </div>
@@ -6567,9 +6572,9 @@ function Dashboard({ user, onLogout }) {
                           {isFV && isExclusiveRole && !isRoleTaken && (
                             <span style={{
                               fontSize: '0.75rem',
-                              color: '#f59e0b',
+                              color: '#667eea',
                               fontWeight: '500',
-                              backgroundColor: '#fef3c7',
+                              backgroundColor: '#eff2fd',
                               padding: '0.125rem 0.375rem',
                               borderRadius: '0.25rem'
                             }}>
