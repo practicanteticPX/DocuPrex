@@ -3239,6 +3239,24 @@ function Dashboard({ user, onLogout }) {
     return (bytes / 1024 / 1024).toFixed(2) + ' MB';
   };
 
+  /**
+   * Obtiene las iniciales de un nombre (primera letra del nombre y apellido)
+   */
+  const getInitials = (name, email) => {
+    if (!name && !email) return 'U';
+
+    const displayName = name || email;
+    const parts = displayName.trim().split(/\s+/);
+
+    if (parts.length >= 2) {
+      // Tiene nombre y apellido
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    } else {
+      // Solo tiene una palabra, usar las primeras 2 letras
+      return displayName.substring(0, 2).toUpperCase();
+    }
+  };
+
   // Si se está verificando el documento desde URL, mostrar pantalla de carga
   if (isCheckingDocumentFromUrl) {
     return (
@@ -3441,7 +3459,7 @@ function Dashboard({ user, onLogout }) {
 
             <div className="user-info">
               <div className="user-avatar">
-                {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+                {getInitials(user?.name, user?.email)}
               </div>
               <div className="user-details">
                 <span className="user-name">{user?.name || user?.email}</span>
@@ -3967,7 +3985,7 @@ function Dashboard({ user, onLogout }) {
                                         }}
                                       >
                                         <div className="signer-avatar-circle">
-                                          {signer.name.charAt(0).toUpperCase()}
+                                          {getInitials(signer.name, signer.email)}
                                         </div>
                                         <div className="signer-info-modern">
                                           <p className="signer-name-modern">
@@ -4025,7 +4043,7 @@ function Dashboard({ user, onLogout }) {
                                       </div>
 
                                       <div className="signer-avatar-circle">
-                                        {signer.name.charAt(0).toUpperCase()}
+                                        {getInitials(signer.name, signer.email)}
                                       </div>
 
                                       <div className="signer-info-modern flex-grow">
@@ -5964,7 +5982,7 @@ function Dashboard({ user, onLogout }) {
                                     }}
                                   >
                                     <div className="signer-avatar-circle">
-                                      {(signer.name || signer.email || 'U').charAt(0).toUpperCase()}
+                                      {getInitials(signer.name, signer.email)}
                                     </div>
                                     <div className="signer-info-modern">
                                       <p className="signer-name-modern">
@@ -6181,7 +6199,7 @@ function Dashboard({ user, onLogout }) {
                         </div>
 
                         <div className="signer-avatar-circle">
-                          {(signature.signer?.name || signature.signer?.email || 'U').charAt(0).toUpperCase()}
+                          {getInitials(signature.signer?.name, signature.signer?.email)}
                         </div>
 
                         <div className="signer-info-modern flex-grow">

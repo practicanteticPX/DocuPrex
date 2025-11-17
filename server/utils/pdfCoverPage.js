@@ -132,59 +132,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     yPosition -= 25;
 
     // ========== INFORMACIÓN DEL DOCUMENTO - ESTILO ZAPSIGN (SIN CAJA) ==========
-    coverPage.drawText('Estado:', {
-      x: margin,
-      y: yPosition,
-      size: 9,
-      font: fontBold,
-      color: rgb(0.3, 0.3, 0.3),
-    });
-
-    yPosition -= 16;
-
-    let statusColor = rgb(0.5, 0.5, 0.5);
-    if (documentStatus === 'FIRMADO') {
-      statusColor = rgb(0.13, 0.59, 0.25);
-    } else if (documentStatus === 'RECHAZADO') {
-      statusColor = rgb(0.8, 0.1, 0.1);
-    }
-
-    coverPage.drawText(documentStatus, {
-      x: margin,
-      y: yPosition,
-      size: 10,
-      font: fontRegular,
-      color: statusColor,
-    });
-
-    yPosition -= 25;
-
-    coverPage.drawText('Documento:', {
-      x: margin,
-      y: yPosition,
-      size: 9,
-      font: fontBold,
-      color: rgb(0.3, 0.3, 0.3),
-    });
-
-    yPosition -= 16;
-
-    const docTitle = documentInfo.title || 'Sin nombre';
-    const maxTitleLength = 60;
-    const displayTitle = docTitle.length > maxTitleLength
-      ? docTitle.substring(0, maxTitleLength) + '...'
-      : docTitle;
-
-    coverPage.drawText(displayTitle, {
-      x: margin,
-      y: yPosition,
-      size: 10,
-      font: fontRegular,
-      color: rgb(0.15, 0.15, 0.15),
-    });
-
-    yPosition -= 25;
-
+    // 1. Fecha de creación
     coverPage.drawText('Fecha de creación:', {
       x: margin,
       y: yPosition,
@@ -217,6 +165,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 25;
 
+    // 2. Tipo de documento
     if (documentInfo.documentTypeName) {
       coverPage.drawText('Tipo de documento:', {
         x: margin,
@@ -238,6 +187,61 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       yPosition -= 25;
     }
+
+    // 3. Documento
+    coverPage.drawText('Documento:', {
+      x: margin,
+      y: yPosition,
+      size: 9,
+      font: fontBold,
+      color: rgb(0.3, 0.3, 0.3),
+    });
+
+    yPosition -= 16;
+
+    const docTitle = documentInfo.title || 'Sin nombre';
+    const maxTitleLength = 60;
+    const displayTitle = docTitle.length > maxTitleLength
+      ? docTitle.substring(0, maxTitleLength) + '...'
+      : docTitle;
+
+    coverPage.drawText(displayTitle, {
+      x: margin,
+      y: yPosition,
+      size: 10,
+      font: fontRegular,
+      color: rgb(0.15, 0.15, 0.15),
+    });
+
+    yPosition -= 25;
+
+    // 4. Estado
+    coverPage.drawText('Estado:', {
+      x: margin,
+      y: yPosition,
+      size: 9,
+      font: fontBold,
+      color: rgb(0.3, 0.3, 0.3),
+    });
+
+    yPosition -= 16;
+
+    let statusColor = rgb(0.5, 0.5, 0.5);
+    if (documentStatus === 'FIRMADO') {
+      statusColor = rgb(0.13, 0.59, 0.25);
+    } else if (documentStatus === 'RECHAZADO') {
+      statusColor = rgb(0.8, 0.1, 0.1);
+    }
+
+    coverPage.drawText(documentStatus, {
+      x: margin,
+      y: yPosition,
+      size: 10,
+      font: fontRegular,
+      color: statusColor,
+    });
+
+    yPosition -= 25;
 
     const rejectedSigner = sortedSigners.find(s => s.status === 'rejected');
     if (rejectedSigner) {

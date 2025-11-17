@@ -6977,13 +6977,13 @@
 }
 
 .type-filter-option input[type="checkbox"]:hover {
-  border-color: #C7D2FE;
+  border-color: #9CA3AF;
   background: #F9FAFB;
 }
 
 .type-filter-option input[type="checkbox"]:checked {
-  background: #eff2fd;
-  border-color: #4F46E5;
+  background: #6B7280;
+  border-color: #6B7280;
 }
 
 .type-filter-option input[type="checkbox"]:checked::after {
@@ -6993,7 +6993,7 @@
   top: 50%;
   width: 3px;
   height: 7px;
-  border: solid #4F46E5;
+  border: solid white;
   border-width: 0 2px 2px 0;
   transform: translate(-50%, -60%) rotate(45deg);
 }
