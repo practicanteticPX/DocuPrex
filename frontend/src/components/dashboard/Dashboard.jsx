@@ -195,6 +195,37 @@ function Dashboard({ user, onLogout }) {
     };
   }, []);
 
+  // Cerrar dropdown de filtro de tipo al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const dropdowns = document.querySelectorAll('.type-filter-dropdown');
+      const buttons = document.querySelectorAll('.filter-type-btn');
+
+      let clickedInsideDropdownOrButton = false;
+
+      dropdowns.forEach(dropdown => {
+        if (dropdown.contains(event.target)) {
+          clickedInsideDropdownOrButton = true;
+        }
+      });
+
+      buttons.forEach(button => {
+        if (button.contains(event.target)) {
+          clickedInsideDropdownOrButton = true;
+        }
+      });
+
+      if (!clickedInsideDropdownOrButton && showTypeFilterDropdown) {
+        setShowTypeFilterDropdown(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showTypeFilterDropdown]);
+
   // Cerrar dropdown de roles al hacer scroll
   useEffect(() => {
     const handleScroll = () => {
@@ -896,6 +927,11 @@ function Dashboard({ user, onLogout }) {
                 filePath
                 fileName
                 fileSize
+                documentType {
+                  id
+                  code
+                  name
+                }
                 uploadedBy {
                   name
                   email
@@ -1163,6 +1199,11 @@ function Dashboard({ user, onLogout }) {
                 fileSize
                 status
                 createdAt
+                documentType {
+                  id
+                  code
+                  name
+                }
                 uploadedBy {
                   id
                   name
@@ -1191,6 +1232,11 @@ function Dashboard({ user, onLogout }) {
                 fileSize
                 status
                 createdAt
+                documentType {
+                  id
+                  code
+                  name
+                }
                 uploadedBy {
                   id
                   name

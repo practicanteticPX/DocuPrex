@@ -35,15 +35,18 @@ const getAllDocuments = `
 const getDocumentsByUser = `
   SELECT
     d.*,
+    dt.name as document_type_name,
+    dt.code as document_type_code,
     COUNT(DISTINCT ds.user_id) as total_signers,
     COUNT(DISTINCT CASE WHEN s.status = 'signed' THEN s.signer_id END) as signed_count,
     COUNT(DISTINCT CASE WHEN s.status = 'pending' THEN s.signer_id END) as pending_count,
     COUNT(DISTINCT CASE WHEN s.status = 'rejected' THEN s.signer_id END) as rejected_count
   FROM documents d
+  LEFT JOIN document_types dt ON d.document_type_id = dt.id
   LEFT JOIN document_signers ds ON d.id = ds.document_id
   LEFT JOIN signatures s ON d.id = s.document_id AND ds.user_id = s.signer_id
   WHERE d.uploaded_by = $1
-  GROUP BY d.id
+  GROUP BY d.id, dt.name, dt.code
   ORDER BY d.created_at DESC
 `;
 
@@ -56,6 +59,8 @@ const getPendingDocumentsForUser = `
     d.*,
     u.name as uploader_name,
     u.email as uploader_email,
+    dt.name as document_type_name,
+    dt.code as document_type_code,
     COALESCE(s.status, 'pending') as my_signature_status,
     ds.order_position as my_order_position,
     dtr.role_code as my_role_code,
@@ -84,6 +89,7 @@ const getPendingDocumentsForUser = `
   FROM document_signers ds
   JOIN documents d ON ds.document_id = d.id
   JOIN users u ON d.uploaded_by = u.id
+  LEFT JOIN document_types dt ON d.document_type_id = dt.id
   LEFT JOIN signatures s ON d.id = s.document_id AND ds.user_id = s.signer_id
   LEFT JOIN document_type_roles dtr ON ds.role_code = dtr.role_code
     AND d.document_type_id = dtr.document_type_id
@@ -110,12 +116,15 @@ const getSignedDocumentsByUser = `
     d.*,
     u.name as uploader_name,
     u.email as uploader_email,
+    dt.name as document_type_name,
+    dt.code as document_type_code,
     s.status as signature_status,
     s.signed_at,
     s.consecutivo
   FROM document_signers ds
   JOIN documents d ON ds.document_id = d.id
   JOIN users u ON d.uploaded_by = u.id
+  LEFT JOIN document_types dt ON d.document_type_id = dt.id
   JOIN signatures s ON d.id = s.document_id AND ds.user_id = s.signer_id
   WHERE ds.user_id = $1
     AND s.status = 'signed'
@@ -130,12 +139,15 @@ const getRejectedDocumentsByUser = `
     d.*,
     u.name as uploader_name,
     u.email as uploader_email,
+    dt.name as document_type_name,
+    dt.code as document_type_code,
     s.status as signature_status,
     s.rejected_at,
     s.rejection_reason
   FROM document_signers ds
   JOIN documents d ON ds.document_id = d.id
   JOIN users u ON d.uploaded_by = u.id
+  LEFT JOIN document_types dt ON d.document_type_id = dt.id
   JOIN signatures s ON d.id = s.document_id AND ds.user_id = s.signer_id
   WHERE ds.user_id = $1
     AND s.status = 'rejected'
@@ -148,10 +160,13 @@ const getRejectedDocumentsByUser = `
 const getDocumentsRejectedByOthers = `
   SELECT DISTINCT
     d.*,
+    dt.name as document_type_name,
+    dt.code as document_type_code,
     u_rejector.name as rejector_name,
     s.rejection_reason,
     s.rejected_at
   FROM documents d
+  LEFT JOIN document_types dt ON d.document_type_id = dt.id
   JOIN signatures s ON d.id = s.document_id
   JOIN users u_rejector ON s.signer_id = u_rejector.id
   WHERE d.uploaded_by = $1

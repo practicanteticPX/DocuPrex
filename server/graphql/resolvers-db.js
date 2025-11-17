@@ -72,14 +72,17 @@ const resolvers = {
       const result = await query(`
         SELECT
           d.*,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
           COUNT(DISTINCT ds.user_id) as total_signers,
           COUNT(DISTINCT CASE WHEN s.status = 'signed' THEN s.signer_id END) as signed_count,
           COUNT(DISTINCT CASE WHEN s.status = 'pending' THEN s.signer_id END) as pending_count
         FROM documents d
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
         LEFT JOIN document_signers ds ON d.id = ds.document_id
         LEFT JOIN signatures s ON d.id = s.document_id AND ds.user_id = s.signer_id
         WHERE d.uploaded_by = $1
-        GROUP BY d.id
+        GROUP BY d.id, dt.name, dt.code
         ORDER BY d.created_at DESC
       `, [user.id]);
 
@@ -94,6 +97,8 @@ const resolvers = {
           d.*,
           u.name as uploaded_by_name,
           u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
           COALESCE(s.status, 'pending') as signature_status,
           ds.order_position,
           CASE
@@ -121,6 +126,7 @@ const resolvers = {
         FROM document_signers ds
         JOIN documents d ON ds.document_id = d.id
         JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
         LEFT JOIN signatures s ON d.id = s.document_id AND ds.user_id = s.signer_id
         WHERE ds.user_id = $1
           AND COALESCE(s.status, 'pending') = 'pending'
@@ -148,11 +154,14 @@ const resolvers = {
           d.*,
           u.name as uploaded_by_name,
           u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
           s.signed_at,
           s.signature_type
         FROM signatures s
         JOIN documents d ON s.document_id = d.id
         JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
         WHERE s.signer_id = $1
           AND s.status = 'signed'
           AND d.uploaded_by != $1
@@ -170,6 +179,8 @@ const resolvers = {
           d.*,
           u.name as uploaded_by_name,
           u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
           s.rejection_reason,
           s.rejected_at,
           s.signed_at,
@@ -178,6 +189,7 @@ const resolvers = {
         FROM documents d
         JOIN signatures s ON d.id = s.document_id
         JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
         WHERE s.signer_id = $1
           AND s.status = 'rejected'
         ORDER BY sort_date DESC
@@ -194,6 +206,8 @@ const resolvers = {
           d.*,
           u.name as uploaded_by_name,
           u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
           rejector_sig.rejection_reason,
           rejector_sig.rejected_at,
           rejector_sig.signed_at,
@@ -204,6 +218,7 @@ const resolvers = {
           COALESCE(rejector_sig.rejected_at, rejector_sig.signed_at, rejector_sig.created_at) as sort_date
         FROM documents d
         JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
         -- Mi firma (debe existir y yo NO soy quien rechazó)
         JOIN signatures my_sig ON d.id = my_sig.document_id
           AND my_sig.signer_id = $1
@@ -2256,6 +2271,17 @@ const resolvers = {
 
     documentType: async (parent) => {
       if (!parent.document_type_id) return null;
+
+      // Si ya tenemos los datos del tipo de documento en el parent (de un JOIN), usarlos directamente
+      if (parent.document_type_code || parent.document_type_name) {
+        return {
+          id: parent.document_type_id,
+          code: parent.document_type_code,
+          name: parent.document_type_name
+        };
+      }
+
+      // Si no, hacer la consulta
       const result = await query('SELECT * FROM document_types WHERE id = $1', [parent.document_type_id]);
       return result.rows[0] || null;
     },
