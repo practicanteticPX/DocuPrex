@@ -1725,6 +1725,14 @@ label[for="document-type"] span {
   background: #F3F4F6 !important;
 }
 
+.custom-select-option.selected {
+  background: #E5E7EB !important;
+}
+
+.custom-select-option.selected:hover {
+  background: #D1D5DB !important;
+}
+
 /* Contenido de la opción */
 .option-content {
   display: flex !important;
@@ -1757,34 +1765,6 @@ label[for="document-type"] span {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
-}
-
-/* Check de opción seleccionada */
-.option-check {
-  width: 24px !important;
-  height: 24px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  color: #10B981 !important;
-  flex-shrink: 0 !important;
-  animation: checkFadeIn 0.2s ease !important;
-}
-
-.option-check svg {
-  width: 18px !important;
-  height: 18px !important;
-}
-
-@keyframes checkFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 /* Scrollbar del dropdown */
