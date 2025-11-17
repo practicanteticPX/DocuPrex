@@ -4266,7 +4266,7 @@ function Dashboard({ user, onLogout }) {
                       onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'pending' ? null : 'pending')}
                       title="Filtrar por tipo de documento"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </button>
@@ -4607,22 +4607,21 @@ function Dashboard({ user, onLogout }) {
                       </svg>
                       En curso
                     </button>
-                  </div>
 
-                  {/* Botón de filtro por tipo de documento */}
-                  <div style={{ position: 'relative' }}>
-                    <button
-                      className={`filter-type-btn ${signedDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                      onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'signed' ? null : 'signed')}
-                      title="Filtrar por tipo de documento"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
+                    {/* Botón de filtro por tipo de documento */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        className={`filter-type-btn ${signedDocsTypeFilter.length > 0 ? 'active' : ''}`}
+                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'signed' ? null : 'signed')}
+                        title="Filtrar por tipo de documento"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
 
-                    {/* Dropdown de filtros */}
-                    {showTypeFilterDropdown === 'signed' && (
+                      {/* Dropdown de filtros */}
+                      {showTypeFilterDropdown === 'signed' && (
                       <div className="type-filter-dropdown">
                         <div className="type-filter-header">
                           <span>Tipo de documento</span>
@@ -4654,7 +4653,8 @@ function Dashboard({ user, onLogout }) {
                           </label>
                         </div>
                       </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -4927,22 +4927,21 @@ function Dashboard({ user, onLogout }) {
                       </svg>
                       Rechazados
                     </button>
-                  </div>
 
-                  {/* Botón de filtro por tipo de documento */}
-                  <div style={{ position: 'relative' }}>
-                    <button
-                      className={`filter-type-btn ${myDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                      onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'my' ? null : 'my')}
-                      title="Filtrar por tipo de documento"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
+                    {/* Botón de filtro por tipo de documento */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        className={`filter-type-btn ${myDocsTypeFilter.length > 0 ? 'active' : ''}`}
+                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'my' ? null : 'my')}
+                        title="Filtrar por tipo de documento"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
 
-                    {/* Dropdown de filtros */}
-                    {showTypeFilterDropdown === 'my' && (
+                      {/* Dropdown de filtros */}
+                      {showTypeFilterDropdown === 'my' && (
                       <div className="type-filter-dropdown">
                         <div className="type-filter-header">
                           <span>Tipo de documento</span>
@@ -4974,7 +4973,8 @@ function Dashboard({ user, onLogout }) {
                           </label>
                         </div>
                       </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -5273,22 +5273,21 @@ function Dashboard({ user, onLogout }) {
                       </svg>
                       Rechazados por otros
                     </button>
-                  </div>
 
-                  {/* Botón de filtro por tipo de documento */}
-                  <div style={{ position: 'relative' }}>
-                    <button
-                      className={`filter-type-btn ${rejectedDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                      onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'rejected' ? null : 'rejected')}
-                      title="Filtrar por tipo de documento"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
+                    {/* Botón de filtro por tipo de documento */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        className={`filter-type-btn ${rejectedDocsTypeFilter.length > 0 ? 'active' : ''}`}
+                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'rejected' ? null : 'rejected')}
+                        title="Filtrar por tipo de documento"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
 
-                    {/* Dropdown de filtros */}
-                    {showTypeFilterDropdown === 'rejected' && (
+                      {/* Dropdown de filtros */}
+                      {showTypeFilterDropdown === 'rejected' && (
                       <div className="type-filter-dropdown">
                         <div className="type-filter-header">
                           <span>Tipo de documento</span>
@@ -5320,7 +5319,8 @@ function Dashboard({ user, onLogout }) {
                           </label>
                         </div>
                       </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

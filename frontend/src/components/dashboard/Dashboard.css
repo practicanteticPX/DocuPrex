@@ -6772,25 +6772,25 @@
 }
 
 .filter-status-btn:hover {
-  background: #6366F1;
+  background: #EFF2FD;
   border-color: #6366F1;
-  color: white;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+  color: #4F46E5;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
 }
 
 .filter-status-btn:hover svg {
-  color: white;
+  color: #4F46E5;
 }
 
 .filter-status-btn.active {
-  background: #6366F1;
+  background: #EFF2FD;
   border-color: #6366F1;
-  color: white;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+  color: #4F46E5;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
 }
 
 .filter-status-btn.active svg {
-  color: white;
+  color: #4F46E5;
 }
 
 /* Colores específicos para cada tipo de filtro */
@@ -6869,7 +6869,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 14px;
+  padding: 9px 16px;
   background: white;
   border: 1.5px solid #E5E7EB;
   border-radius: 10px;
@@ -6877,23 +6877,22 @@
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
-  margin-left: 8px;
-}
-
-.filter-type-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
-}
-
-.filter-type-btn.active {
-  background: #667eea;
-  border-color: #667eea;
-  color: white;
 }
 
 .filter-type-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+}
+
+.filter-type-btn:hover {
+  border-color: #6366F1;
+  background: #F9FAFB;
+}
+
+.filter-type-btn.active {
+  background: #eff2fd;
+  border-color: #6366F1;
+  color: #4F46E5;
 }
 
 .type-filter-dropdown {
@@ -6928,20 +6927,19 @@
 
 .clear-all-filters-btn {
   padding: 4px 10px;
-  background: #667eea;
-  border: none;
-  border-radius: 4px;
-  color: white;
-  font-size: 10px;
-  font-weight: 600;
+  background: #eff2fd;
+  border: 1px solid #E0E7FF;
+  border-radius: 5px;
+  color: #4F46E5;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
 }
 
 .clear-all-filters-btn:hover {
-  background: #5568d3;
+  background: #E0E7FF;
+  border-color: #C7D2FE;
 }
 
 .type-filter-options {
@@ -6967,36 +6965,37 @@
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid #D1D5DB;
-  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #E5E7EB;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   position: relative;
   background: white;
   flex-shrink: 0;
 }
 
 .type-filter-option input[type="checkbox"]:hover {
-  border-color: #9CA3AF;
+  border-color: #C7D2FE;
+  background: #F9FAFB;
 }
 
 .type-filter-option input[type="checkbox"]:checked {
-  background: #667eea;
-  border-color: #667eea;
+  background: #eff2fd;
+  border-color: #4F46E5;
 }
 
 .type-filter-option input[type="checkbox"]:checked::after {
-  content: '✓';
+  content: '';
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
+  width: 3px;
+  height: 7px;
+  border: solid #4F46E5;
+  border-width: 0 2px 2px 0;
+  transform: translate(-50%, -60%) rotate(45deg);
 }
 
 .type-filter-option span {
