@@ -7,6 +7,7 @@ import './Rejected.css';
 import './SignersOrder.css';
 import './WaitingTurn.css';
 import Notifications from './Notifications';
+import DocumentTypeSelector from './DocumentTypeSelector';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -98,7 +99,6 @@ function Dashboard({ user, onLogout }) {
   const [documentTypes, setDocumentTypes] = useState([]);
   const [selectedDocumentType, setSelectedDocumentType] = useState(null);
   const [documentTypeRoles, setDocumentTypeRoles] = useState([]);
-  const [showDocTypeDropdown, setShowDocTypeDropdown] = useState(false);
   const [loadingDocumentTypes, setLoadingDocumentTypes] = useState(false);
 
   // Estados para dropdown de roles
@@ -127,10 +127,10 @@ function Dashboard({ user, onLogout }) {
   const [rejectedDocsSearchTerm, setRejectedDocsSearchTerm] = useState('');
 
   // Estados para filtros de tipo de documento
-  const [pendingDocsTypeFilter, setPendingDocsTypeFilter] = useState([]); // ['SA', 'FV']
-  const [myDocsTypeFilter, setMyDocsTypeFilter] = useState([]); // ['SA', 'FV']
-  const [signedDocsTypeFilter, setSignedDocsTypeFilter] = useState([]); // ['SA', 'FV']
-  const [rejectedDocsTypeFilter, setRejectedDocsTypeFilter] = useState([]); // ['SA', 'FV']
+  const [pendingDocsTypeFilter, setPendingDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
+  const [myDocsTypeFilter, setMyDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
+  const [signedDocsTypeFilter, setSignedDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
+  const [rejectedDocsTypeFilter, setRejectedDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
   const [showTypeFilterDropdown, setShowTypeFilterDropdown] = useState(null); // 'pending', 'my', 'signed', 'rejected'
 
   // Estados para configuración
@@ -241,24 +241,6 @@ function Dashboard({ user, onLogout }) {
       window.removeEventListener('scroll', handleScroll, true);
     };
   }, [openRoleDropdown]);
-
-  // Cerrar dropdown de tipo de documento al hacer clic fuera
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      const wrapper = document.querySelector('.custom-select-wrapper');
-      if (wrapper && !wrapper.contains(event.target) && showDocTypeDropdown) {
-        setShowDocTypeDropdown(false);
-      }
-    };
-
-    if (showDocTypeDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showDocTypeDropdown]);
 
   // Estados para modal de gestión de firmantes
   const [managingDocument, setManagingDocument] = useState(null);
@@ -3601,74 +3583,16 @@ function Dashboard({ user, onLogout }) {
                         <label htmlFor="document-type">
                           Tipo de documento <span>(opcional)</span>
                         </label>
-                        <div className="custom-select-wrapper" style={{ position: 'relative' }}>
-                          <button
-                            type="button"
-                            id="document-type"
-                            className="custom-select-trigger"
-                            onClick={() => !uploading && !loadingDocumentTypes && setShowDocTypeDropdown(!showDocTypeDropdown)}
-                            disabled={uploading || loadingDocumentTypes}
-                          >
-                            <span className="custom-select-value">
-                              {selectedDocumentType ? selectedDocumentType.name : 'Sin tipo específico'}
-                            </span>
-                            <svg
-                              className="custom-select-arrow"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                              style={{
-                                transform: showDocTypeDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
-                                transition: 'transform 0.2s ease'
-                              }}
-                            >
-                              <polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
-
-                          {showDocTypeDropdown && (
-                            <div className="custom-select-dropdown">
-                              <div
-                                className={`custom-select-option ${!selectedDocumentType ? 'selected' : ''}`}
-                                onClick={() => {
-                                  setSelectedDocumentType(null);
-                                  setDocumentTypeRoles([]);
-                                  setSelectedSigners([]);
-                                  setShowDocTypeDropdown(false);
-                                }}
-                              >
-                                <div className="option-content">
-                                  <div className="option-info">
-                                    <p className="option-name">Sin tipo específico</p>
-                                    <p className="option-description">Documento sin plantilla predefinida</p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {documentTypes.map(type => (
-                                <div
-                                  key={type.id}
-                                  className={`custom-select-option ${selectedDocumentType?.id === type.id ? 'selected' : ''}`}
-                                  onClick={() => {
-                                    setSelectedDocumentType(type);
-                                    setDocumentTypeRoles(type?.roles || []);
-                                    setSelectedSigners([]);
-                                    setShowDocTypeDropdown(false);
-                                  }}
-                                >
-                                  <div className="option-content">
-                                    <div className="option-info">
-                                      <p className="option-name">{type.name}</p>
-                                      {type.description && (
-                                        <p className="option-description">{type.description}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        <DocumentTypeSelector
+                          documentTypes={documentTypes}
+                          selectedDocumentType={selectedDocumentType}
+                          onDocumentTypeChange={(type) => {
+                            setSelectedDocumentType(type);
+                            setDocumentTypeRoles(type?.roles || []);
+                            setSelectedSigners([]);
+                          }}
+                          disabled={uploading || loadingDocumentTypes}
+                        />
                       </div>
 
                       <div className="form-group">
@@ -4227,7 +4151,9 @@ function Dashboard({ user, onLogout }) {
                     {(() => {
                       const filteredCount = pendingDocuments.filter(doc => {
                         const matchesSearch = doc.title.toLowerCase().includes(pendingDocsSearchTerm.toLowerCase());
-                        const matchesType = pendingDocsTypeFilter.length === 0 || pendingDocsTypeFilter.includes(doc.documentType?.code);
+                        const matchesType = pendingDocsTypeFilter.length === 0 ||
+                          pendingDocsTypeFilter.includes(doc.documentType?.code) ||
+                          (pendingDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                         return matchesSearch && matchesType;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} esperando tu firma`;
@@ -4293,6 +4219,14 @@ function Dashboard({ user, onLogout }) {
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
+                              checked={pendingDocsTypeFilter.includes('NONE')}
+                              onChange={() => toggleDocTypeFilter('pending', 'NONE')}
+                            />
+                            <span>Sin tipo específico</span>
+                          </label>
+                          <label className="type-filter-option">
+                            <input
+                              type="checkbox"
                               checked={pendingDocsTypeFilter.includes('SA')}
                               onChange={() => toggleDocTypeFilter('pending', 'SA')}
                             />
@@ -4333,7 +4267,9 @@ function Dashboard({ user, onLogout }) {
                   // Filtrar documentos por búsqueda y tipo
                   const filteredDocs = pendingDocuments.filter(doc => {
                     const matchesSearch = doc.title.toLowerCase().includes(pendingDocsSearchTerm.toLowerCase());
-                    const matchesType = pendingDocsTypeFilter.length === 0 || pendingDocsTypeFilter.includes(doc.documentType?.code);
+                    const matchesType = pendingDocsTypeFilter.length === 0 ||
+                      pendingDocsTypeFilter.includes(doc.documentType?.code) ||
+                      (pendingDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                     return matchesSearch && matchesType;
                   });
 
@@ -4547,7 +4483,9 @@ function Dashboard({ user, onLogout }) {
                         const matchesStatus = signedDocsStatusFilter === 'all' ||
                                              (signedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                              doc.status === signedDocsStatusFilter;
-                        const matchesType = signedDocsTypeFilter.length === 0 || signedDocsTypeFilter.includes(doc.documentType?.code);
+                        const matchesType = signedDocsTypeFilter.length === 0 ||
+                          signedDocsTypeFilter.includes(doc.documentType?.code) ||
+                          (signedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                         return matchesSearch && matchesStatus && matchesType;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''}`;
@@ -4642,6 +4580,14 @@ function Dashboard({ user, onLogout }) {
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
+                              checked={signedDocsTypeFilter.includes('NONE')}
+                              onChange={() => toggleDocTypeFilter('signed', 'NONE')}
+                            />
+                            <span>Sin tipo específico</span>
+                          </label>
+                          <label className="type-filter-option">
+                            <input
+                              type="checkbox"
                               checked={signedDocsTypeFilter.includes('SA')}
                               onChange={() => toggleDocTypeFilter('signed', 'SA')}
                             />
@@ -4691,7 +4637,9 @@ function Dashboard({ user, onLogout }) {
                                          doc.status === signedDocsStatusFilter;
 
                     // Filtro por tipo de documento
-                    const matchesType = signedDocsTypeFilter.length === 0 || signedDocsTypeFilter.includes(doc.documentType?.code);
+                    const matchesType = signedDocsTypeFilter.length === 0 ||
+                      signedDocsTypeFilter.includes(doc.documentType?.code) ||
+                      (signedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
 
                     return matchesSearch && matchesStatus && matchesType;
                   });
@@ -4858,7 +4806,9 @@ function Dashboard({ user, onLogout }) {
                         const matchesStatus = myDocsStatusFilter === 'all' ||
                                              (myDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                              doc.status === myDocsStatusFilter;
-                        const matchesType = myDocsTypeFilter.length === 0 || myDocsTypeFilter.includes(doc.documentType?.code);
+                        const matchesType = myDocsTypeFilter.length === 0 ||
+                          myDocsTypeFilter.includes(doc.documentType?.code) ||
+                          (myDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                         return matchesSearch && matchesStatus && matchesType;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''}`;
@@ -4962,6 +4912,14 @@ function Dashboard({ user, onLogout }) {
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
+                              checked={myDocsTypeFilter.includes('NONE')}
+                              onChange={() => toggleDocTypeFilter('my', 'NONE')}
+                            />
+                            <span>Sin tipo específico</span>
+                          </label>
+                          <label className="type-filter-option">
+                            <input
+                              type="checkbox"
                               checked={myDocsTypeFilter.includes('SA')}
                               onChange={() => toggleDocTypeFilter('my', 'SA')}
                             />
@@ -5012,7 +4970,9 @@ function Dashboard({ user, onLogout }) {
                                            doc.status === myDocsStatusFilter;
 
                       // Filtro por tipo de documento
-                      const matchesType = myDocsTypeFilter.length === 0 || myDocsTypeFilter.includes(doc.documentType?.code);
+                      const matchesType = myDocsTypeFilter.length === 0 ||
+                        myDocsTypeFilter.includes(doc.documentType?.code) ||
+                        (myDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
 
                       return matchesSearch && matchesStatus && matchesType;
                     });
@@ -5213,7 +5173,9 @@ function Dashboard({ user, onLogout }) {
                         const matchesFilter = rejectedDocsFilter === 'all' ||
                                             (rejectedDocsFilter === 'byMe' && rejectedByMe.some(d => d.id === doc.id)) ||
                                             (rejectedDocsFilter === 'byOthers' && rejectedByOthers.some(d => d.id === doc.id));
-                        const matchesType = rejectedDocsTypeFilter.length === 0 || rejectedDocsTypeFilter.includes(doc.documentType?.code);
+                        const matchesType = rejectedDocsTypeFilter.length === 0 ||
+                          rejectedDocsTypeFilter.includes(doc.documentType?.code) ||
+                          (rejectedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                         return matchesSearch && matchesFilter && matchesType;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} rechazado${filteredCount !== 1 ? 's' : ''}`;
@@ -5308,6 +5270,14 @@ function Dashboard({ user, onLogout }) {
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
+                              checked={rejectedDocsTypeFilter.includes('NONE')}
+                              onChange={() => toggleDocTypeFilter('rejected', 'NONE')}
+                            />
+                            <span>Sin tipo específico</span>
+                          </label>
+                          <label className="type-filter-option">
+                            <input
+                              type="checkbox"
                               checked={rejectedDocsTypeFilter.includes('SA')}
                               onChange={() => toggleDocTypeFilter('rejected', 'SA')}
                             />
@@ -5358,7 +5328,9 @@ function Dashboard({ user, onLogout }) {
                     const matchesFilter = rejectedDocsFilter === 'all' ||
                                         (rejectedDocsFilter === 'byMe' && doc.rejectedBy === 'me') ||
                                         (rejectedDocsFilter === 'byOthers' && doc.rejectedBy === 'others');
-                    const matchesType = rejectedDocsTypeFilter.length === 0 || rejectedDocsTypeFilter.includes(doc.documentType?.code);
+                    const matchesType = rejectedDocsTypeFilter.length === 0 ||
+                      rejectedDocsTypeFilter.includes(doc.documentType?.code) ||
+                      (rejectedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                     return matchesSearch && matchesFilter && matchesType;
                   });
 
