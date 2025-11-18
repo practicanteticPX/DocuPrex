@@ -3618,7 +3618,7 @@ function Dashboard({ user, onLogout }) {
                             id="document-title"
                             value={documentTitle}
                             onChange={(e) => setDocumentTitle(e.target.value)}
-                            placeholder={selectedDocumentType?.code === 'FV' ? "Concepto de la factura..." : selectedDocumentType ? "Concepto del anticipo..." : ""}
+                            placeholder={selectedDocumentType?.code === 'FV' ? "Concepto de la factura..." : selectedDocumentType ? "Concepto del anticipo..." : "Concepto del documento..."}
                             className="form-input"
                             style={{ flex: 1 }}
                             disabled={uploading}
@@ -3635,7 +3635,15 @@ function Dashboard({ user, onLogout }) {
                           id="document-description"
                           value={documentDescription}
                           onChange={(e) => setDocumentDescription(e.target.value)}
-                          placeholder="Describe brevemente el documento..."
+                          placeholder={
+                            !selectedDocumentType
+                              ? "Describe brevemente el documento..."
+                              : selectedDocumentType?.code === 'FV'
+                                ? "Describe brevemente la factura..."
+                                : selectedDocumentType?.code === 'SA'
+                                  ? "Describe brevemente la solicitud de anticipo..."
+                                  : "Describe brevemente el documento..."
+                          }
                           className="form-input form-textarea"
                           rows="3"
                           disabled={uploading}

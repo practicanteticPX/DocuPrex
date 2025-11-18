@@ -484,7 +484,7 @@ async function notificarDocumentoRechazado({
                     <span style="font-weight: 500; color: #374151;">${rechazadoPor}</span> ha rechazado el documento "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>".
                   </p>
                   
-                  <div style="margin-bottom: 32px; text-align: left; background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 12px 16px;">
+                  <div style="margin-bottom: 32px; text-align: left; background-color: #fef2f2; padding: 12px 16px;">
                     <p style="margin: 0; font-family: 'Poppins', Arial, sans-serif; font-size: 15px; color: #374151; margin-bottom: 4px; font-weight: 600;">Motivo del rechazo:</p>
                     <p style="margin: 0; font-family: 'Poppins', Arial, sans-serif; font-size: 15px; color: #6b7280; font-style: italic;">${motivoRechazo}</p>
                   </div>
@@ -501,7 +501,7 @@ async function notificarDocumentoRechazado({
                       </td>
                     </tr>
                   </table>
-                  
+                
                 </td>
               </tr>
             </table>

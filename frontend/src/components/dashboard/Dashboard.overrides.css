@@ -1625,6 +1625,48 @@ label[for="document-type"] span {
 }
 
 /* ========================================
+   FILTROS DE DOCUMENTOS FIRMADOS - SOLO LAYOUT
+   ======================================== */
+
+/* Contenedor de filtros - Buscador arriba, botones abajo */
+.my-docs-filters {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  margin-bottom: 24px !important;
+  flex-wrap: wrap !important;
+}
+
+/* Buscador - Ocupa toda la primera fila */
+.filter-search {
+  flex: 1 !important;
+  min-width: 250px !important;
+  width: 100% !important;
+}
+
+/* Grupo de botones de filtro - Van en segunda fila, ocupan todo el ancho */
+.filter-status-group {
+  width: 100% !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .my-docs-filters {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .filter-search {
+    max-width: 100% !important;
+  }
+
+  .filter-status-group {
+    width: 100% !important;
+  }
+}
+
+/* ========================================
    ESTILOS PARA MODAL DE CONSECUTIVO (AZUL)
    ======================================== */
 
