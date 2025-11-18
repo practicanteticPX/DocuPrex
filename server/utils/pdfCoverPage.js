@@ -547,14 +547,14 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       yPosition -= 18;
 
-      // Consecutivo (si existe - solo para Legalización de Facturas)
-      if (signer.consecutivo) {
+      // Consecutivo (si existe y el documento fue firmado - solo para Legalización de Facturas)
+      if (signer.status === 'signed' && signer.consecutivo) {
         currentPage.drawText(`Consecutivo: ${signer.consecutivo}`, {
           x: margin,
           y: yPosition,
           size: 9,
-          font: fontRegular,
-          color: rgb(0.4, 0.4, 0.4),
+          font: fontBold,
+          color: rgb(0.2, 0.2, 0.2),
         });
         yPosition -= 18;
       }
