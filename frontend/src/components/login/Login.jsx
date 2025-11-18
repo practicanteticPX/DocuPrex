@@ -95,7 +95,6 @@ function Login({ onLogin }) {
               <PyramidLoader />
             </div>
             <h1>DocuPrex</h1>
-            <p className="subtitle">Hecho por Jesús Y Esteban TIC</p>
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">

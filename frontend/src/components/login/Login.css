@@ -60,7 +60,8 @@
 
 .login-header h1 {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 800;
+  font-style: italic;
   color: #111827;
   margin-bottom: 8px;
   letter-spacing: -0.5px;
