@@ -8,6 +8,7 @@ import './SignersOrder.css';
 import './WaitingTurn.css';
 import Notifications from './Notifications';
 import DocumentTypeSelector from './DocumentTypeSelector';
+import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -41,6 +42,7 @@ function Dashboard({ user, onLogout }) {
   const [documentDescription, setDocumentDescription] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [showCreationLoader, setShowCreationLoader] = useState(false);
   const [error, setError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
@@ -1972,23 +1974,31 @@ function Dashboard({ user, onLogout }) {
           }
         }
 
-        setUploadSuccess(true);
-        setSelectedFile(null);
-        setSelectedFiles([]);
-        setDocumentTitle('');
-        setDocumentDescription('');
-        setSelectedSigners([]);
-        setActiveStep(0); // Volver al primer paso del stepper
+        // Mostrar animación de carga
+        setShowCreationLoader(true);
 
-        // Limpiar el input file
-        const fileInput = document.getElementById('file-input');
-        if (fileInput) fileInput.value = '';
+        // Después de 3 segundos (duración de la animación), ocultar loader y mostrar éxito
+        setTimeout(() => {
+          setShowCreationLoader(false);
+          setUploadSuccess(true);
+          setSelectedFile(null);
+          setSelectedFiles([]);
+          setDocumentTitle('');
+          setDocumentDescription('');
+          setSelectedSigners([]);
+          setActiveStep(0); // Volver al primer paso del stepper
+          setActiveTab('upload'); // Volver al tab de subir documento
 
-        // Recargar mis documentos si estamos en esa pestaña
-        // recargar "mis documentos" siempre, ya que hay nuevos elementos
-        await loadMyDocuments();
+          // Limpiar el input file
+          const fileInput = document.getElementById('file-input');
+          if (fileInput) fileInput.value = '';
 
-        setTimeout(() => setUploadSuccess(false), 5000);
+          // Recargar mis documentos
+          loadMyDocuments();
+
+          // Ocultar mensaje de éxito después de 5 segundos
+          setTimeout(() => setUploadSuccess(false), 5000);
+        }, 3000);
       } else {
         throw new Error(uploadResponse.data.message || 'Error al subir el documento');
       }
@@ -6880,6 +6890,9 @@ function Dashboard({ user, onLogout }) {
         </div>,
         document.body
       )}
+
+      {/* Loader de creación de documento */}
+      {showCreationLoader && <DocumentCreationLoader />}
 
     </div>
   );
