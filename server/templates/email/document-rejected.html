@@ -88,19 +88,23 @@
     }
     .button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      text-decoration: none;
+      background-color: #EF4444;
+      color: white !important;
+      text-decoration: none !important;
       padding: 14px 32px;
       border-radius: 8px;
       font-weight: 600;
       font-size: 16px;
-      margin: 16px 0;
-      transition: all 0.3s ease;
+      margin: 24px 0;
+      mso-line-height-rule: exactly;
+      line-height: 100%;
     }
     .button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+      background-color: #DC2626 !important;
+    }
+    .button-wrapper {
+      margin: 24px 0;
+      line-height: 0;
     }
     .footer {
       background-color: #f9fafb;
@@ -145,7 +149,14 @@
 
       <p>El documento permanecerá disponible para revisión en el sistema.</p>
 
-      <a href="{{documentoUrl}}" class="button">Ver Documento</a>
+      <!-- Botón compatible con Outlook -->
+      <table border="0" cellpadding="0" cellspacing="0" style="margin: 24px auto;">
+        <tr>
+          <td align="center" style="border-radius: 8px; background-color: #EF4444;">
+            <a href="{{documentoUrl}}" target="_blank" style="display: inline-block; padding: 14px 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 8px; -webkit-text-size-adjust: none; mso-line-height-rule: exactly;">Ver Detalles</a>
+          </td>
+        </tr>
+      </table>
 
       <p style="font-size: 14px; color: #9ca3af; margin-top: 32px;">
         Puedes contactar directamente con el firmante para obtener más detalles sobre el rechazo.
