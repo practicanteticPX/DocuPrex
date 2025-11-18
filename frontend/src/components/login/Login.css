@@ -53,24 +53,9 @@
 .logo-container {
   display: flex;
   justify-content: center;
-  margin-bottom: 16px;
-}
-
-.logo {
-  width: 56px;
-  height: 56px;
-  background: #6366F1;
-  border-radius: 12px;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.15);
-}
-
-.logo svg {
-  width: 32px;
-  height: 32px;
-  color: white;
+  margin-bottom: 20px;
+  height: 120px;
 }
 
 .login-header h1 {
@@ -306,14 +291,8 @@
     font-size: 13px;
   }
 
-  .logo {
-    width: 48px;
-    height: 48px;
-  }
-
-  .logo svg {
-    width: 28px;
-    height: 28px;
+  .logo-container {
+    height: 100px;
   }
 }
 

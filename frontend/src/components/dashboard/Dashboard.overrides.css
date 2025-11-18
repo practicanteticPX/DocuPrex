@@ -805,7 +805,7 @@ textarea.form-input:focus {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to { transform: rotateX(360deg); }
 }
 
 /* Empty state */

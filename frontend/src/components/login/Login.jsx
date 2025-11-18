@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import './Login.css';
+import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import { API_URL } from '../../config/api';
 
 // Log para debug
@@ -91,13 +92,7 @@ function Login({ onLogin }) {
         <div className="login-card">
           <div className="login-header">
             <div className="logo-container">
-              <div className="logo">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
+              <PyramidLoader />
             </div>
             <h1>DocuPrex</h1>
             <p className="subtitle">Hecho por Jesús Y Esteban TIC</p>
