@@ -4731,7 +4731,7 @@ function Dashboard({ user, onLogout }) {
 
                           <div className="doc-meta-row">
                             <span className="doc-created-text">
-                              {doc.signedAt ? `Firmado el ${formatDateTime(doc.signedAt)}` : `Creado el ${formatDateTime(doc.createdAt)}`} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
+                              Creado el {formatDateTime(doc.createdAt)} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
                             </span>
                           </div>
 

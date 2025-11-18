@@ -493,11 +493,7 @@ async function notificarDocumentoRechazado({
                   <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto;">
                     <tr>
                       <td align="center" bgcolor="#EF4444" style="background-color: #EF4444; border-radius: 8px;">
-                        <a href="${documentoUrl}" target="_blank" class="button-link" style="display: inline-block; text-decoration: none; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; font-weight: 600; padding: 12px 24px; border: 1px solid #EF4444; border-radius: 8px;">
-                          <span style="color: #ffffff; text-decoration: none;">
-                            Ver Detalles
-                          </span>
-                        </a>
+                        <a href="${documentoUrl}" target="_blank" class="button-link" style="display: inline-block; text-decoration: none; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; font-weight: 600; padding: 12px 24px; border: 1px solid #EF4444; border-radius: 8px;"><span style="color: #ffffff; text-decoration: none;">Ver Detalles</span></a>
                       </td>
                     </tr>
                   </table>
