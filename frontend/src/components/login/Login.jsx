@@ -2,7 +2,6 @@ import { useState } from 'react';
 import axios from 'axios';
 import './Login.css';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
-import Loader from '../Loader/Loader';
 import { API_URL } from '../../config/api';
 
 // Log para debug
@@ -169,21 +168,11 @@ function Login({ onLogin }) {
             <button
               type="submit"
               className="submit-button"
-              disabled={loading}
             >
-              {loading ? (
-                <>
-                  <Loader size="small" />
-                  <span>Iniciando sesión...</span>
-                </>
-              ) : (
-                <>
-                  <span>Iniciar Sesión</span>
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M13 7L18 12M18 12L13 17M18 12H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </>
-              )}
+              <span>Iniciar Sesión</span>
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13 7L18 12M18 12L13 17M18 12H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
           </form>
 
