@@ -148,7 +148,7 @@
 .help-step-number {
   width: 28px;
   height: 28px;
-  background: #374151;
+  background: #6B7280;
   color: white;
   border-radius: 50%;
   display: flex;
@@ -252,7 +252,7 @@
 }
 
 .help-modal-button {
-  background: #374151;
+  background: #6B7280;
   color: white;
   border: none;
   border-radius: 6px;
@@ -264,7 +264,7 @@
 }
 
 .help-modal-button:hover {
-  background: #1F2937;
+  background: #4B5563;
 }
 
 .help-modal-button:active {

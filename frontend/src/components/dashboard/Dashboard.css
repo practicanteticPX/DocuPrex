@@ -3799,41 +3799,48 @@
 .summary-card {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px;
-  background: #F9FAFB;
-  border-radius: 12px;
-  border: 1px solid #E5E7EB;
+  gap: 12px;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  padding: 0;
 }
 
 .summary-item {
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 16px;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
   background: white;
+  border: 1px solid #E5E7EB;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .summary-icon {
-  width: 40px;
-  height: 40px;
-  color: #2563EB;
+  width: 22px;
+  height: 22px;
+  color: #9CA3AF;
   flex-shrink: 0;
 }
 
+.summary-item div {
+  flex: 1;
+}
+
 .summary-item div h4 {
-  margin: 0 0 4px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #374151;
+  margin: 0 0 3px 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9CA3AF;
+  letter-spacing: 0.3px;
 }
 
 .summary-item div p {
   margin: 0;
-  font-size: 14px;
-  color: #6B7280;
+  font-size: 15px;
+  font-weight: 500;
+  color: #374151;
+  line-height: 1.4;
 }
 
 /* ========================================
