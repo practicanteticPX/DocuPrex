@@ -93,8 +93,8 @@ function Login({ onLogin }) {
           <div className="login-header">
             <div className="logo-container">
               <PyramidLoader />
+              <h1>DocuPrex.</h1>
             </div>
-            <h1>DocuPrex</h1>
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">

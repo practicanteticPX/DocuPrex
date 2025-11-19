@@ -1,4 +1,6 @@
-﻿/* Dashboard Container */
+﻿@import url('https://fonts.cdnfonts.com/css/aileron');
+
+/* Dashboard Container */
 .dashboard-container {
   position: fixed;
   top: 0;
@@ -4181,6 +4183,12 @@
   margin-top: -25px;
 }
 
+.ds-aside-header .logo-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ds-aside .logo {
   width: 40px;
   height: 40px;
@@ -4200,10 +4208,12 @@
 }
 
 .ds-brand-text {
-  font-weight: 700;
-  font-size: 18px;
+  font-family: 'Aileron Black', 'Inter', sans-serif;
+  font-weight: 900;
+  font-size: 22px;
   color: #111827;
   letter-spacing: -0.3px;
+  text-transform: lowercase;
 }
 
 .ds-side-nav {

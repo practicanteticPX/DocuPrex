@@ -9,6 +9,7 @@ import './WaitingTurn.css';
 import Notifications from './Notifications';
 import DocumentTypeSelector from './DocumentTypeSelector';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
+import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -3276,14 +3277,10 @@ function Dashboard({ user, onLogout }) {
           {/* Left Sidebar (visual only) */}
           <aside className="ds-aside">
             <div className="ds-aside-header">
-              <div className="logo">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+              <div className="logo-container">
+                <PyramidLoader />
+                <span className="ds-brand-text">docuprex.</span>
               </div>
-              <span className="ds-brand-text">DocuPrex</span>
             </div>
             <nav className="ds-side-nav">
               <button className={`ds-nav-item ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
