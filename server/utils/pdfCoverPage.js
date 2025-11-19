@@ -366,13 +366,18 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     let currentPage = coverPage;
     let signersInCurrentPage = 0;
-    const MAX_SIGNERS_PER_PAGE = 3; // Máximo 3 firmantes por página para más espacio
+    const SIGNER_HEIGHT = 80; // Altura aproximada por firmante (nombre + email + fecha + espacios)
+    const MIN_MARGIN_BOTTOM = 60; // Margen mínimo inferior
     let totalSignerPages = 1;
 
     for (let i = 0; i < sortedSigners.length; i++) {
       const signer = sortedSigners[i];
 
-      if (signersInCurrentPage >= MAX_SIGNERS_PER_PAGE) {
+      // Verificar si hay suficiente espacio para el siguiente firmante
+      const spaceNeeded = SIGNER_HEIGHT;
+      const spaceAvailable = yPosition - MIN_MARGIN_BOTTOM;
+
+      if (spaceAvailable < spaceNeeded && signersInCurrentPage > 0) {
         const newPage = pdfDoc.addPage([width, height]);
         currentPage = newPage;
         yPosition = height - margin;

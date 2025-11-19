@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './Notifications.css';
 import { API_URL } from '../../config/api';
+import Loader from '../Loader/Loader';
 
 /**
  * Helper function para manejar errores de autenticación en GraphQL
@@ -307,7 +308,7 @@ const Notifications = ({ onNotificationClick }) => {
           <div className="notifications-list">
             {loading ? (
               <div className="notifications-loading">
-                <div className="spinner-minimal"></div>
+                <Loader size="small" />
                 <p>Cargando notificaciones...</p>
               </div>
             ) : notifications.length === 0 ? (

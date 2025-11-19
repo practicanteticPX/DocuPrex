@@ -10,6 +10,7 @@ import Notifications from './Notifications';
 import DocumentTypeSelector from './DocumentTypeSelector';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
+import Loader from '../Loader/Loader';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -3758,7 +3759,7 @@ function Dashboard({ user, onLogout }) {
                     <>
                       {loadingSigners ? (
                         <div className="signers-loading">
-                          <span className="button-spinner"></span>
+                          <Loader size="small" />
                           <span>Cargando firmantes...</span>
                         </div>
                       ) : (
@@ -4264,7 +4265,7 @@ function Dashboard({ user, onLogout }) {
 
               {loadingPending ? (
                 <div className="loading-state-minimal">
-                  <div className="spinner-minimal"></div>
+                  <Loader size="medium" />
                   <p>Cargando documentos...</p>
                 </div>
               ) : pendingDocuments.length === 0 ? (
@@ -4626,7 +4627,7 @@ function Dashboard({ user, onLogout }) {
 
               {loadingSigned ? (
                 <div className="loading-state-minimal">
-                  <div className="spinner-minimal"></div>
+                  <Loader size="medium" />
                   <p>Cargando documentos...</p>
                 </div>
               ) : signedDocuments.length === 0 ? (
@@ -4958,7 +4959,7 @@ function Dashboard({ user, onLogout }) {
 
               {loadingMy ? (
                 <div className="loading-state-minimal">
-                  <div className="spinner-minimal"></div>
+                  <Loader size="medium" />
                   <p>Cargando documentos...</p>
                 </div>
               ) : myDocuments.length === 0 ? (
@@ -5316,7 +5317,7 @@ function Dashboard({ user, onLogout }) {
 
               {loadingRejected ? (
                 <div className="loading-state-minimal">
-                  <div className="spinner-minimal"></div>
+                  <Loader size="medium" />
                   <p>Cargando documentos rechazados...</p>
                 </div>
               ) : (rejectedByMe.length === 0 && rejectedByOthers.length === 0) ? (

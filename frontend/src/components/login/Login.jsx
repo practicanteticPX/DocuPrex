@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import './Login.css';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
+import Loader from '../Loader/Loader';
 import { API_URL } from '../../config/api';
 
 // Log para debug
@@ -172,7 +173,7 @@ function Login({ onLogin }) {
             >
               {loading ? (
                 <>
-                  <span className="button-spinner"></span>
+                  <Loader size="small" />
                   <span>Iniciando sesión...</span>
                 </>
               ) : (

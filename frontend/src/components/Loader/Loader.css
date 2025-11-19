@@ -1,0 +1,35 @@
+/* From Uiverse.io by JesusRafaelNavaCruz - Adaptado */
+.custom-loader {
+  border-radius: 50%;
+  box-sizing: border-box;
+  border-top: 4px solid #4B5563;
+  border-left: 4px solid #4B5563;
+  border-right: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  animation: customLoaderSpin 0.7s infinite linear;
+}
+
+/* Tamaños predefinidos */
+.custom-loader--small {
+  width: 24px;
+  height: 24px;
+  border-width: 3px;
+}
+
+.custom-loader--medium {
+  width: 48px;
+  height: 48px;
+  border-width: 4px;
+}
+
+.custom-loader--large {
+  width: 64px;
+  height: 64px;
+  border-width: 5px;
+}
+
+@keyframes customLoaderSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
