@@ -12,6 +12,7 @@ import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLo
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
 import LogoutButton from '../LogoutButton/LogoutButton';
+import HelpModal from '../HelpModal/HelpModal';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -90,6 +91,9 @@ function Dashboard({ user, onLogout }) {
   // Estado para modal de notificación elegante
   const [showNotification, setShowNotification] = useState(false);
   const [notificationData, setNotificationData] = useState({ title: '', message: '', type: 'info' });
+
+  // Estado para modal de ayuda
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Estados para confirmación de firma rápida (desde la tarjeta)
   const [showQuickSignConfirm, setShowQuickSignConfirm] = useState(false);
@@ -3548,7 +3552,7 @@ function Dashboard({ user, onLogout }) {
                         <h2 className="zapsign-title">Nuevo documento</h2>
                         <p className="zapsign-subtitle">Completa los detalles y sube tu archivo para firmar.</p>
                       </div>
-                      <button type="button" className="help-button">
+                      <button type="button" className="help-button" onClick={() => setShowHelpModal(true)}>
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -4080,26 +4084,7 @@ function Dashboard({ user, onLogout }) {
                         <h3 className="section-question">Resumen del envío</h3>
 
                         <div className="summary-card">
-                          <div className="summary-item">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="summary-icon">
-                              <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            <div>
-                              <h4>Documentos</h4>
-                              <p>{selectedFiles?.length || 0} archivo{(selectedFiles?.length || 0) !== 1 ? 's' : ''} seleccionado{(selectedFiles?.length || 0) !== 1 ? 's' : ''}</p>
-                            </div>
-                          </div>
-
-                          <div className="summary-item">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="summary-icon">
-                              <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.3503 17.623 3.8507 18.1676 4.55231C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89317 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            <div>
-                              <h4>Firmantes</h4>
-                              <p>{selectedSigners?.length || 0} persona{(selectedSigners?.length || 0) !== 1 ? 's' : ''} seleccionada{(selectedSigners?.length || 0) !== 1 ? 's' : ''}</p>
-                            </div>
-                          </div>
-
+                          {/* 1. Título */}
                           {documentTitle && (
                             <div className="summary-item">
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="summary-icon">
@@ -4111,6 +4096,42 @@ function Dashboard({ user, onLogout }) {
                               </div>
                             </div>
                           )}
+
+                          {/* 2. Tipo de documento */}
+                          {selectedDocumentType && (
+                            <div className="summary-item">
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="summary-icon">
+                                <path d="M7 21H17C18.1046 21 19 20.1046 19 19V9.41421C19 9.149 18.8946 8.89464 18.7071 8.70711L13.2929 3.29289C13.1054 3.10536 12.851 3 12.5858 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M9 7H10M9 11H15M9 15H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              <div>
+                                <h4>Tipo de documento</h4>
+                                <p>{selectedDocumentType.name}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. Firmantes */}
+                          <div className="summary-item">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="summary-icon">
+                              <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.3503 17.623 3.8507 18.1676 4.55231C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89317 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            <div>
+                              <h4>Firmantes</h4>
+                              <p>{selectedSigners?.length || 0} persona{(selectedSigners?.length || 0) !== 1 ? 's' : ''} seleccionada{(selectedSigners?.length || 0) !== 1 ? 's' : ''}</p>
+                            </div>
+                          </div>
+
+                          {/* 4. Documentos */}
+                          <div className="summary-item">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="summary-icon">
+                              <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            <div>
+                              <h4>Documentos</h4>
+                              <p>{selectedFiles?.length || 0} archivo{(selectedFiles?.length || 0) !== 1 ? 's' : ''} seleccionado{(selectedFiles?.length || 0) !== 1 ? 's' : ''}</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </>
@@ -6887,6 +6908,9 @@ function Dashboard({ user, onLogout }) {
 
       {/* Loader de creación de documento */}
       {showCreationLoader && <DocumentCreationLoader />}
+
+      {/* Modal de ayuda */}
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
 
     </div>
   );
