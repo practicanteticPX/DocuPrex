@@ -4175,9 +4175,9 @@
 .ds-aside-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-start;
   height: 56px;
-  padding: 12.5px 8px;
+  padding: 12.5px 16px;
   border-bottom: 1px solid #E5E7EB;
   margin-bottom: 16px;
   margin-top: -25px;
@@ -4186,7 +4186,12 @@
 .ds-aside-header .logo-container {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+}
+
+.ds-aside-header .logo-container .pyramid-loader {
+  margin-top: 2px;
+  margin-left: 4px;
 }
 
 .ds-aside .logo {
@@ -4210,9 +4215,9 @@
 .ds-brand-text {
   font-family: 'Aileron Black', 'Inter', sans-serif;
   font-weight: 900;
-  font-size: 22px;
+  font-size: 28px;
   color: #111827;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
   text-transform: lowercase;
 }
 

@@ -27,8 +27,8 @@
 .login-card {
   width: 100%;
   background: #ffffff;
-  border-radius: 20px;
-  padding: 32px 56px;
+  border-radius: 8px;
+  padding: 28px 48px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
   border: none;
   display: flex;
@@ -61,10 +61,15 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin-bottom: 0;
   height: auto;
   position: relative;
+}
+
+.logo-container .pyramid-loader {
+  margin-top: 2px;
+  margin-left: 2px;
 }
 
 .login-header h1 {
