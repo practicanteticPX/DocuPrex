@@ -70,6 +70,8 @@
 .logo-container .pyramid-loader {
   margin-top: 2px;
   margin-left: 2px;
+  min-width: 35px;
+  max-width: 35px;
 }
 
 .login-header h1 {

@@ -5,7 +5,8 @@
   height: 35px;
   display: block;
   transform-style: preserve-3d;
-  transform: rotateX(-20deg) scale(0.5);
+  transform: rotateX(-15deg) scale(0.5);
+  flex-shrink: 0;
 }
 
 .pyramid-loader .wrapper {

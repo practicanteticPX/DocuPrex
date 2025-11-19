@@ -95,6 +95,31 @@
   max-height: 480px;
 }
 
+/* Scrollbar moderno y delgado */
+.notifications-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notifications-list::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+.notifications-list::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 10px;
+}
+
+.notifications-list::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Para Firefox */
+.notifications-list {
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent;
+}
+
 /* Loading state */
 .notifications-loading {
   display: flex;
