@@ -6,6 +6,8 @@
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -148,7 +150,7 @@
 .help-step-number {
   width: 28px;
   height: 28px;
-  background: #6B7280;
+  background: #6366F2;
   color: white;
   border-radius: 50%;
   display: flex;
@@ -252,7 +254,7 @@
 }
 
 .help-modal-button {
-  background: #6B7280;
+  background: #6366F2;
   color: white;
   border: none;
   border-radius: 6px;
@@ -264,7 +266,7 @@
 }
 
 .help-modal-button:hover {
-  background: #4B5563;
+  background: #4F46E5;
 }
 
 .help-modal-button:active {
