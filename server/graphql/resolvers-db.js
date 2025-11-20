@@ -457,7 +457,13 @@ const resolvers = {
           throw new Error('Usuario o contraseña inválidos');
         }
 
+        // Extraer username del email
         const username = email.includes('@') ? email.split('@')[0] : email;
+
+        console.log('🔍 Intentando autenticar usuario:', username);
+        console.log('🔍 Username length:', username.length);
+        console.log('🔍 Username charCodes:', [...username].map(c => c.charCodeAt(0)));
+
         const ldapUser = await authenticateUser(username, password);
 
         let result = await query(

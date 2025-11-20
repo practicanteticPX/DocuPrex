@@ -53,6 +53,10 @@ function Login({ onLogin }) {
           email: formData.username,
           password: formData.password
         }
+      }, {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8'
+        }
       });
 
       // Verificar si hay errores de GraphQL y mejorar logging para debug

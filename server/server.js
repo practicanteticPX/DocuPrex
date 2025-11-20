@@ -73,7 +73,24 @@ async function startServer() {
     credentials: true,
   }));
 
-  app.use(express.json());
+  // Configurar express.json para manejar correctamente UTF-8
+  app.use(express.json({
+    charset: 'utf-8',
+    verify: (req, res, buf, encoding) => {
+      // Asegurar que el buffer se interprete como UTF-8
+      if (buf && buf.length) {
+        req.rawBody = buf.toString('utf8');
+      }
+    }
+  }));
+
+  // Middleware adicional para asegurar UTF-8 en requests
+  app.use((req, res, next) => {
+    if (req.headers['content-type']?.includes('application/json')) {
+      req.headers['content-type'] = 'application/json; charset=utf-8';
+    }
+    next();
+  });
 
   // Servir archivos estáticos de la carpeta uploads con headers apropiados para PDFs
   // IMPORTANTE: Esto debe ir ANTES del middleware de UTF-8 para que no se sobrescriban los headers

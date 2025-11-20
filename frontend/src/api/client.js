@@ -34,7 +34,7 @@ class GraphQLClient {
       const token = options.token || this.getToken();
 
       const headers = {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
         ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers
       };

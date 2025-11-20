@@ -56,11 +56,31 @@ async function unbindSafe(client) {
 }
 
 /**
+ * Escapa caracteres especiales para filtros LDAP según RFC 4515
+ * @param {string} str - String a escapar
+ * @returns {string} - String escapado
+ */
+function escapeLdapFilter(str) {
+  // No escapar caracteres UTF-8 normales, solo los que son especiales en LDAP
+  return str
+    .replace(/\\/g, '\\5c')  // Backslash
+    .replace(/\*/g, '\\2a')  // Asterisco
+    .replace(/\(/g, '\\28')  // Paréntesis izquierdo
+    .replace(/\)/g, '\\29')  // Paréntesis derecho
+    .replace(/\0/g, '\\00'); // Null
+}
+
+/**
  * Compone el filtro de búsqueda para el usuario
+ * Asegura que el username esté correctamente codificado en UTF-8 y escapado
  */
 function composeUserSearchFilter(username) {
+  // Escapar caracteres especiales pero mantener UTF-8 (como Ñ)
+  const escapedUsername = escapeLdapFilter(username);
   const base = AD_USER_SEARCH_FILTER || '(&(objectCategory=person)(objectClass=user))';
-  return `(&${base}(sAMAccountName=${username}))`;
+  console.log(`🔍 Username original: "${username}"`);
+  console.log(`🔍 Username escapado: "${escapedUsername}"`);
+  return `(&${base}(sAMAccountName=${escapedUsername}))`;
 }
 
 /**
@@ -133,20 +153,81 @@ async function searchUserEntry(username) {
 }
 
 /**
+ * Decodifica secuencias UTF-8 escapadas en formato LDAP (\XX\XX)
+ * Ejemplo: "Ria\c3\b1o" -> "Riaño"
+ */
+function decodeLdapDN(dn) {
+  // Encontrar todas las secuencias \XX y convertirlas a bytes
+  const bytes = [];
+  let i = 0;
+
+  while (i < dn.length) {
+    if (dn[i] === '\\' && i + 2 < dn.length) {
+      const hexStr = dn.substr(i + 1, 2);
+      if (/^[0-9a-fA-F]{2}$/.test(hexStr)) {
+        bytes.push(parseInt(hexStr, 16));
+        i += 3;
+        continue;
+      }
+    }
+    bytes.push(dn.charCodeAt(i));
+    i++;
+  }
+
+  // Convertir los bytes a string UTF-8
+  return Buffer.from(bytes).toString('utf8');
+}
+
+/**
+ * Codifica el DN para asegurar que esté en el formato correcto para bind
+ * Convierte bytes UTF-8 a la representación que LDAP espera
+ */
+function encodeLdapDN(dn) {
+  // Si el DN ya tiene secuencias escapadas (\XX), dejarlo como está
+  if (/\\[0-9a-fA-F]{2}/.test(dn)) {
+    return dn;
+  }
+  // Si tiene caracteres UTF-8 no-ASCII, convertirlos a secuencias escapadas
+  return dn.replace(/[^\x00-\x7F]/g, (char) => {
+    const bytes = Buffer.from(char, 'utf8');
+    return Array.from(bytes)
+      .map(byte => '\\' + byte.toString(16).padStart(2, '0'))
+      .join('');
+  });
+}
+
+/**
  * Verifica la contraseña del usuario haciendo bind con su DN
  */
 async function verifyUserPassword(userDN, password) {
   const client = createLdapClient();
-  console.log(`🔐 Verificando contraseña para DN: ${userDN}`);
+
+  // Probar con el DN tal como viene de LDAP (ya escapado)
+  console.log(`🔐 Verificando contraseña para DN original: ${userDN}`);
+
+  // También intentar con DN decodificado en caso de que LDAP lo necesite
+  const decodedDN = decodeLdapDN(userDN);
+  console.log(`🔐 DN decodificado: ${decodedDN}`);
+
   try {
+    // Intentar primero con el DN original (escapado)
     await new Promise((resolve, reject) =>
       client.bind(userDN, password, err => {
         if (err) {
-          console.error(`❌ Error al verificar contraseña:`, err.message);
-          return reject(err);
+          console.log(`⚠️  Bind con DN escapado falló, intentando con DN decodificado...`);
+          // Si falla, intentar con el DN decodificado
+          client.bind(decodedDN, password, err2 => {
+            if (err2) {
+              console.error(`❌ Error al verificar contraseña con ambos DNs:`, err2.message);
+              return reject(err2);
+            }
+            console.log(`✓ Contraseña verificada correctamente con DN decodificado`);
+            resolve();
+          });
+        } else {
+          console.log(`✓ Contraseña verificada correctamente con DN escapado`);
+          resolve();
         }
-        console.log(`✓ Contraseña verificada correctamente`);
-        resolve();
       })
     );
     return true;
@@ -167,6 +248,7 @@ async function verifyUserPassword(userDN, password) {
 async function authenticateUser(username, password) {
   try {
     console.log(`🔐 Intentando autenticar usuario: ${username}`);
+    console.log(`🔤 Username bytes:`, Buffer.from(username, 'utf8'));
 
     // Buscar el usuario en AD
     const user = await searchUserEntry(username);
