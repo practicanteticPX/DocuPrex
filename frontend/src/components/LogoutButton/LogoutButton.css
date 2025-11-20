@@ -1,16 +1,22 @@
-/* Botón de logout estático */
+/* Botón de logout moderno */
 .Btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 45px;
-  height: 45px;
-  border: none;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid #E5E7EB;
   border-radius: 8px;
   cursor: pointer;
   position: relative;
   box-shadow: none;
-  background-color: #F3F4F6;
+  background-color: white;
+  transition: all 0.2s ease;
+}
+
+.Btn:hover {
+  background-color: #F9FAFB;
+  border-color: #D1D5DB;
 }
 
 .sign {
@@ -20,17 +26,19 @@
 }
 
 .sign svg {
-  width: 17px;
-}
-
-.sign svg path {
-  fill: rgb(44, 44, 44);
+  width: 18px;
+  height: 18px;
+  color: #6366F1;
 }
 
 .text {
-  display: none;
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6366F1;
+  white-space: nowrap;
 }
 
 .Btn:active {
-  transform: translate(2px, 2px);
+  transform: scale(0.98);
 }
