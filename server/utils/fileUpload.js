@@ -23,6 +23,19 @@ const normalizeUserName = (name) => {
 };
 
 /**
+ * Normaliza el nombre de un archivo
+ * MANTIENE tildes, ñ y caracteres en español
+ * Solo elimina caracteres que causan problemas en sistemas de archivos
+ */
+const normalizeFileName = (fileName) => {
+  return fileName
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_') // Solo reemplazar caracteres inválidos en Windows/Linux
+    .replace(/\s+/g, '_') // Reemplazar espacios por guiones bajos
+    .replace(/_+/g, '_') // Reemplazar múltiples _ por uno solo
+    .trim();
+};
+
+/**
  * Obtiene o crea la carpeta del usuario
  */
 const getUserUploadDir = (userName) => {
@@ -50,11 +63,41 @@ const storage = multer.diskStorage({
     cb(null, userDir);
   },
   filename: function (req, file, cb) {
-    // Generar nombre único: timestamp-random-original.pdf
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    const nameWithoutExt = path.basename(file.originalname, ext);
-    cb(null, `${nameWithoutExt}-${uniqueSuffix}${ext}`);
+    // Decodificar el nombre original correctamente (multer puede enviarlo en latin1)
+    let originalName = file.originalname;
+
+    // Si el nombre viene con encoding incorrecto, corregirlo
+    try {
+      // Intentar decodificar de latin1 a utf8
+      const buffer = Buffer.from(originalName, 'latin1');
+      const decodedName = buffer.toString('utf8');
+
+      // Verificar si la decodificación tiene sentido (contiene caracteres válidos)
+      if (decodedName && !decodedName.includes('�')) {
+        originalName = decodedName;
+      }
+    } catch (e) {
+      // Si falla, usar el nombre original
+    }
+
+    // Obtener nombre y extensión
+    const ext = path.extname(originalName);
+    const nameWithoutExt = path.basename(originalName, ext);
+
+    // MANTENER EL NOMBRE ORIGINAL TAL CUAL - SIN MODIFICACIONES
+    // Espacios, tildes, ñ, símbolos - TODO se mantiene exactamente igual
+
+    // Si el archivo ya existe, agregar (1), (2), (3), etc.
+    const userDir = getUserUploadDir(req.user.name);
+    let finalName = `${nameWithoutExt}${ext}`;
+    let counter = 1;
+
+    while (fs.existsSync(path.join(userDir, finalName))) {
+      finalName = `${nameWithoutExt} (${counter})${ext}`;
+      counter++;
+    }
+
+    cb(null, finalName);
   }
 });
 
@@ -92,5 +135,6 @@ module.exports = {
   uploadMultiplePDFs,
   uploadDir,
   normalizeUserName,
+  normalizeFileName,
   getUserUploadDir,
 };

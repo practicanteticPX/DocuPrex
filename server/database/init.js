@@ -32,7 +32,6 @@ async function initDatabase() {
     console.log('  - documents');
     console.log('  - signatures');
     console.log('  - document_signers');
-    console.log('  - audit_log');
     console.log('  - notifications');
     console.log('\nVistas creadas:');
     console.log('  - v_documents_with_signatures');

@@ -9,6 +9,7 @@ const {
   notificarDocumentoFirmadoCompleto,
   notificarDocumentoRechazado
 } = require('../services/emailService');
+const pdfLogger = require('../utils/pdfLogger');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 
@@ -431,7 +432,7 @@ const resolvers = {
      * @returns {Promise<{token: string, user: Object}>} JWT token and user object
      * @throws {Error} When credentials are invalid or authentication fails
      */
-    login: async (_, { email, password }) => {
+    login: async (_, { email, password }, { ipAddress }) => {
       try {
         const localUserResult = await query(
           'SELECT * FROM users WHERE email = $1 AND password_hash IS NOT NULL',
@@ -450,6 +451,9 @@ const resolvers = {
               JWT_SECRET,
               { expiresIn: process.env.JWT_EXPIRES || '8h' }
             );
+
+            // Registrar login en logs
+            pdfLogger.logLogin(localUser.name, ipAddress || 'IP desconocida');
 
             return { token, user: localUser };
           }
@@ -496,6 +500,9 @@ const resolvers = {
           JWT_SECRET,
           { expiresIn: process.env.JWT_EXPIRES || '8h' }
         );
+
+        // Registrar login en logs
+        pdfLogger.logLogin(user.name, ipAddress || 'IP desconocida');
 
         return { token, user };
       } catch (error) {
@@ -961,6 +968,39 @@ const resolvers = {
       } catch (notifError) {
         console.error('Error al crear notificaciones de firmantes:', notifError);
         // No lanzamos el error para que no falle la asignación
+      }
+
+      // ========== REGISTRAR ASIGNACIONES EN LOGS ==========
+      try {
+        const docTitleResult = await query('SELECT title FROM documents WHERE id = $1', [documentId]);
+        if (docTitleResult.rows.length > 0) {
+          const documentTitle = docTitleResult.rows[0].title;
+
+          // Registrar cada asignación
+          for (const assignment of signerAssignments) {
+            const signerResult = await query('SELECT name FROM users WHERE id = $1', [assignment.userId]);
+            if (signerResult.rows.length > 0) {
+              const signerName = signerResult.rows[0].name;
+
+              // Obtener nombres de roles
+              let roleText = null;
+              if (assignment.roleIds && assignment.roleIds.length > 0) {
+                const rolesResult = await query(
+                  'SELECT role_name FROM document_type_roles WHERE id = ANY($1)',
+                  [assignment.roleIds]
+                );
+                if (rolesResult.rows.length > 0) {
+                  roleText = rolesResult.rows.map(r => r.role_name).join(', ');
+                }
+              }
+
+              pdfLogger.logSignerAssigned(user.name, signerName, documentTitle, roleText);
+            }
+          }
+        }
+      } catch (logError) {
+        console.error('Error al registrar logs de asignación:', logError);
+        // No lanzar error para que no falle la asignación
       }
 
       // ========== GENERAR O ACTUALIZAR PÁGINA DE PORTADA ==========
@@ -1757,6 +1797,9 @@ const resolvers = {
           const rejectorResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
           const rejectorName = rejectorResult.rows.length > 0 ? rejectorResult.rows[0].name : 'Usuario';
 
+          // Registrar rechazo en logs
+          pdfLogger.logDocumentRejected(rejectorName, doc.title, reason || 'Sin razón especificada');
+
           // 2. Crear notificación interna para el creador (si no es quien rechazó)
           if (doc.uploaded_by !== user.id) {
             await query(
@@ -1800,11 +1843,6 @@ const resolvers = {
         console.error('Error al crear notificaciones de rechazo:', notifError);
         // No lanzamos el error para que no falle el rechazo
       }
-
-      await query(
-        'INSERT INTO audit_log (user_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5)',
-        [user.id, 'reject', 'document', documentId, JSON.stringify({ reason })]
-      );
 
       // ========== ACTUALIZAR PÁGINA DE FIRMANTES ==========
       try {
@@ -2027,6 +2065,9 @@ const resolvers = {
         if (docResult.rows.length > 0) {
           const doc = docResult.rows[0];
 
+          // Registrar firma en logs
+          pdfLogger.logDocumentSigned(user.name, doc.title);
+
           // 1. Eliminar la notificación de signature_request del usuario que acaba de firmar
           await query(
             `DELETE FROM notifications
@@ -2146,11 +2187,6 @@ const resolvers = {
         console.error('Error al crear notificaciones de firma:', notifError);
         // No lanzamos el error para que no falle la firma
       }
-
-      await query(
-        'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
-        [user.id, 'sign', 'document', documentId]
-      );
 
       // ========== ACTUALIZAR PÁGINA DE FIRMANTES ==========
       try {

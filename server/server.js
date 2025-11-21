@@ -9,6 +9,8 @@ require('dotenv').config();
 
 const { typeDefs, resolvers } = require('./graphql');
 const uploadRoutes = require('./routes/upload');
+const logsRoutes = require('./routes/logs');
+const pdfLogger = require('./utils/pdfLogger');
 const { startCleanupService } = require('./services/notificationCleanup');
 const { query } = require('./database/db');
 
@@ -118,6 +120,9 @@ async function startServer() {
   // Rutas REST para subida de archivos
   app.use('/api', uploadRoutes);
 
+  // Rutas REST para logs en TXT/PDF
+  app.use('/api/logs', logsRoutes);
+
   // Ruta para visualizar documentos con el nombre correcto
   app.get('/api/view/:documentId', async (req, res) => {
     try {
@@ -175,6 +180,10 @@ async function startServer() {
     try {
       const { documentId } = req.params;
 
+      // Obtener usuario del token si existe
+      const token = req.headers.authorization?.replace('Bearer ', '') || '';
+      const user = getUserFromToken(token);
+
       // Buscar el documento en la base de datos
       const result = await query('SELECT id, title, file_path FROM documents WHERE id = $1', [documentId]);
 
@@ -185,6 +194,11 @@ async function startServer() {
       const document = result.rows[0];
       const filePath = document.file_path;
       const title = document.title || 'documento';
+
+      // Registrar descarga en logs
+      if (user && user.name) {
+        pdfLogger.logDocumentDownloaded(user.name, title);
+      }
 
       // Construir la ruta completa del archivo
       let fullPath;
@@ -229,7 +243,10 @@ async function startServer() {
       const token = req.headers.authorization?.replace('Bearer ', '') || '';
       const user = getUserFromToken(token);
 
-      return { user };
+      // Obtener IP del cliente
+      const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'IP desconocida';
+
+      return { user, req, ipAddress };
     },
     formatError: (error) => {
       console.error('GraphQL Error:', error);

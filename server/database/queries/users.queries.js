@@ -169,18 +169,6 @@ const getActiveUsers = `
   ORDER BY u.name ASC
 `;
 
-/**
- * Obtiene el último login de un usuario (si existe tabla de logs)
- */
-const getLastLogin = `
-  SELECT
-    user_id,
-    MAX(created_at) as last_login
-  FROM audit_log
-  WHERE action = 'login' AND user_id = $1
-  GROUP BY user_id
-`;
-
 module.exports = {
   getUserById,
   getUserByEmail,
@@ -197,6 +185,5 @@ module.exports = {
   checkAdUsernameExists,
   getUserCount,
   getUserCountByRole,
-  getActiveUsers,
-  getLastLogin
+  getActiveUsers
 };

@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Bash(del \"d:\\docuprex_docker\\frontend\\src\\components\\login\\Login.theme.css\")"
+      "Bash(del \"d:\\docuprex_docker\\frontend\\src\\components\\login\\Login.theme.css\")",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(cat:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(timeout 10 docker logs:*)",
+      "Bash(docker logs:*)",
+      "Bash(timeout 12 docker logs:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(npm install:*)",
+      "Bash(docker-compose stop:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

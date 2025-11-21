@@ -5,6 +5,7 @@ const { uploadSinglePDF, uploadMultiplePDFs, normalizeUserName, uploadDir } = re
 const { mergePDFs, cleanupTempFiles, validatePDFs } = require('../utils/pdfMerger');
 const { query } = require('../database/db');
 const jwt = require('jsonwebtoken');
+const pdfLogger = require('../utils/pdfLogger');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
@@ -94,21 +95,10 @@ router.post('/upload', authenticate, (req, res) => {
 
       const document = result.rows[0];
 
-      // Registrar en auditoría
-      await query(
-        `INSERT INTO audit_log (user_id, action, entity_type, entity_id, details, ip_address)
-        VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          req.user.id,
-          'upload',
-          'document',
-          document.id,
-          JSON.stringify({ title, file_name: req.file.filename }),
-          req.ip
-        ]
-      );
+      // Registrar en logs
+      pdfLogger.logDocumentCreated(req.user.name, document.title);
 
-      console.log(`âœ… Documento subido: ${document.title} (ID: ${document.id})`);
+      console.log(`âœ… Documento subido: ${document.title}`);
 
       res.json({
         success: true,
@@ -200,18 +190,9 @@ router.post('/upload-multiple', authenticate, (req, res) => {
         );
         const document = result.rows[0];
 
-        await query(
-          `INSERT INTO audit_log (user_id, action, entity_type, entity_id, details, ip_address)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            req.user.id,
-            'upload',
-            'document',
-            document.id,
-            JSON.stringify({ title, file_name: f.filename }),
-            req.ip
-          ]
-        );
+        // Registrar en logs
+        pdfLogger.logDocumentCreated(req.user.name, document.title);
+
         created.push(document);
       }
 
@@ -340,26 +321,6 @@ router.post('/upload-unified', authenticate, (req, res) => {
       );
 
       const document = result.rows[0];
-
-      // Registrar en auditoría
-      await query(
-        `INSERT INTO audit_log (user_id, action, entity_type, entity_id, details, ip_address)
-        VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          req.user.id,
-          'upload',
-          'document',
-          document.id,
-          JSON.stringify({
-            title: docTitle,
-            file_name: mergedFileName,
-            files_merged: req.files.length,
-            total_pages: mergeResult.totalPages,
-            source_files: req.files.map(f => f.originalname)
-          }),
-          req.ip
-        ]
-      );
 
       // Eliminar archivos temporales originales
       console.log('🗑️  Limpiando archivos temporales...');

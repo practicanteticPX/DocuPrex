@@ -85,7 +85,6 @@ async function truncateTables() {
   log('\n🗄️  Eliminando todos los registros de la base de datos...', 'yellow');
 
   const tables = [
-    'audit_log',
     'notifications',
     'signatures',
     'document_signers',
@@ -143,7 +142,7 @@ async function showStatistics() {
   log('\n📊 Verificando estado de la base de datos...', 'yellow');
 
   try {
-    const tables = ['users', 'documents', 'signatures', 'notifications', 'audit_log'];
+    const tables = ['users', 'documents', 'signatures', 'notifications'];
 
     for (const table of tables) {
       const result = await query(`SELECT COUNT(*) as count FROM ${table}`);

@@ -178,27 +178,6 @@ CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
 
 -- ==================================================
--- TABLA 8: audit_log
--- Registro de auditoría para trazabilidad
--- ==================================================
-CREATE TABLE IF NOT EXISTS audit_log (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    action VARCHAR(100) NOT NULL, -- 'upload', 'sign', 'reject', 'download', 'delete', etc.
-    entity_type VARCHAR(50) NOT NULL, -- 'document', 'signature', 'user'
-    entity_id UUID NOT NULL,
-    details JSONB, -- Detalles adicionales en formato JSON
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Índices para audit_log
-CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC);
-
--- ==================================================
 -- FUNCIONES Y TRIGGERS
 -- ==================================================
 

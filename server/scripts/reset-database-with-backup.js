@@ -132,7 +132,7 @@ async function truncateTables() {
   try {
     await query('SET session_replication_role = replica;');
 
-    const tables = ['audit_log', 'notifications', 'signatures', 'document_signers', 'documents', 'users'];
+    const tables = ['notifications', 'signatures', 'document_signers', 'documents', 'users'];
 
     for (const table of tables) {
       await query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE;`);

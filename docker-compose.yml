@@ -30,11 +30,12 @@ services:
     depends_on:
       - postgres-db
     volumes:
-      - ./server:/app
-      - /app/node_modules
+      - ./server/uploads:/app/uploads
+      - ./server/logs:/app/logs
+      - ./server/.env:/app/.env
     env_file:
       - ./server/.env
-    command: npm run dev
+    command: npm start
     # Configuración DNS para resolver dominios externos
     dns:
       - 8.8.8.8
@@ -53,14 +54,13 @@ services:
     restart: unless-stopped
     ports:
       # Exponer solo en IP específica para usuarios remotos (más seguro que 0.0.0.0)
-      - "192.168.0.30:5173:5173"
+      - "192.168.0.30:5173:4173"
     depends_on:
       - server
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend/dist:/app/dist
     # No necesita env_file aquí, Vite lo toma de frontend/.env al construir/ejecutar
-    command: npm run dev # El --host ya está en el Dockerfile CMD
+    command: npm run preview -- --host
     networks:
       - npm_docker_default  # Red compartida con NPM
       - default             # Red interna para comunicarse con server
