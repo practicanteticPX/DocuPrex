@@ -9,6 +9,8 @@
   justify-content: center;
   overflow: hidden;
   background: #f5f7fb;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
 }
 
 .login-content {
@@ -133,7 +135,8 @@
 
 .form-group label {
   font-size: 13px;
-  font-weight: 500;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
   color: #374151;
   letter-spacing: 0px;
   display: none;
@@ -165,7 +168,8 @@
   background: #e8f0fe;
   color: #111827;
   transition: all 0.2s ease;
-  font-family: inherit;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
   text-indent: 0px;
 }
 
@@ -215,6 +219,8 @@
   border-radius: 12px;
   color: #DC2626;
   font-size: 13px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
   line-height: 1.5;
   animation: slideDown 0.3s ease;
 }
@@ -241,7 +247,8 @@
   width: 100%;
   padding: 14px 20px;
   font-size: 15px;
-  font-weight: 600;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
   color: white;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   border: none;
@@ -311,6 +318,8 @@
 
 .help-text {
   font-size: 13px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
   color: #6B7280;
   line-height: 1.5;
   display: flex;
@@ -322,7 +331,8 @@
 .help-text a {
   color: #6366F1;
   text-decoration: none;
-  font-weight: 600;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
   transition: all 0.2s ease;
 }
 

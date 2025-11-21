@@ -7,6 +7,8 @@
   height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
 }
 
 .dashboard-background {
@@ -1435,7 +1437,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   min-width: 160px;
   transform: none !important;
 }
@@ -1607,7 +1609,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .modal-alert-button.success {
@@ -5477,7 +5479,7 @@
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .pdf-viewer-waiting-message svg {

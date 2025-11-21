@@ -1,5 +1,5 @@
 :root {
-  font-family: 'Aileron', 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -26,7 +26,8 @@ html.fonts-loaded {
 
 /* Asegurar que el body use la fuente correcta desde el inicio */
 body {
-  font-family: 'Aileron', 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
 }
 
 /* Scrollbar moderno y delgado para todo el navegador */
