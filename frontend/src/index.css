@@ -1,5 +1,5 @@
 :root {
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Aileron', 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -13,6 +13,20 @@
   -moz-osx-font-smoothing: grayscale;
 
   background-color: white;
+}
+
+/* Prevenir FOUT - ocultar texto hasta que las fuentes carguen */
+html {
+  visibility: hidden;
+}
+
+html.fonts-loaded {
+  visibility: visible;
+}
+
+/* Asegurar que el body use la fuente correcta desde el inicio */
+body {
+  font-family: 'Aileron', 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
 
 /* Scrollbar moderno y delgado para todo el navegador */

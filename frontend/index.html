@@ -7,7 +7,35 @@
     <meta name="description" content="Sistema de Firmas Digitales - Prexxa" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.cdnfonts.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.cdnfonts.com/css/aileron">
+    <link href="https://fonts.cdnfonts.com/css/aileron" rel="stylesheet">
+    <script>
+      // Detectar cuando las fuentes están cargadas
+      if ('fonts' in document) {
+        Promise.all([
+          document.fonts.load('400 1em Aileron'),
+          document.fonts.load('500 1em Aileron'),
+          document.fonts.load('600 1em Aileron'),
+        ]).then(function() {
+          document.documentElement.classList.add('fonts-loaded');
+        }).catch(function() {
+          // Si falla la carga, mostrar igual después de 100ms
+          setTimeout(function() {
+            document.documentElement.classList.add('fonts-loaded');
+          }, 100);
+        });
+      } else {
+        // Fallback para navegadores antiguos
+        document.documentElement.classList.add('fonts-loaded');
+      }
+
+      // Timeout de seguridad: mostrar después de 300ms máximo
+      setTimeout(function() {
+        document.documentElement.classList.add('fonts-loaded');
+      }, 300);
+    </script>
     <title>DocuPrex</title>
   </head>
   <body>

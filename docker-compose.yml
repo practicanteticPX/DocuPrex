@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Exponer solo en IP específica para usuarios remotos (más seguro que 0.0.0.0)
+      # Exponer solo en IP específica para usuarios remotos 
       # NPM también puede acceder por nombre de contenedor (firmas_server) vía red Docker
       - "192.168.0.30:5001:5001"
     depends_on:
@@ -53,7 +53,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Exponer solo en IP específica para usuarios remotos (más seguro que 0.0.0.0)
+      # Exponer solo en IP específica para usuarios remotos 
       - "192.168.0.30:5173:4173"
     depends_on:
       - server
