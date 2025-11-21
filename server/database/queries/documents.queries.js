@@ -338,6 +338,80 @@ const getRecentDocuments = `
   LIMIT 100
 `;
 
+/**
+ * Obtiene documentos antiguos (más de 3 meses) para limpieza
+ */
+const getOldDocuments = `
+  SELECT
+    d.id,
+    d.title,
+    d.file_path,
+    d.created_at,
+    u.name as uploader_name,
+    u.email as uploader_email
+  FROM documents d
+  JOIN users u ON d.uploaded_by = u.id
+  WHERE d.created_at < NOW() - INTERVAL '3 months'
+  ORDER BY d.created_at ASC
+`;
+
+/**
+ * Elimina documentos antiguos (más de 3 meses) y todos sus rastros
+ * Esta query elimina en cascada:
+ * - Notificaciones asociadas
+ * - Firmas asociadas
+ * - Asignaciones de firmantes
+ * - El documento mismo
+ */
+const deleteOldDocuments = `
+  WITH old_documents AS (
+    SELECT id, file_path
+    FROM documents
+    WHERE created_at < NOW() - INTERVAL '3 months'
+  ),
+  deleted_notifications AS (
+    DELETE FROM notifications
+    WHERE document_id IN (SELECT id FROM old_documents)
+    RETURNING id
+  ),
+  deleted_signatures AS (
+    DELETE FROM signatures
+    WHERE document_id IN (SELECT id FROM old_documents)
+    RETURNING id
+  ),
+  deleted_signers AS (
+    DELETE FROM document_signers
+    WHERE document_id IN (SELECT id FROM old_documents)
+    RETURNING document_id
+  ),
+  deleted_documents AS (
+    DELETE FROM documents
+    WHERE id IN (SELECT id FROM old_documents)
+    RETURNING id, file_path
+  )
+  SELECT
+    (SELECT COUNT(*) FROM deleted_documents) as documents_deleted,
+    (SELECT COUNT(*) FROM deleted_signatures) as signatures_deleted,
+    (SELECT COUNT(*) FROM deleted_notifications) as notifications_deleted,
+    (SELECT array_agg(file_path) FROM deleted_documents) as deleted_file_paths
+`;
+
+/**
+ * Obtiene estadísticas de documentos que serían eliminados
+ */
+const getOldDocumentsStats = `
+  SELECT
+    COUNT(DISTINCT d.id) as documents_count,
+    COUNT(DISTINCT s.id) as signatures_count,
+    COUNT(DISTINCT n.id) as notifications_count,
+    MIN(d.created_at) as oldest_document,
+    MAX(d.created_at) as newest_document_to_delete
+  FROM documents d
+  LEFT JOIN signatures s ON d.id = s.document_id
+  LEFT JOIN notifications n ON d.id = n.document_id
+  WHERE d.created_at < NOW() - INTERVAL '3 months'
+`;
+
 module.exports = {
   getDocumentById,
   getAllDocuments,
@@ -356,5 +430,8 @@ module.exports = {
   getDocumentStats,
   getDocumentStatsByUser,
   canUserSignDocument,
-  getRecentDocuments
+  getRecentDocuments,
+  getOldDocuments,
+  deleteOldDocuments,
+  getOldDocumentsStats
 };

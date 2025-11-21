@@ -12,6 +12,7 @@ const uploadRoutes = require('./routes/upload');
 const logsRoutes = require('./routes/logs');
 const pdfLogger = require('./utils/pdfLogger');
 const { startCleanupService } = require('./services/notificationCleanup');
+const { startDocumentCleanupService } = require('./services/documentCleanup');
 const { query } = require('./database/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
@@ -295,6 +296,10 @@ async function startServer() {
     // Iniciar servicio de limpieza automática de notificaciones
     startCleanupService();
     console.log(`🧹 Servicio de limpieza de notificaciones iniciado (cada 24h a las 2:00 AM)`);
+
+    // Iniciar servicio de limpieza automática de documentos antiguos
+    startDocumentCleanupService();
+    console.log(`🗑️  Servicio de limpieza de documentos antiguos iniciado (cada 24h a las 3:00 AM)`);
   });
 }
 
