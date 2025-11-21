@@ -20,30 +20,37 @@ if (!fs.existsSync(logsDir)) {
 
 /**
  * Formatea la fecha y hora en formato legible
+ * Zona horaria: America/Bogota (Colombia)
  */
 function formatDateTime(date) {
+  // Convertir a hora de Bogotá (UTC-5)
   const d = new Date(date);
+  const bogotaTime = new Date(d.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+
   const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
                   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-  const day = d.getDate();
-  const month = months[d.getMonth()];
-  const year = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const day = bogotaTime.getDate();
+  const month = months[bogotaTime.getMonth()];
+  const year = bogotaTime.getFullYear();
+  const hours = String(bogotaTime.getHours()).padStart(2, '0');
+  const minutes = String(bogotaTime.getMinutes()).padStart(2, '0');
+  const seconds = String(bogotaTime.getSeconds()).padStart(2, '0');
 
   return `${day} de ${month} de ${year} a las ${hours}:${minutes}:${seconds}`;
 }
 
 /**
  * Obtiene el nombre del archivo de log del día actual
+ * Zona horaria: America/Bogota (Colombia)
  */
 function getTodayLogFileName() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
+  const now = new Date();
+  const bogotaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+
+  const year = bogotaTime.getFullYear();
+  const month = String(bogotaTime.getMonth() + 1).padStart(2, '0');
+  const day = String(bogotaTime.getDate()).padStart(2, '0');
 
   return `log_${year}-${month}-${day}.txt`;
 }
@@ -165,12 +172,12 @@ function getMonthName(monthNum) {
  */
 
 // Autenticación
-function logLogin(userName, ipAddress) {
-  writeLog(`${userName} inició sesión desde ${ipAddress}`);
+function logLogin(userName) {
+  writeLog(`${userName} inició sesión`);
 }
 
-function logLoginFailed(email, ipAddress) {
-  writeLog(`Intento fallido de inicio de sesión para ${email} desde ${ipAddress}`);
+function logLoginFailed(email) {
+  writeLog(`Intento fallido de inicio de sesión para ${email}`);
 }
 
 function logLogout(userName) {

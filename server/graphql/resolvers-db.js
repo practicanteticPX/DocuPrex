@@ -453,7 +453,7 @@ const resolvers = {
             );
 
             // Registrar login en logs
-            pdfLogger.logLogin(localUser.name, ipAddress || 'IP desconocida');
+            pdfLogger.logLogin(localUser.name);
 
             return { token, user: localUser };
           }
@@ -502,7 +502,7 @@ const resolvers = {
         );
 
         // Registrar login en logs
-        pdfLogger.logLogin(user.name, ipAddress || 'IP desconocida');
+        pdfLogger.logLogin(user.name);
 
         return { token, user };
       } catch (error) {
@@ -972,6 +972,13 @@ const resolvers = {
 
       // ========== REGISTRAR ASIGNACIONES EN LOGS ==========
       try {
+        // Obtener nombre del usuario que asigna
+        const assignerResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
+        if (assignerResult.rows.length === 0) {
+          throw new Error('Usuario asignador no encontrado');
+        }
+        const assignerName = assignerResult.rows[0].name;
+
         const docTitleResult = await query('SELECT title FROM documents WHERE id = $1', [documentId]);
         if (docTitleResult.rows.length > 0) {
           const documentTitle = docTitleResult.rows[0].title;
@@ -994,7 +1001,7 @@ const resolvers = {
                 }
               }
 
-              pdfLogger.logSignerAssigned(user.name, signerName, documentTitle, roleText);
+              pdfLogger.logSignerAssigned(assignerName, signerName, documentTitle, roleText);
             }
           }
         }
@@ -1668,6 +1675,18 @@ const resolvers = {
       }
 
       await query('DELETE FROM documents WHERE id = $1', [id]);
+
+      // Registrar eliminación en logs
+      try {
+        const deleterResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
+        if (deleterResult.rows.length > 0) {
+          const deleterName = deleterResult.rows[0].name;
+          pdfLogger.logDocumentDeleted(deleterName, doc.title);
+        }
+      } catch (logError) {
+        console.error('Error al registrar log de eliminación:', logError);
+      }
+
       return true;
     },
 
@@ -2065,8 +2084,13 @@ const resolvers = {
         if (docResult.rows.length > 0) {
           const doc = docResult.rows[0];
 
-          // Registrar firma en logs
-          pdfLogger.logDocumentSigned(user.name, doc.title);
+          // Obtener el nombre del usuario que firma
+          const signerResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
+          if (signerResult.rows.length > 0) {
+            const signerName = signerResult.rows[0].name;
+            // Registrar TODAS las firmas
+            pdfLogger.logDocumentSigned(signerName, doc.title);
+          }
 
           // 1. Eliminar la notificación de signature_request del usuario que acaba de firmar
           await query(
