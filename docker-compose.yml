@@ -53,14 +53,17 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Exponer solo en IP específica para usuarios remotos 
-      - "192.168.0.30:5173:4173"
+      # Exponer solo en IP específica para usuarios remotos
+      - "192.168.0.30:5173:5173"
     depends_on:
       - server
     volumes:
-      - ./frontend/dist:/app/dist
-    # No necesita env_file aquí, Vite lo toma de frontend/.env al construir/ejecutar
-    command: npm run preview -- --host
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+    # Modo desarrollo con hot-reload
+    command: npm run dev -- --host
     networks:
       - npm_docker_default  # Red compartida con NPM
       - default             # Red interna para comunicarse con server
