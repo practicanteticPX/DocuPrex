@@ -18,6 +18,11 @@ if (!fs.existsSync(logsDir)) {
   console.log('📁 Carpeta de logs creada');
 }
 
+// Control de debounce para archiveOldLogs
+let archiveTimeout = null;
+let lastArchiveCheck = 0;
+const ARCHIVE_COOLDOWN = 60000; // 1 minuto entre verificaciones
+
 /**
  * Formatea la fecha y hora en formato legible
  * Zona horaria: America/Bogota (Colombia)
@@ -64,6 +69,13 @@ function writeLog(message) {
   const logEntry = `[${timestamp}] ${message}\n`;
 
   fs.appendFileSync(logFile, logEntry, 'utf8');
+
+  // Archivar logs antiguos con debounce (máximo 1 vez por minuto)
+  const now = Date.now();
+  if (now - lastArchiveCheck >= ARCHIVE_COOLDOWN) {
+    lastArchiveCheck = now;
+    setImmediate(() => archiveOldLogs());
+  }
 }
 
 /**
@@ -259,6 +271,54 @@ function logNotificationSent(recipientName, notificationType) {
 }
 
 /**
+ * Convierte TXT antiguos a PDF y los elimina
+ * Se ejecuta automáticamente al iniciar el servidor y cada vez que se escribe un log
+ */
+function archiveOldLogs() {
+  try {
+    const files = fs.readdirSync(logsDir);
+    const txtFiles = files.filter(file => file.endsWith('.txt'));
+
+    const today = getTodayLogFileName();
+
+    txtFiles.forEach(txtFile => {
+      // Solo procesar archivos que NO sean del día actual
+      if (txtFile !== today) {
+        const txtPath = path.join(logsDir, txtFile);
+        const pdfFileName = txtFile.replace('.txt', '.pdf');
+        const pdfPath = path.join(logsDir, pdfFileName);
+
+        // Si el PDF no existe, crearlo desde el TXT
+        if (!fs.existsSync(pdfPath)) {
+          // Extraer fecha del nombre del archivo
+          const dateMatch = txtFile.match(/log_(\d{4})-(\d{2})-(\d{2})\.txt/);
+          if (dateMatch) {
+            const [, year, month, day] = dateMatch;
+            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+
+            generateDailyPDF(date)
+              .then(() => {
+                // Eliminar el TXT después de crear el PDF
+                fs.unlinkSync(txtPath);
+                console.log(`📦 Archivo archivado: ${txtFile} → ${pdfFileName} (TXT eliminado)`);
+              })
+              .catch(err => {
+                console.error(`❌ Error al archivar ${txtFile}:`, err.message);
+              });
+          }
+        } else {
+          // Si el PDF ya existe, simplemente eliminar el TXT
+          fs.unlinkSync(txtPath);
+          console.log(`🗑️  TXT antiguo eliminado: ${txtFile} (PDF ya existe)`);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error al archivar logs antiguos:', error.message);
+  }
+}
+
+/**
  * Genera el PDF del día actual al final del día (útil para ejecutar en cron)
  */
 async function generateTodayPDF() {
@@ -305,6 +365,10 @@ function getLogPDF(date) {
   return generateDailyPDF(date);
 }
 
+// Archivar logs antiguos al cargar el módulo
+console.log('🔄 Verificando logs antiguos para archivar...');
+archiveOldLogs();
+
 module.exports = {
   // Funciones de logging
   logLogin,
@@ -331,5 +395,6 @@ module.exports = {
   generateTodayPDF,
   listLogPDFs,
   getLogPDF,
+  archiveOldLogs,
   logsDir
 };
