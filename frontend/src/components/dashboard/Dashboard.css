@@ -4190,8 +4190,8 @@
 
 .ds-aside-header .logo-container {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  gap: 4px;
 }
 
 .ds-aside .logo {
@@ -4219,6 +4219,7 @@
   color: #111827;
   letter-spacing: -0.5px;
   text-transform: lowercase;
+  transform: translateY(-10px);
 }
 
 .ds-side-nav {

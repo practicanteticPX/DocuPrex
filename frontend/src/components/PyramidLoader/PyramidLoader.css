@@ -1,11 +1,12 @@
 /* From Uiverse.io by Anita3761520000 */
 .pyramid-loader {
   position: relative;
-  width: 80px;
-  height: 80px;
+  width: 50px;
+  height: 50px;
   display: block;
   transform-style: preserve-3d;
-  transform: rotateX(-20deg);
+  transform: rotateX(-20deg) translateY(0px);
+  margin-bottom: -8px;
 }
 
 .wrapper {
@@ -26,8 +27,8 @@
 }
 
 .pyramid-loader .wrapper .side {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   /* you can choose any gradient or color you want */
   /* background: radial-gradient( #2F2585 10%, #F028FD 70%, #2BDEAC 120%); */
   position: absolute;
@@ -61,8 +62,8 @@
 }
 
 .pyramid-loader .wrapper .shadow {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   background: #8b5ad5;
   position: absolute;
   top: 0;
@@ -70,6 +71,6 @@
   right: 0;
   bottom: 0;
   margin: auto;
-  transform: rotateX(90deg) translateZ(-24px);
-  filter: blur(12px);
+  transform: rotateX(90deg) translateZ(-18px);
+  filter: blur(10px);
 }
