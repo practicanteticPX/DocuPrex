@@ -13,6 +13,7 @@ import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
 import LogoutButton from '../LogoutButton/LogoutButton';
 import HelpModal from '../HelpModal/HelpModal';
+import RealSignerModal from './RealSignerModal';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -141,6 +142,12 @@ function Dashboard({ user, onLogout }) {
   const [signedDocsTypeFilter, setSignedDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
   const [rejectedDocsTypeFilter, setRejectedDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
   const [showTypeFilterDropdown, setShowTypeFilterDropdown] = useState(null); // 'pending', 'my', 'signed', 'rejected'
+
+  // Estados para modal de selección de firmante real (usuario Negociaciones)
+  const [showRealSignerModal, setShowRealSignerModal] = useState(false);
+  const [realSignerAction, setRealSignerAction] = useState('firmar'); // 'firmar' o 'rechazar'
+  const [realSignerName, setRealSignerName] = useState('');
+  const [pendingDocumentAction, setPendingDocumentAction] = useState(null); // Guarda la acción pendiente
 
   // Estados para configuración
   const [showSettings, setShowSettings] = useState(false);
@@ -2024,7 +2031,33 @@ function Dashboard({ user, onLogout }) {
   /**
    * Firmar documento REAL usando GraphQL
    */
-  const handleSignDocument = async (docId) => {
+  /**
+   * Verifica si el usuario actual es "Negociaciones"
+   */
+  const isNegociacionesUser = () => {
+    return user && (user.name === 'Negociaciones' || user.email === 'negociaciones@prexxa.com');
+  };
+
+  /**
+   * Maneja el inicio del proceso de firma
+   * Si es usuario Negociaciones, muestra modal de selección primero
+   */
+  const initiateSignDocument = (docId) => {
+    if (isNegociacionesUser()) {
+      // Guardar la acción pendiente y mostrar modal
+      setPendingDocumentAction({ type: 'sign', docId });
+      setRealSignerAction('firmar');
+      setShowRealSignerModal(true);
+    } else {
+      // Firmar directamente
+      handleSignDocument(docId);
+    }
+  };
+
+  /**
+   * Firma el documento (función interna, llamada después del modal si es necesario)
+   */
+  const handleSignDocument = async (docId, realSigner = null) => {
     // Prevenir múltiples clicks
     if (signing) {
       console.warn('Ya se está procesando una firma');
@@ -2034,6 +2067,13 @@ function Dashboard({ user, onLogout }) {
     try {
       setSigning(true);
       const token = localStorage.getItem('token');
+
+      // Construir signatureData incluyendo el nombre real si es usuario Negociaciones
+      let signatureData = `Firmado por ${user.name || user.email}`;
+      if (realSigner) {
+        signatureData += ` (${realSigner})`;
+      }
+      signatureData += ` el ${new Date().toISOString()}`;
 
       const response = await axios.post(
         API_URL,
@@ -2050,7 +2090,7 @@ function Dashboard({ user, onLogout }) {
           `,
           variables: {
             documentId: docId,
-            signatureData: `Firmado por ${user.name || user.email} el ${new Date().toISOString()}`,
+            signatureData: signatureData,
             consecutivo: consecutivo || null
           }
         },
@@ -2085,9 +2125,44 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
-   * Rechazar documento con razón
+   * Maneja el inicio del proceso de rechazo
+   * Si es usuario Negociaciones, muestra modal de selección primero
    */
-  const handleRejectDocument = async (docId, reason) => {
+  const initiateRejectDocument = (docId, reason) => {
+    if (isNegociacionesUser()) {
+      // Guardar la acción pendiente y mostrar modal
+      setPendingDocumentAction({ type: 'reject', docId, reason });
+      setRealSignerAction('rechazar');
+      setShowRealSignerModal(true);
+    } else {
+      // Rechazar directamente
+      handleRejectDocument(docId, reason);
+    }
+  };
+
+  /**
+   * Maneja la confirmación del modal de selección de firmante real
+   */
+  const handleRealSignerConfirm = (signerName) => {
+    setRealSignerName(signerName);
+
+    if (pendingDocumentAction) {
+      if (pendingDocumentAction.type === 'sign') {
+        // Ejecutar firma con el nombre real
+        handleSignDocument(pendingDocumentAction.docId, signerName);
+      } else if (pendingDocumentAction.type === 'reject') {
+        // Ejecutar rechazo con el nombre real
+        handleRejectDocument(pendingDocumentAction.docId, pendingDocumentAction.reason, signerName);
+      }
+      // Limpiar acción pendiente
+      setPendingDocumentAction(null);
+    }
+  };
+
+  /**
+   * Rechazar documento con razón (función interna, llamada después del modal si es necesario)
+   */
+  const handleRejectDocument = async (docId, reason, realSigner = null) => {
     // Prevenir múltiples clicks
     if (rejecting) {
       console.warn('Ya se está procesando un rechazo');
@@ -2097,6 +2172,12 @@ function Dashboard({ user, onLogout }) {
     try {
       setRejecting(true);
       const token = localStorage.getItem('token');
+
+      // Agregar información del firmante real si es usuario Negociaciones
+      let finalReason = reason || '';
+      if (realSigner) {
+        finalReason = `${finalReason}\n\n[Rechazado por: ${realSigner}]`;
+      }
 
       const response = await axios.post(
         API_URL,
@@ -2108,7 +2189,7 @@ function Dashboard({ user, onLogout }) {
           `,
           variables: {
             documentId: docId,
-            reason: reason || ''
+            reason: finalReason
           }
         },
         {
@@ -2370,7 +2451,7 @@ function Dashboard({ user, onLogout }) {
 
   const handleConfirmSign = async () => {
     if (viewingDocument) {
-      await handleSignDocument(viewingDocument.id);
+      initiateSignDocument(viewingDocument.id);
       setShowSignConfirm(false);
       // No cerrar el viewer aquí, dejar que el usuario cierre el popup de éxito
     }
@@ -2415,7 +2496,7 @@ function Dashboard({ user, onLogout }) {
     }
 
     if (viewingDocument) {
-      await handleRejectDocument(viewingDocument.id, rejectReason.trim());
+      initiateRejectDocument(viewingDocument.id, rejectReason.trim());
       // Limpiar estados del modal de rechazo
       setShowRejectConfirm(false);
       setRejectReason('');
@@ -2445,7 +2526,7 @@ function Dashboard({ user, onLogout }) {
    */
   const handleConfirmQuickSign = async () => {
     if (documentToSign) {
-      await handleSignDocument(documentToSign.id);
+      initiateSignDocument(documentToSign.id);
       setShowQuickSignConfirm(false);
       setDocumentToSign(null);
     }
@@ -6911,6 +6992,17 @@ function Dashboard({ user, onLogout }) {
 
       {/* Modal de ayuda */}
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+
+      {/* Modal de selección de firmante real (usuario Negociaciones) */}
+      <RealSignerModal
+        isOpen={showRealSignerModal}
+        onClose={() => {
+          setShowRealSignerModal(false);
+          setPendingDocumentAction(null);
+        }}
+        onConfirm={handleRealSignerConfirm}
+        action={realSignerAction}
+      />
 
     </div>
   );

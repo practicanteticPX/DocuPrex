@@ -1,0 +1,283 @@
+/* Modal de selección de firmante real */
+.real-signer-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 400;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.real-signer-modal-content {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.real-signer-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 28px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.real-signer-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+  color: #111827;
+}
+
+.real-signer-modal-close {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: #6B7280;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.real-signer-modal-close:hover {
+  background-color: #F3F4F6;
+  color: #111827;
+}
+
+.real-signer-modal-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Body */
+.real-signer-modal-body {
+  padding: 28px;
+}
+
+.real-signer-instruction {
+  font-size: 15px;
+  color: #374151;
+  margin: 0 0 20px 0;
+  line-height: 1.6;
+}
+
+/* Lista de firmantes */
+.real-signer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.real-signer-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.real-signer-option:hover {
+  border-color: #D1D5DB;
+  background-color: #F9FAFB;
+}
+
+.real-signer-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.real-signer-option input[type="radio"]:checked ~ .real-signer-radio {
+  border-color: #6366F1;
+  background-color: #6366F1;
+}
+
+.real-signer-option input[type="radio"]:checked ~ .real-signer-radio::after {
+  transform: scale(1);
+}
+
+.real-signer-option:has(input[type="radio"]:checked) {
+  border-color: #6366F1;
+  background-color: #EEF2FF;
+}
+
+.real-signer-radio {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #D1D5DB;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.real-signer-radio::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background-color: white;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: transform 0.2s ease;
+}
+
+.real-signer-name {
+  font-size: 15px;
+  color: #111827;
+  font-weight: 400;
+}
+
+/* Error */
+.real-signer-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background-color: #FEE2E2;
+  border: 1px solid #FCA5A5;
+  border-radius: 8px;
+  color: #DC2626;
+  font-size: 14px;
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+.real-signer-error svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Footer */
+.real-signer-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 28px;
+  border-top: 1px solid #E5E7EB;
+  background-color: #F9FAFB;
+}
+
+.real-signer-btn-cancel,
+.real-signer-btn-confirm {
+  flex: 1;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 400;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.real-signer-btn-cancel {
+  background-color: white;
+  color: #374151;
+  border: 1px solid #D1D5DB;
+}
+
+.real-signer-btn-cancel:hover {
+  background-color: #F3F4F6;
+  border-color: #9CA3AF;
+}
+
+.real-signer-btn-confirm {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.real-signer-btn-confirm:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.real-signer-btn-confirm:active {
+  transform: translateY(0);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .real-signer-modal-content {
+    max-width: 100%;
+    margin: 0 16px;
+  }
+
+  .real-signer-modal-header {
+    padding: 20px 20px;
+  }
+
+  .real-signer-modal-header h2 {
+    font-size: 18px;
+  }
+
+  .real-signer-modal-body {
+    padding: 20px;
+  }
+
+  .real-signer-modal-footer {
+    padding: 16px 20px;
+    flex-direction: column;
+  }
+
+  .real-signer-btn-cancel,
+  .real-signer-btn-confirm {
+    width: 100%;
+  }
+}
