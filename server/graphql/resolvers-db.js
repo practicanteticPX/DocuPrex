@@ -292,6 +292,8 @@ const resolvers = {
           s.signed_at as signature_signed_at,
           s.rejected_at as signature_rejected_at,
           s.rejection_reason as signature_rejection_reason,
+          s.consecutivo as signature_consecutivo,
+          s.real_signer_name as signature_real_signer_name,
           s.created_at as signature_created_at
         FROM document_signers ds
         LEFT JOIN users u ON ds.user_id = u.id
@@ -319,6 +321,8 @@ const resolvers = {
           signedAt: row.signature_signed_at || null,
           rejectedAt: row.signature_rejected_at || null,
           rejectionReason: row.signature_rejection_reason || null,
+          consecutivo: row.signature_consecutivo || null,
+          realSignerName: row.signature_real_signer_name || null,
           createdAt: row.signature_created_at || null
         } : null
       }));
@@ -1039,7 +1043,8 @@ const resolvers = {
                   s.signed_at,
                   s.rejected_at,
                   s.rejection_reason,
-                  s.consecutivo
+                  s.consecutivo,
+                  s.real_signer_name
           FROM document_signers ds
           JOIN users u ON ds.user_id = u.id
           LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1714,7 +1719,7 @@ const resolvers = {
      * @returns {Promise<boolean>} True if rejection succeeds
      * @throws {Error} When unauthorized, not in sequence, or not assigned to document
      */
-    rejectDocument: async (_, { documentId, reason }, { user }) => {
+    rejectDocument: async (_, { documentId, reason, realSignerName }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
       // Validar orden secuencial - el usuario debe ser el siguiente en la fila para rechazar
@@ -1756,8 +1761,8 @@ const resolvers = {
       const now = new Date().toISOString();
 
       await query(
-        'UPDATE signatures SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3 WHERE document_id = $4 AND signer_id = $5',
-        ['rejected', reason || '', now, documentId, user.id]
+        'UPDATE signatures SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3, real_signer_name = $4 WHERE document_id = $5 AND signer_id = $6',
+        ['rejected', reason || '', now, realSignerName || null, documentId, user.id]
       );
 
       const statusResult = await query(
@@ -1947,7 +1952,7 @@ const resolvers = {
      * @returns {Promise<Object>} Signature record
      * @throws {Error} When unauthorized, not in sequence (non-owner), or not assigned to document
      */
-    signDocument: async (_, { documentId, signatureData, consecutivo }, { user }) => {
+    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
       const docOwnerCheck = await query(
@@ -2009,17 +2014,18 @@ const resolvers = {
           SET status = 'signed',
               signature_data = $1,
               consecutivo = $2,
+              real_signer_name = $3,
               signed_at = CURRENT_TIMESTAMP
-          WHERE document_id = $3 AND signer_id = $4
+          WHERE document_id = $4 AND signer_id = $5
           RETURNING *`,
-          [signatureData, consecutivo || null, documentId, user.id]
+          [signatureData, consecutivo || null, realSignerName || null, documentId, user.id]
         );
       } else {
         result = await query(
-          `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, consecutivo, signed_at)
-          VALUES ($1, $2, 'signed', $3, 'digital', $4, CURRENT_TIMESTAMP)
+          `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, consecutivo, real_signer_name, signed_at)
+          VALUES ($1, $2, 'signed', $3, 'digital', $4, $5, CURRENT_TIMESTAMP)
           RETURNING *`,
-          [documentId, user.id, signatureData, consecutivo || null]
+          [documentId, user.id, signatureData, consecutivo || null, realSignerName || null]
         );
       }
 

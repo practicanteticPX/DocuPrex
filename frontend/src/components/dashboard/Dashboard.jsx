@@ -2079,19 +2079,21 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation SignDocument($documentId: ID!, $signatureData: String!, $consecutivo: String) {
-              signDocument(documentId: $documentId, signatureData: $signatureData, consecutivo: $consecutivo) {
+            mutation SignDocument($documentId: ID!, $signatureData: String!, $consecutivo: String, $realSignerName: String) {
+              signDocument(documentId: $documentId, signatureData: $signatureData, consecutivo: $consecutivo, realSignerName: $realSignerName) {
                 id
                 status
                 signedAt
                 consecutivo
+                realSignerName
               }
             }
           `,
           variables: {
             documentId: docId,
             signatureData: signatureData,
-            consecutivo: consecutivo || null
+            consecutivo: consecutivo || null,
+            realSignerName: realSigner || null
           }
         },
         {
@@ -2183,13 +2185,14 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation RejectDocument($documentId: ID!, $reason: String) {
-              rejectDocument(documentId: $documentId, reason: $reason)
+            mutation RejectDocument($documentId: ID!, $reason: String, $realSignerName: String) {
+              rejectDocument(documentId: $documentId, reason: $reason, realSignerName: $realSignerName)
             }
           `,
           variables: {
             documentId: docId,
-            reason: finalReason
+            reason: finalReason,
+            realSignerName: realSigner || null
           }
         },
         {

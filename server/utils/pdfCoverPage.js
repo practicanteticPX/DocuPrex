@@ -428,8 +428,12 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         statusTextColor = rgb(0.8, 0.1, 0.1);
       }
 
-      const signerName = (signer.name || 'Sin nombre').toUpperCase();
-      const maxNameLength = 50;
+      // Construir el nombre del firmante: si tiene real_signer_name, mostrarlo junto al nombre del usuario
+      let signerName = (signer.name || 'Sin nombre').toUpperCase();
+      if (signer.real_signer_name) {
+        signerName = `${signerName} (${signer.real_signer_name})`;
+      }
+      const maxNameLength = 70;
       const displayName = signerName.length > maxNameLength
         ? signerName.substring(0, maxNameLength) + '...'
         : signerName;
