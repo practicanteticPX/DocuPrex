@@ -491,6 +491,7 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectionReason
                   rejectedAt
+                  realSignerName
                 }
               }
               documentSigners(documentId: $documentId) {
@@ -875,6 +876,7 @@ function Dashboard({ user, onLogout }) {
                   rejectedAt
                   roleName
                   orderPosition
+                  realSignerName
                   signer {
                     id
                     name
@@ -946,6 +948,7 @@ function Dashboard({ user, onLogout }) {
                   rejectedAt
                   roleName
                   orderPosition
+                  realSignerName
                   signer {
                     id
                     name
@@ -1024,6 +1027,7 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   roleName
                   orderPosition
+                  realSignerName
                 }
               }
             }
@@ -1214,6 +1218,7 @@ function Dashboard({ user, onLogout }) {
                   rejectedAt
                   roleName
                   orderPosition
+                  realSignerName
                   signer {
                     id
                     name
@@ -1247,6 +1252,7 @@ function Dashboard({ user, onLogout }) {
                   rejectedAt
                   roleName
                   orderPosition
+                  realSignerName
                   signer {
                     id
                     name
@@ -2296,6 +2302,7 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectedAt
                   rejectionReason
+                  realSignerName
                 }
               }
               documentSigners(documentId: $id) {
@@ -2625,6 +2632,7 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectedAt
                   rejectionReason
+                  realSignerName
                   createdAt
                 }
               }
@@ -2656,6 +2664,7 @@ function Dashboard({ user, onLogout }) {
         signedAt: ds.signature?.signedAt,
         rejectedAt: ds.signature?.rejectedAt,
         rejectionReason: ds.signature?.rejectionReason,
+        realSignerName: ds.signature?.realSignerName,
         createdAt: ds.signature?.createdAt || new Date().toISOString()
       })).sort((a, b) => a.orderPosition - b.orderPosition);
 
@@ -2789,6 +2798,9 @@ function Dashboard({ user, onLogout }) {
                 signedAt
                 createdAt
                 rejectionReason
+                realSignerName
+                roleName
+                orderPosition
               }
             }
           `,
@@ -6280,6 +6292,7 @@ function Dashboard({ user, onLogout }) {
                         <div className="signer-info-modern flex-grow">
                           <p className="signer-name-modern">
                             {signature.signer?.name || 'Usuario'}
+                            {signature.realSignerName && <span style={{ fontWeight: '500', color: '#10B981' }}> ({signature.realSignerName})</span>}
                             {signature.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {signature.roleName}</span>}
                           </p>
                           <p className="signer-email-modern">{signature.signer?.email || 'N/A'}</p>

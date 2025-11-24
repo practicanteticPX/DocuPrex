@@ -1318,7 +1318,8 @@ const resolvers = {
                     s.signed_at,
                     s.rejected_at,
                     s.rejection_reason,
-                    s.consecutivo
+                    s.consecutivo,
+                    s.real_signer_name
             FROM document_signers ds
             JOIN users u ON ds.user_id = u.id
             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1593,7 +1594,7 @@ const resolvers = {
 
         if (docInfo.rows.length > 0) {
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names, s.status, s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo
+            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names, s.status, s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo, s.real_signer_name
              FROM document_signers ds
              JOIN users u ON ds.user_id = u.id
              LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -1890,7 +1891,8 @@ const resolvers = {
                     s.signed_at,
                     s.rejected_at,
                     s.rejection_reason,
-                    s.consecutivo
+                    s.consecutivo,
+                    s.real_signer_name
             FROM document_signers ds
             JOIN users u ON ds.user_id = u.id
             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -2240,7 +2242,8 @@ const resolvers = {
                     s.signed_at,
                     s.rejected_at,
                     s.rejection_reason,
-                    s.consecutivo
+                    s.consecutivo,
+                    s.real_signer_name
             FROM document_signers ds
             JOIN users u ON ds.user_id = u.id
             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -2396,6 +2399,7 @@ const resolvers = {
     rejectionReason: (parent) => parent.rejection_reason,
     rejectedAt: (parent) => parent.rejected_at,
     signedAt: (parent) => parent.signed_at,
+    realSignerName: (parent) => parent.real_signer_name,
     createdAt: (parent) => parent.created_at,
     updatedAt: (parent) => parent.updated_at,
 
