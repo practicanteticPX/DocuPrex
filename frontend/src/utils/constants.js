@@ -180,8 +180,8 @@ export const REGEX_PATTERNS = {
 // LOCAL STORAGE KEYS
 // ============================================
 export const STORAGE_KEYS = {
-  AUTH_TOKEN: 'authToken',
-  USER_DATA: 'userData',
+  AUTH_TOKEN: 'token',
+  USER_DATA: 'user',
   REDIRECT_PATH: 'redirectAfterLogin',
   THEME: 'theme'
 };

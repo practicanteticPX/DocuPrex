@@ -368,6 +368,64 @@ const resolvers = {
       return parseInt(result.rows[0].count) || 0;
     },
 
+    negotiationSigners: async (_, __, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT id, name, active
+        FROM negotiation_signers
+        WHERE active = true
+        ORDER BY name ASC
+      `);
+
+      return result.rows;
+    },
+
+    verifyNegotiationSignerCedula: async (_, { name, lastFourDigits }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      console.log('🔍 Verificando cédula para:', name);
+      console.log('🔢 Últimos 4 dígitos recibidos:', lastFourDigits, 'Tipo:', typeof lastFourDigits);
+      console.log('👤 Usuario:', user.name);
+
+      // Buscar el firmante en la base de datos
+      const result = await query(`
+        SELECT cedula
+        FROM negotiation_signers
+        WHERE name = $1 AND active = true
+      `, [name]);
+
+      if (result.rows.length === 0) {
+        console.log('❌ Firmante no encontrado:', name);
+        return {
+          valid: false,
+          message: 'Firmante no encontrado en la base de datos'
+        };
+      }
+
+      const fullCedula = result.rows[0].cedula;
+      const lastFour = fullCedula.slice(-4);
+
+      console.log('💳 Cédula completa en BD:', fullCedula);
+      console.log('🔢 Últimos 4 en BD:', lastFour);
+      console.log('🔢 Últimos 4 recibidos:', lastFourDigits);
+      console.log('✅ ¿Coinciden?', lastFour === lastFourDigits);
+
+      if (lastFour === lastFourDigits) {
+        console.log('✅ Verificación exitosa');
+        return {
+          valid: true,
+          message: 'Cédula verificada correctamente'
+        };
+      } else {
+        console.log('❌ No coinciden');
+        return {
+          valid: false,
+          message: 'Los últimos 4 dígitos no coinciden'
+        };
+      }
+    },
+
     availableSigners: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 

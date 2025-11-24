@@ -287,6 +287,73 @@
   box-shadow: none;
 }
 
+/* Botón Volver */
+.real-signer-btn-back {
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  background-color: white;
+  color: #6B7280;
+  border: 2px solid #E5E7EB;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  letter-spacing: -0.01em;
+  transition: all 0.15s ease;
+}
+
+.real-signer-btn-back:hover {
+  background-color: #F9FAFB;
+  border-color: #CBD5E1;
+}
+
+/* Input de cédula */
+.real-signer-cedula-input {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.cedula-digits-container {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.cedula-digit-input {
+  width: 56px;
+  height: 72px;
+  font-size: 36px;
+  font-weight: 600;
+  font-family: 'Courier New', Courier, monospace;
+  text-align: center;
+  border: 3px solid #E5E7EB;
+  border-radius: 12px;
+  background-color: #FAFBFC;
+  color: #1F2937;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.cedula-digit-input:focus {
+  border-color: #3B82F6;
+  background-color: #FFFFFF;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+}
+
+.cedula-digit-input::placeholder {
+  color: #D1D5DB;
+}
+
+.cedula-hint {
+  font-size: 13px;
+  color: #9CA3AF;
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .real-signer-modal-content {

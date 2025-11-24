@@ -5,11 +5,11 @@
 
 import { getLocalStorage } from '../utils/helpers';
 import { STORAGE_KEYS, ERROR_MESSAGES } from '../utils/constants';
+import { API_URL } from '../config/api';
 
 /**
- * URL del API GraphQL
+ * URL del API GraphQL - importada desde config/api para soportar HTTP/HTTPS automáticamente
  */
-const API_URL = import.meta.env.VITE_API_URL || 'http://192.168.0.30:5001/graphql';
 
 /**
  * Clase para manejar cliente GraphQL
@@ -23,7 +23,8 @@ class GraphQLClient {
    * Obtiene el token de autenticación
    */
   getToken() {
-    return getLocalStorage(STORAGE_KEYS.AUTH_TOKEN);
+    // Usar localStorage.getItem directamente porque el token se guarda como string simple, no como JSON
+    return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
   }
 
   /**

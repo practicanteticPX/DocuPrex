@@ -135,6 +135,17 @@ const typeDefs = gql`
     roleNames: [String!]
   }
 
+  type NegotiationSigner {
+    id: ID!
+    name: String!
+    active: Boolean!
+  }
+
+  type VerifyCedulaResponse {
+    valid: Boolean!
+    message: String
+  }
+
   type Query {
     # Usuarios
     me: User
@@ -165,6 +176,10 @@ const typeDefs = gql`
     # Notificaciones
     notifications: [Notification!]!
     unreadNotificationsCount: Int!
+
+    # Firmantes de Negociaciones
+    negotiationSigners: [NegotiationSigner!]!
+    verifyNegotiationSignerCedula(name: String!, lastFourDigits: String!): VerifyCedulaResponse!
   }
 
   type Mutation {

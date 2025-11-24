@@ -18,7 +18,10 @@
       "Bash(curl:*)",
       "Bash(npm run build:*)",
       "Bash(node scripts/regenerateNegociacionesDocs.js:*)",
-      "Bash(docker cp:*)"
+      "Bash(docker cp:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(timeout 30 docker logs:*)",
+      "Bash(timeout 60 docker logs:*)"
     ],
     "deny": [],
     "ask": []
