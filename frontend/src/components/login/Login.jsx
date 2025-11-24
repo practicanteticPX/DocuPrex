@@ -181,8 +181,8 @@ function Login({ onLogin }) {
           </form>
 
           <div className="login-footer">
-            <p className="help-text">
-              ¿Necesitas ayuda? <a href="https://soporteprexxa.com/glpi/index.php?noAUTO=1" target="_blank" rel="noopener noreferrer">Contacta soporte</a>
+            <p className="copyright-text">
+              © {new Date().getFullYear()} DocuPrex® - Powered by Prexxa TIC
             </p>
           </div>
         </div>
