@@ -28,11 +28,11 @@
 
 .real-signer-modal-content {
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   width: 100%;
-  max-width: 440px;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.08);
-  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 600px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.08);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
 
@@ -51,18 +51,23 @@
 .real-signer-modal-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 28px 32px 24px 32px;
-  border-bottom: 1px solid #F3F4F6;
+  align-items: flex-start;
+  padding: 32px 40px;
+  border-bottom: 1px solid #F0F1F3;
+  background: linear-gradient(to bottom, #FAFBFC 0%, #FFFFFF 100%);
+}
+
+.real-signer-header-content {
+  flex: 1;
 }
 
 .real-signer-modal-header h2 {
-  margin: 0;
-  font-size: 18px;
+  margin: 0 0 8px 0;
+  font-size: 22px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-weight: 400;
-  color: #111827;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  color: #1F2937;
+  letter-spacing: -0.02em;
 }
 
 .real-signer-modal-close {
@@ -90,7 +95,7 @@
 
 /* Body */
 .real-signer-modal-body {
-  padding: 24px 32px;
+  padding: 32px 40px;
 }
 
 .real-signer-instruction {
@@ -98,33 +103,35 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-weight: 400;
   color: #6B7280;
-  margin: 0 0 20px 0;
-  line-height: 1.5;
+  margin: 0;
+  line-height: 1.6;
 }
 
 /* Lista de firmantes */
 .real-signer-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
 .real-signer-option {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  background-color: white;
+  background-color: #FFFFFF;
 }
 
 .real-signer-option:hover {
   border-color: #CBD5E1;
-  background-color: #FAFBFC;
+  background-color: #F9FAFB;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .real-signer-option input[type="radio"] {
@@ -133,28 +140,42 @@
   pointer-events: none;
 }
 
-.real-signer-option input[type="radio"]:checked ~ .real-signer-radio {
-  border-color: #6366F1;
-  background-color: #6366F1;
+/* Estilo para acción "firmar" (verde) */
+.real-signer-modal-firmar .real-signer-option input[type="radio"]:checked ~ .real-signer-radio {
+  border-color: #10B981;
+  background-color: #10B981;
+}
+
+.real-signer-modal-firmar .real-signer-option:has(input[type="radio"]:checked) {
+  border-color: #10B981;
+  background-color: #ECFDF5;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.15);
+}
+
+/* Estilo para acción "rechazar" (rojo) */
+.real-signer-modal-rechazar .real-signer-option input[type="radio"]:checked ~ .real-signer-radio {
+  border-color: #EF4444;
+  background-color: #EF4444;
+}
+
+.real-signer-modal-rechazar .real-signer-option:has(input[type="radio"]:checked) {
+  border-color: #EF4444;
+  background-color: #FEF2F2;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15);
 }
 
 .real-signer-option input[type="radio"]:checked ~ .real-signer-radio::after {
   transform: scale(1);
 }
 
-.real-signer-option:has(input[type="radio"]:checked) {
-  border-color: #6366F1;
-  background-color: #F5F7FF;
-}
-
 .real-signer-radio {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border: 2px solid #D1D5DB;
   border-radius: 50%;
   position: relative;
   flex-shrink: 0;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -167,14 +188,15 @@
   background-color: white;
   border-radius: 50%;
   transform: scale(0);
-  transition: transform 0.15s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .real-signer-name {
   font-size: 15px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-weight: 400;
-  color: #111827;
+  font-weight: 500;
+  color: #1F2937;
+  letter-spacing: -0.01em;
 }
 
 /* Error */
@@ -215,68 +237,82 @@
 /* Footer */
 .real-signer-modal-footer {
   display: flex;
-  gap: 12px;
-  padding: 20px 32px 24px 32px;
-  border-top: 1px solid #F3F4F6;
-  background-color: white;
+  gap: 14px;
+  padding: 24px 40px 32px 40px;
+  border-top: 1px solid #F0F1F3;
+  background-color: #FAFBFC;
 }
 
 .real-signer-btn-cancel,
 .real-signer-btn-confirm {
-  flex: 1;
-  padding: 11px 20px;
+  padding: 13px 28px;
   font-size: 14px;
-  font-weight: 400;
-  border-radius: 8px;
+  font-weight: 500;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s ease;
   border: none;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  letter-spacing: -0.01em;
 }
 
 .real-signer-btn-cancel {
   background-color: white;
   color: #6B7280;
-  border: 1px solid #E5E7EB;
+  border: 2px solid #E5E7EB;
+  padding: 11px 28px;
 }
 
-.real-signer-btn-cancel:hover {
-  background-color: #F9FAFB;
-  border-color: #D1D5DB;
-  color: #374151;
-}
 
 .real-signer-btn-confirm {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex: 1;
   color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.real-signer-btn-confirm:active {
-  transform: scale(0.98);
+/* Botón para firmar (verde) */
+.real-signer-btn-firmar {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+}
+
+
+/* Botón para rechazar (rojo) */
+.real-signer-btn-rechazar {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+}
+
+/* Estado deshabilitado de los botones */
+.real-signer-btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* Responsive */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .real-signer-modal-content {
     max-width: 100%;
     margin: 0 16px;
   }
 
   .real-signer-modal-header {
-    padding: 20px 20px;
+    padding: 24px;
   }
 
   .real-signer-modal-header h2 {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .real-signer-modal-body {
-    padding: 20px;
+    padding: 24px;
+  }
+
+  .real-signer-list {
+    grid-template-columns: 1fr;
   }
 
   .real-signer-modal-footer {
-    padding: 16px 20px;
-    flex-direction: column;
+    padding: 20px 24px;
+    flex-direction: column-reverse;
   }
 
   .real-signer-btn-cancel,

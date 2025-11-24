@@ -667,10 +667,6 @@ textarea.form-input:focus {
   background-color: #B91C1C !important;
 }
 
-.sign-confirm-btn.confirm:hover {
-  background-color: #059669 !important;
-}
-
 /* ========================================
    BOTÓN RECHAZAR Y POPUP DE RECHAZO
    ======================================== */
@@ -743,11 +739,6 @@ textarea.form-input:focus {
   font-size: 14px !important;
   font-weight: 600 !important;
   box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2) !important;
-}
-
-.reject-confirm-btn.confirm:hover:not(:disabled) {
-  background-color: #DC2626 !important;
-  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3) !important;
 }
 
 .reject-confirm-btn.confirm:disabled {
