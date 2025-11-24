@@ -12,7 +12,9 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
   const availableSigners = [
     'Carolina Martinez',
     'Valentina Arroyave',
-    'Manuela Correa'
+    'Manuela Correa',
+    'Luisa Velez',
+    'Sebastian Pinto'
   ];
 
   const handleConfirm = () => {
