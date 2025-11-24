@@ -13,10 +13,14 @@ const logsRoutes = require('./routes/logs');
 const pdfLogger = require('./utils/pdfLogger');
 const { startCleanupService } = require('./services/notificationCleanup');
 const { startDocumentCleanupService } = require('./services/documentCleanup');
+const { startReminderService } = require('./services/signatureReminders');
 const { query } = require('./database/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 const PORT = process.env.PORT || 5001;
+
+// Timestamp de inicio del servidor - usado para detectar reinicios
+const SERVER_START_TIME = Date.now();
 
 // Función para obtener el usuario del token
 const getUserFromToken = (token) => {
@@ -235,6 +239,16 @@ async function startServer() {
     }
   });
 
+  // Endpoint de health check - devuelve el timestamp de inicio del servidor
+  app.get('/api/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      serverStartTime: SERVER_START_TIME,
+      uptime: Date.now() - SERVER_START_TIME,
+      timestamp: Date.now()
+    });
+  });
+
   // Crear servidor Apollo
   const server = new ApolloServer({
     typeDefs,
@@ -300,6 +314,10 @@ async function startServer() {
     // Iniciar servicio de limpieza automática de documentos antiguos
     startDocumentCleanupService();
     console.log(`🗑️  Servicio de limpieza de documentos antiguos iniciado (cada 24h a las 3:00 AM)`);
+
+    // Iniciar servicio de recordatorios de firmas pendientes
+    startReminderService();
+    console.log(`📧 Servicio de recordatorios de firmas iniciado (cada 24h a las 9:00 AM)`);
   });
 }
 

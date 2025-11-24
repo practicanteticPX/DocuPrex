@@ -4,6 +4,7 @@ import Login from './components/login/Login.jsx'
 import Dashboard from './components/dashboard/Dashboard.jsx'
 import './App.css'
 import { API_URL } from './config/api'
+import { useServerHealth } from './hooks/useServerHealth'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -79,6 +80,14 @@ function App() {
     setIsAuthenticated(false)
     setUser(null)
   }
+
+  // Monitorear el estado del servidor y desloguear si se detecta un reinicio
+  useServerHealth(() => {
+    if (isAuthenticated) {
+      console.log('🔄 Servidor reiniciado detectado. Cerrando sesión silenciosamente...');
+      handleLogout();
+    }
+  }, 30000); // Verificar cada 30 segundos
 
   return (
     <>
