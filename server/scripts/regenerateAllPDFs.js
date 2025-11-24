@@ -25,11 +25,14 @@ async function regenerateAllPDFs() {
       SELECT
         d.id,
         d.title,
+        d.file_name,
         d.file_path,
         d.created_at,
-        u.name as uploaded_by_name
+        u.name as uploaded_by_name,
+        dt.name as document_type_name
       FROM documents d
       LEFT JOIN users u ON d.uploaded_by = u.id
+      LEFT JOIN document_types dt ON d.document_type_id = dt.id
       ORDER BY d.created_at DESC
     `);
 
@@ -51,9 +54,14 @@ async function regenerateAllPDFs() {
             u.name,
             u.email,
             ds.order_position,
+            ds.role_name,
+            ds.role_names,
             COALESCE(s.status, 'pending') as status,
             s.signed_at,
-            s.rejected_at
+            s.rejected_at,
+            s.rejection_reason,
+            s.consecutivo,
+            s.real_signer_name
           FROM document_signers ds
           JOIN users u ON ds.user_id = u.id
           LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = u.id
@@ -70,8 +78,10 @@ async function regenerateAllPDFs() {
 
         const documentInfo = {
           title: doc.title,
+          fileName: doc.file_name,
           createdAt: doc.created_at,
-          uploadedBy: doc.uploaded_by_name || 'Sistema'
+          uploadedBy: doc.uploaded_by_name || 'Sistema',
+          documentTypeName: doc.document_type_name || null
         };
 
         // Actualizar la página de firmantes

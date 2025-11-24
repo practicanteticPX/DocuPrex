@@ -155,7 +155,13 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         })
       : 'No disponible';
 
-    coverPage.drawText(createdDate, {
+    // Construir texto con la fecha y el nombre del creador
+    const createdBy = documentInfo.uploadedBy || 'Sistema';
+    const createdText = createdDate !== 'No disponible'
+      ? `${createdDate} por ${createdBy}`
+      : `${createdDate}`;
+
+    coverPage.drawText(createdText, {
       x: margin,
       y: yPosition,
       size: 10,

@@ -1360,9 +1360,10 @@ const resolvers = {
         console.log(`📋 Actualizando página de portada del documento ${documentId}...`);
 
         const docInfoResult = await query(
-          `SELECT d.*, u.name as uploader_name
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
           FROM documents d
           LEFT JOIN users u ON d.uploaded_by = u.id
+          LEFT JOIN document_types dt ON d.document_type_id = dt.id
           WHERE d.id = $1`,
           [documentId]
         );
@@ -1395,7 +1396,8 @@ const resolvers = {
               title: docInfo.title,
               fileName: docInfo.file_name,
               createdAt: docInfo.created_at,
-              uploadedBy: docInfo.uploader_name || 'Sistema'
+              uploadedBy: docInfo.uploader_name || 'Sistema',
+              documentTypeName: docInfo.document_type_name || null
             };
 
             await updateSignersPage(pdfPath, signers, documentInfo);
@@ -1643,9 +1645,10 @@ const resolvers = {
 
       try {
         const docInfo = await query(
-          `SELECT d.*, u.name as uploader_name
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
            FROM documents d
            LEFT JOIN users u ON d.uploaded_by = u.id
+           LEFT JOIN document_types dt ON d.document_type_id = dt.id
            WHERE d.id = $1`,
           [documentId]
         );
@@ -1670,7 +1673,8 @@ const resolvers = {
               title: docInfo.rows[0].title,
               fileName: docInfo.rows[0].file_name,
               createdAt: docInfo.rows[0].created_at,
-              uploadedBy: docInfo.rows[0].uploader_name || 'Sistema'
+              uploadedBy: docInfo.rows[0].uploader_name || 'Sistema',
+              documentTypeName: docInfo.rows[0].document_type_name || null
             };
 
             await updateSignersPage(pdfPath, signers, documentInfo);
