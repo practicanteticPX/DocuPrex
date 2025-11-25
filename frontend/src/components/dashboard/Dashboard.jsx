@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
-import { motion } from 'framer-motion';
 import './Dashboard.css';
 import './Dashboard.overrides.css';
 import './Rejected.css';
@@ -17,6 +16,9 @@ import HelpModal from '../HelpModal/HelpModal';
 import RealSignerModal from './RealSignerModal';
 import { Download, Close, Settings } from '../ui/animated-icons';
 import clockImage from '../../assets/clock.png';
+import estebanPhoto from '../../assets/esteban.JPG';
+import jesusPhoto from '../../assets/jesus.JPG';
+import BalatroBackground from '../ui/backgrounds/BalatroBackground';
 import {
   API_URL,
   API_UPLOAD_URL,
@@ -158,6 +160,8 @@ function Dashboard({ user, onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [rejectedDocsFilter, setRejectedDocsFilter] = useState('all'); // all, byMe, byOthers
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [selectedDeveloper, setSelectedDeveloper] = useState(null);
 
   // Actualizar emailNotifications cuando el user cambie
   useEffect(() => {
@@ -3535,6 +3539,53 @@ function Dashboard({ user, onLogout }) {
                         </span>
                       </label>
                     </div>
+
+                    <button
+                      onClick={() => {
+                        setShowCreditsModal(true);
+                        setShowSettings(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        marginTop: '12px',
+                        padding: '12px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        backgroundColor: 'white',
+                        color: '#374151',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f9fafb';
+                        e.currentTarget.style.borderColor = '#d1d5db';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'white';
+                        e.currentTarget.style.borderColor = '#e5e7eb';
+                      }}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                      </svg>
+                      Ver créditos
+                    </button>
                   </div>
                   <style>{`
                     @keyframes slideDown {
@@ -5970,6 +6021,321 @@ function Dashboard({ user, onLogout }) {
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* Modal de Créditos */}
+      {showCreditsModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10001,
+            animation: 'fadeIn 0.2s ease'
+          }}
+          onClick={() => setShowCreditsModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              padding: '40px',
+              maxWidth: '500px',
+              width: '90%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              animation: 'slideUp 0.3s ease',
+              textAlign: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: '700',
+              color: '#111827',
+              marginBottom: '8px'
+            }}>
+              Créditos
+            </h2>
+            <p style={{
+              fontSize: '14px',
+              color: '#6b7280',
+              marginBottom: '32px'
+            }}>
+              Desarrollado por
+            </p>
+
+            <div style={{ marginBottom: '32px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '24px'
+              }}>
+                {/* Avatar 1 - Esteban Zuluaga */}
+                <div
+                  onClick={() => setSelectedDeveloper({
+                    name: 'Esteban Zuluaga',
+                    role: 'Analista de Datos',
+                    photo: estebanPhoto
+                  })}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <img
+                    src={estebanPhoto}
+                    alt="Esteban Zuluaga"
+                    loading="eager"
+                    decoding="sync"
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      objectPosition: 'center',
+                      border: '3px solid white',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                      transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                      imageRendering: '-webkit-optimize-contrast',
+                      WebkitBackfaceVisibility: 'hidden',
+                      backfaceVisibility: 'hidden',
+                      transform: 'translateZ(0) scale(1)',
+                      willChange: 'transform',
+                      filter: 'contrast(1.05) brightness(1.02)',
+                      WebkitFontSmoothing: 'antialiased',
+                      MozOsxFontSmoothing: 'grayscale'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px) translateZ(0) scale(1.05)';
+                      e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0) translateZ(0) scale(1)';
+                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                    }}
+                  />
+                  <div style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#374151'
+                  }}>
+                    Esteban Zuluaga
+                  </div>
+                </div>
+
+                {/* Avatar 2 - Jesús Bustamante */}
+                <div
+                  onClick={() => setSelectedDeveloper({
+                    name: 'Jesús Bustamante',
+                    role: 'Practicante TIC',
+                    photo: jesusPhoto
+                  })}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <img
+                    src={jesusPhoto}
+                    alt="Jesús Bustamante"
+                    loading="eager"
+                    decoding="sync"
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      objectPosition: 'center',
+                      border: '3px solid white',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                      transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                      imageRendering: '-webkit-optimize-contrast',
+                      WebkitBackfaceVisibility: 'hidden',
+                      backfaceVisibility: 'hidden',
+                      transform: 'translateZ(0) scale(1)',
+                      willChange: 'transform',
+                      filter: 'contrast(1.05) brightness(1.02)',
+                      WebkitFontSmoothing: 'antialiased',
+                      MozOsxFontSmoothing: 'grayscale'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px) translateZ(0) scale(1.05)';
+                      e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0) translateZ(0) scale(1)';
+                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                    }}
+                  />
+                  <div style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#374151'
+                  }}>
+                    Jesús Bustamante
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowCreditsModal(false)}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#2563eb';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#3b82f6';
+              }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalles del Desarrollador */}
+      {selectedDeveloper && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10002,
+            animation: 'fadeIn 0.2s ease'
+          }}
+          onClick={() => setSelectedDeveloper(null)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              padding: '40px',
+              maxWidth: '350px',
+              width: '90%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              animation: 'slideUp 0.3s ease',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <BalatroBackground
+              isRotate={false}
+              mouseInteraction={true}
+              pixelFilter={700}
+              className=""
+            />
+            <img
+              src={selectedDeveloper.photo}
+              alt={selectedDeveloper.name}
+              loading="eager"
+              decoding="sync"
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                width: '140px',
+                height: '140px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                objectPosition: 'center',
+                border: '4px solid white',
+                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15)',
+                marginBottom: '20px',
+                imageRendering: '-webkit-optimize-contrast',
+                WebkitBackfaceVisibility: 'hidden',
+                backfaceVisibility: 'hidden',
+                transform: 'translateZ(0)',
+                filter: 'contrast(1.05) brightness(1.02)',
+                WebkitFontSmoothing: 'antialiased',
+                MozOsxFontSmoothing: 'grayscale'
+              }}
+            />
+            <h3 style={{
+              position: 'relative',
+              zIndex: 1,
+              fontSize: '20px',
+              fontWeight: '700',
+              color: '#111827',
+              marginBottom: '6px'
+            }}>
+              {selectedDeveloper.name}
+            </h3>
+            <p style={{
+              position: 'relative',
+              zIndex: 1,
+              fontSize: '14px',
+              color: '#6b7280',
+              marginBottom: '24px',
+              fontWeight: '500'
+            }}>
+              {selectedDeveloper.role}
+            </p>
+            <button
+              onClick={() => setSelectedDeveloper(null)}
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                padding: '10px 28px',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#2563eb';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#3b82f6';
+              }}
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       )}
 
