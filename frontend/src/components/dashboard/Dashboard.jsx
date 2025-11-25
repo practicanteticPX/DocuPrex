@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import './Dashboard.css';
@@ -159,9 +159,67 @@ function Dashboard({ user, onLogout }) {
   // Estados para configuración
   const [showSettings, setShowSettings] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(true);
-  const [rejectedDocsFilter, setRejectedDocsFilter] = useState('all'); // all, byMe, byOthers
-  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [rejectedDocsFilter, setRejectedDocsFilter] = useState('all');
   const [selectedDeveloper, setSelectedDeveloper] = useState(null);
+  const developerIndexRef = useRef(0);
+  const avatarRef = useRef(null);
+  const nameRef = useRef(null);
+  const roleRef = useRef(null);
+  const containerRef = useRef(null);
+
+  const developers = [
+    { name: 'Esteban Zuluaga', role: 'Analista de Datos', photo: estebanPhoto },
+    { name: 'Jesús Bustamante', role: 'Practicante TIC', photo: jesusPhoto }
+  ];
+
+  const switchDeveloper = () => {
+    if (!containerRef.current || !avatarRef.current || !nameRef.current || !roleRef.current) return;
+
+    const container = containerRef.current;
+    const avatar = avatarRef.current;
+    const name = nameRef.current;
+    const role = roleRef.current;
+
+    container.style.opacity = '0';
+    container.style.transform = 'translateX(-40px)';
+
+    setTimeout(() => {
+      developerIndexRef.current = (developerIndexRef.current + 1) % 2;
+      const newDev = developers[developerIndexRef.current];
+
+      avatar.src = newDev.photo;
+      name.textContent = newDev.name;
+      role.textContent = newDev.role;
+
+      container.style.transform = 'translateX(40px)';
+
+      setTimeout(() => {
+        container.style.opacity = '1';
+        container.style.transform = 'translateX(0)';
+      }, 50);
+    }, 400);
+  };
+
+  // Bloquear scroll cuando el modal de desarrollador esté abierto
+  useEffect(() => {
+    if (selectedDeveloper) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100vh';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    };
+  }, [selectedDeveloper]);
 
   // Actualizar emailNotifications cuando el user cambie
   useEffect(() => {
@@ -3542,7 +3600,8 @@ function Dashboard({ user, onLogout }) {
 
                     <button
                       onClick={() => {
-                        setShowCreditsModal(true);
+                        developerIndexRef.current = 0;
+                        setSelectedDeveloper(true);
                         setShowSettings(false);
                       }}
                       style={{
@@ -3596,6 +3655,26 @@ function Dashboard({ user, onLogout }) {
                       to {
                         opacity: 1;
                         transform: translateY(0);
+                      }
+                    }
+                    @keyframes slideInFade {
+                      from {
+                        opacity: 0;
+                        transform: translateX(30px);
+                      }
+                      to {
+                        opacity: 1;
+                        transform: translateX(0);
+                      }
+                    }
+                    @keyframes slideOutFade {
+                      from {
+                        opacity: 1;
+                        transform: translateX(0);
+                      }
+                      to {
+                        opacity: 0;
+                        transform: translateX(-30px);
                       }
                     }
                   `}</style>
@@ -6024,203 +6103,6 @@ function Dashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* Modal de Créditos */}
-      {showCreditsModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10001,
-            animation: 'fadeIn 0.2s ease'
-          }}
-          onClick={() => setShowCreditsModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '16px',
-              padding: '40px',
-              maxWidth: '500px',
-              width: '90%',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              animation: 'slideUp 0.3s ease',
-              textAlign: 'center'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{
-              fontSize: '24px',
-              fontWeight: '700',
-              color: '#111827',
-              marginBottom: '8px'
-            }}>
-              Créditos
-            </h2>
-            <p style={{
-              fontSize: '14px',
-              color: '#6b7280',
-              marginBottom: '32px'
-            }}>
-              Desarrollado por
-            </p>
-
-            <div style={{ marginBottom: '32px' }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '24px'
-              }}>
-                {/* Avatar 1 - Esteban Zuluaga */}
-                <div
-                  onClick={() => setSelectedDeveloper({
-                    name: 'Esteban Zuluaga',
-                    role: 'Analista de Datos',
-                    photo: estebanPhoto
-                  })}
-                  style={{
-                    position: 'relative',
-                    display: 'inline-flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <img
-                    src={estebanPhoto}
-                    alt="Esteban Zuluaga"
-                    loading="eager"
-                    decoding="sync"
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      objectPosition: 'center',
-                      border: '3px solid white',
-                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                      transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                      imageRendering: '-webkit-optimize-contrast',
-                      WebkitBackfaceVisibility: 'hidden',
-                      backfaceVisibility: 'hidden',
-                      transform: 'translateZ(0) scale(1)',
-                      willChange: 'transform',
-                      filter: 'contrast(1.05) brightness(1.02)',
-                      WebkitFontSmoothing: 'antialiased',
-                      MozOsxFontSmoothing: 'grayscale'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-4px) translateZ(0) scale(1.05)';
-                      e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0) translateZ(0) scale(1)';
-                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-                    }}
-                  />
-                  <div style={{
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#374151'
-                  }}>
-                    Esteban Zuluaga
-                  </div>
-                </div>
-
-                {/* Avatar 2 - Jesús Bustamante */}
-                <div
-                  onClick={() => setSelectedDeveloper({
-                    name: 'Jesús Bustamante',
-                    role: 'Practicante TIC',
-                    photo: jesusPhoto
-                  })}
-                  style={{
-                    position: 'relative',
-                    display: 'inline-flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <img
-                    src={jesusPhoto}
-                    alt="Jesús Bustamante"
-                    loading="eager"
-                    decoding="sync"
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      objectPosition: 'center',
-                      border: '3px solid white',
-                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                      transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                      imageRendering: '-webkit-optimize-contrast',
-                      WebkitBackfaceVisibility: 'hidden',
-                      backfaceVisibility: 'hidden',
-                      transform: 'translateZ(0) scale(1)',
-                      willChange: 'transform',
-                      filter: 'contrast(1.05) brightness(1.02)',
-                      WebkitFontSmoothing: 'antialiased',
-                      MozOsxFontSmoothing: 'grayscale'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-4px) translateZ(0) scale(1.05)';
-                      e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0) translateZ(0) scale(1)';
-                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-                    }}
-                  />
-                  <div style={{
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#374151'
-                  }}>
-                    Jesús Bustamante
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowCreditsModal(false)}
-              style={{
-                width: '100%',
-                padding: '12px 24px',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#2563eb';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#3b82f6';
-              }}
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Modal de Detalles del Desarrollador */}
       {selectedDeveloper && (
         <div
@@ -6239,7 +6121,6 @@ function Dashboard({ user, onLogout }) {
             backgroundColor: '#000000',
             overflow: 'hidden'
           }}
-          onClick={() => setSelectedDeveloper(null)}
         >
           <BalatroBackground
             isRotate={false}
@@ -6308,73 +6189,132 @@ function Dashboard({ user, onLogout }) {
               </svg>
             </button>
 
-            <div
+            <button
+              onClick={switchDeveloper}
               style={{
-                position: 'relative',
-                width: '220px',
-                height: '220px',
+                position: 'absolute',
+                top: '215px',
+                right: '20px',
+                width: '40px',
+                height: '40px',
                 borderRadius: '50%',
-                overflow: 'hidden',
-                border: '6px solid rgba(255, 255, 255, 0.15)',
-                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(255, 255, 255, 0.1)',
-                transition: 'transform 0.4s ease, box-shadow 0.4s ease'
+                border: 'none',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s ease',
+                zIndex: 20
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.05)';
-                e.currentTarget.style.boxShadow = '0 25px 80px rgba(0, 0, 0, 0.5), 0 0 100px rgba(255, 255, 255, 0.15)';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.transform = 'scale(1.1)';
               }}
               onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
                 e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(255, 255, 255, 0.1)';
               }}
             >
-              <img
-                src={selectedDeveloper.photo}
-                alt={selectedDeveloper.name}
-                loading="eager"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center'
-                }}
-              />
-            </div>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
 
             <div
+              ref={containerRef}
               style={{
-                textAlign: 'center',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '12px'
+                alignItems: 'center',
+                gap: '32px',
+                opacity: 1,
+                transform: 'translateX(0)',
+                transition: 'opacity 0.4s ease-out, transform 0.4s ease-out'
               }}
             >
-              <h2
+              <div
                 style={{
-                  margin: 0,
-                  fontSize: '32px',
-                  fontWeight: '700',
-                  color: '#ffffff',
-                  letterSpacing: '0.5px',
-                  textShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-                  fontFamily: 'system-ui, -apple-system, sans-serif'
+                  position: 'relative',
+                  width: '350px',
+                  height: '350px',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '6px solid rgba(255, 255, 255, 0.15)',
+                  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(255, 255, 255, 0.1)',
+                  transition: 'transform 0.4s ease, box-shadow 0.4s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 25px 80px rgba(0, 0, 0, 0.5), 0 0 100px rgba(255, 255, 255, 0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(255, 255, 255, 0.1)';
                 }}
               >
-                {selectedDeveloper.name}
-              </h2>
-              <p
+                <img
+                  ref={avatarRef}
+                  src={developers[0].photo}
+                  alt={developers[0].name}
+                  loading="eager"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center'
+                  }}
+                />
+              </div>
+
+              <div
                 style={{
-                  margin: 0,
-                  fontSize: '18px',
-                  fontWeight: '400',
-                  color: 'rgba(255, 255, 255, 0.7)',
-                  letterSpacing: '0.5px',
-                  textShadow: '0 2px 10px rgba(0, 0, 0, 0.5)',
-                  fontFamily: 'system-ui, -apple-system, sans-serif'
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
                 }}
               >
-                {selectedDeveloper.role}
-              </p>
+                <h2
+                  ref={nameRef}
+                  style={{
+                    margin: 0,
+                    fontSize: '32px',
+                    fontWeight: '700',
+                    color: '#ffffff',
+                    letterSpacing: '0.5px',
+                    textShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+                    fontFamily: 'system-ui, -apple-system, sans-serif'
+                  }}
+                >
+                  {developers[0].name}
+                </h2>
+                <p
+                  ref={roleRef}
+                  style={{
+                    margin: 0,
+                    fontSize: '18px',
+                    fontWeight: '400',
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    letterSpacing: '0.5px',
+                    textShadow: '0 2px 10px rgba(0, 0, 0, 0.5)',
+                    fontFamily: 'system-ui, -apple-system, sans-serif'
+                  }}
+                >
+                  {developers[0].role}
+                </p>
+              </div>
             </div>
           </div>
         </div>
