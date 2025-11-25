@@ -570,7 +570,8 @@ textarea.form-input:focus {
 }
 
 .pdf-viewer-action-btn.download:hover {
-  background-color: #EEF2FF !important;
+  background-color: #DBEAFE !important;
+  color: #2563EB !important;
 }
 
 .pdf-viewer-action-btn.close:hover {

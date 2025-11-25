@@ -5359,7 +5359,8 @@
 }
 
 .pdf-viewer-action-btn.download:hover {
-  background-color: #F3F4F6;
+  background-color: #DBEAFE;
+  color: #2563EB;
 }
 
 .pdf-viewer-action-btn.close {
