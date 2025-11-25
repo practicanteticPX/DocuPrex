@@ -11,7 +11,8 @@ animated-icons/
 │   └── AnimatedIcon.jsx        # Base component with animation logic
 └── icons/
     ├── DownloadIcon.jsx        # Download icon with vertical bounce
-    └── CloseIcon.jsx           # Close (X) icon with rotation
+    ├── CloseIcon.jsx           # Close (X) icon with rotation
+    └── SettingsIcon.jsx        # Settings/gear icon with rotation
 ```
 
 ## 🎯 Design Principles
@@ -81,7 +82,8 @@ All icons support these props:
 | Icon | Exports | Animation | Use Case |
 |------|---------|-----------|----------|
 | DownloadIcon | `Download`, `DownloadIcon` | Vertical bounce (arrow moves down) | Download buttons, file exports |
-| CloseIcon | `Close`, `X`, `CloseIcon` | Rotation (90° clockwise) | Close buttons, modals, dialogs |
+| CloseIcon | `Close`, `X`, `CloseIcon` | Smooth rotation (90° bidirectional) | Close buttons, modals, dialogs |
+| SettingsIcon | `Settings`, `SettingsIcon` | Continuous rotation (360° infinite) | Settings buttons, configuration menus |
 
 ## 🚀 Adding New Icons
 

@@ -3,6 +3,7 @@ import axios from 'axios';
 import './Notifications.css';
 import { API_URL } from '../../config/api';
 import Loader from '../Loader/Loader';
+import { Bell } from '../ui/animated-icons';
 
 /**
  * Helper function para manejar errores de autenticación en GraphQL
@@ -117,6 +118,7 @@ const Notifications = ({ onNotificationClick }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isBellHovered, setIsBellHovered] = useState(false);
   const dropdownRef = useRef(null);
 
   // Cargar notificaciones
@@ -276,16 +278,10 @@ const Notifications = ({ onNotificationClick }) => {
         className="notifications-bell-button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label="Notificaciones"
+        onMouseEnter={() => setIsBellHovered(true)}
+        onMouseLeave={() => setIsBellHovered(false)}
       >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <Bell isAnimating={isBellHovered} size={24} strokeWidth={2} />
         {unreadCount > 0 && (
           <span className="notifications-badge"></span>
         )}
