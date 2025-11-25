@@ -3599,51 +3599,41 @@ function Dashboard({ user, onLogout }) {
                     </div>
 
                     <button
+                      className="credits-button-magic"
                       onClick={() => {
                         developerIndexRef.current = 0;
                         setSelectedDeveloper(true);
                         setShowSettings(false);
                       }}
-                      style={{
-                        width: '100%',
-                        marginTop: '12px',
-                        padding: '12px',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        backgroundColor: 'white',
-                        color: '#374151',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f9fafb';
-                        e.currentTarget.style.borderColor = '#d1d5db';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'white';
-                        e.currentTarget.style.borderColor = '#e5e7eb';
-                      }}
                     >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
-                      </svg>
-                      Ver créditos
+                      <div className="blur-layer-credits">
+                        <div className="rotating-gradient-credits"></div>
+                      </div>
+
+                      <div className="gradient-layer-credits">
+                        <div className="rotating-gradient-credits"></div>
+                      </div>
+
+                      <div className="inner-bg-credits"></div>
+
+                      <div className="button-content-credits">
+                        <span className="icon-credits">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                          </svg>
+                        </span>
+                        <span className="label-credits">Ver créditos</span>
+                      </div>
                     </button>
                   </div>
                   <style>{`
@@ -3676,6 +3666,115 @@ function Dashboard({ user, onLogout }) {
                         opacity: 0;
                         transform: translateX(-30px);
                       }
+                    }
+
+                    /* Credits Button Subtle Animation */
+                    .credits-button-magic {
+                      background: white;
+                      border: 1px solid #e5e7eb;
+                      border-radius: 8px;
+                      cursor: pointer;
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      font-size: 14px;
+                      font-weight: 500;
+                      line-height: 1.25em;
+                      width: 100%;
+                      margin-top: 12px;
+                      padding: 12px;
+                      position: relative;
+                      color: #374151;
+                      overflow: hidden;
+                      transition: transform 0.15s ease, background-color 0.2s ease;
+                    }
+
+                    .credits-button-magic:hover {
+                      background-color: #f9fafb;
+                    }
+
+                    .credits-button-magic:active {
+                      transform: scale(0.97);
+                    }
+
+                    .blur-layer-credits {
+                      display: none;
+                    }
+
+                    .gradient-layer-credits {
+                      position: absolute;
+                      inset: -1px;
+                      border-radius: 9px;
+                      overflow: hidden;
+                      pointer-events: none;
+                      opacity: 0;
+                      transition: opacity 0.3s ease;
+                    }
+
+                    .credits-button-magic:hover .gradient-layer-credits {
+                      opacity: 0.35;
+                    }
+
+                    .rotating-gradient-credits {
+                      position: absolute;
+                      width: 200%;
+                      height: 200%;
+                      top: -50%;
+                      left: -50%;
+                      background: conic-gradient(
+                        from 0deg,
+                        transparent 0deg,
+                        rgba(139, 92, 246, 0.4) 90deg,
+                        rgba(59, 130, 246, 0.4) 180deg,
+                        rgba(16, 185, 129, 0.4) 270deg,
+                        transparent 360deg
+                      );
+                      animation: rotate-gradient-credits 4s linear infinite;
+                    }
+
+                    @keyframes rotate-gradient-credits {
+                      from {
+                        transform: rotate(0deg);
+                      }
+                      to {
+                        transform: rotate(360deg);
+                      }
+                    }
+
+                    .inner-bg-credits {
+                      position: absolute;
+                      inset: 1px;
+                      border-radius: 7px;
+                      background: white;
+                      z-index: 1;
+                    }
+
+                    .credits-button-magic:hover .inner-bg-credits {
+                      background: #f9fafb;
+                    }
+
+                    .button-content-credits {
+                      position: relative;
+                      z-index: 2;
+                      display: flex;
+                      gap: 8px;
+                      align-items: center;
+                      justify-content: center;
+                    }
+
+                    .icon-credits {
+                      width: 16px;
+                      height: 16px;
+                      display: flex;
+                    }
+
+                    .icon-credits svg {
+                      width: 100%;
+                      height: 100%;
+                      stroke: currentColor;
+                    }
+
+                    .label-credits {
+                      font-size: 14px;
+                      line-height: 1.25em;
                     }
                   `}</style>
                 </>

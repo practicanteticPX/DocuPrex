@@ -381,9 +381,11 @@
 }
 
 .form-group label {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-size: 14px;
   font-weight: 600;
   color: #1a1a1a;
+  display: block;
 }
 
 .form-input {
@@ -4806,12 +4808,15 @@
 }
 
 .form-group label {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #374151;
+  display: block;
 }
 
 .form-group label span {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: #9CA3AF;
   font-weight: 400;
 }
