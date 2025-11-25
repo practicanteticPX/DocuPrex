@@ -10,7 +10,8 @@ animated-icons/
 ├── core/
 │   └── AnimatedIcon.jsx        # Base component with animation logic
 └── icons/
-    └── DownloadIcon.jsx        # Specific icon implementations
+    ├── DownloadIcon.jsx        # Download icon with vertical bounce
+    └── CloseIcon.jsx           # Close (X) icon with rotation
 ```
 
 ## 🎯 Design Principles
@@ -25,11 +26,12 @@ animated-icons/
 
 ### Controlled Animation (Recommended)
 
+**Download Icon Example:**
 ```jsx
 import { useState } from 'react';
 import { Download } from '@/components/ui/animated-icons';
 
-function MyComponent() {
+function DownloadButton() {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -39,6 +41,25 @@ function MyComponent() {
     >
       <Download isAnimating={isHovered} size={20} strokeWidth={2} />
       Download
+    </button>
+  );
+}
+```
+
+**Close Icon Example:**
+```jsx
+import { useState } from 'react';
+import { Close } from '@/components/ui/animated-icons';
+
+function CloseButton() {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <button
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <Close isAnimating={isHovered} size={20} strokeWidth={2} />
     </button>
   );
 }
@@ -54,6 +75,13 @@ All icons support these props:
 | `size` | number | 24 | Icon size in pixels |
 | `strokeWidth` | number | 2 | SVG stroke width |
 | `className` | string | '' | Additional CSS classes |
+
+### Available Icons
+
+| Icon | Exports | Animation | Use Case |
+|------|---------|-----------|----------|
+| DownloadIcon | `Download`, `DownloadIcon` | Vertical bounce (arrow moves down) | Download buttons, file exports |
+| CloseIcon | `Close`, `X`, `CloseIcon` | Rotation (90° clockwise) | Close buttons, modals, dialogs |
 
 ## 🚀 Adding New Icons
 

@@ -15,7 +15,7 @@ import Loader from '../Loader/Loader';
 import LogoutButton from '../LogoutButton/LogoutButton';
 import HelpModal from '../HelpModal/HelpModal';
 import RealSignerModal from './RealSignerModal';
-import { Download } from '../ui/animated-icons';
+import { Download, Close } from '../ui/animated-icons';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -67,6 +67,7 @@ function Dashboard({ user, onLogout }) {
   const [isViewingPending, setIsViewingPending] = useState(false);
   const [isWaitingTurn, setIsWaitingTurn] = useState(false);
   const [isDownloadBtnHovered, setIsDownloadBtnHovered] = useState(false);
+  const [isCloseBtnHovered, setIsCloseBtnHovered] = useState(false);
   const [documentLoadedFromUrl, setDocumentLoadedFromUrl] = useState(false);
   // Establecer isCheckingDocumentFromUrl en true si hay un documento en la URL desde el inicio
   const [isCheckingDocumentFromUrl, setIsCheckingDocumentFromUrl] = useState(() => {
@@ -5687,10 +5688,14 @@ function Dashboard({ user, onLogout }) {
               >
                 <Download isAnimating={isDownloadBtnHovered} size={20} strokeWidth={2} />
               </a>
-              <button className="pdf-viewer-action-btn close" onClick={handleCloseViewer} title="Cerrar">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+              <button
+                className="pdf-viewer-action-btn close"
+                onClick={handleCloseViewer}
+                title="Cerrar"
+                onMouseEnter={() => setIsCloseBtnHovered(true)}
+                onMouseLeave={() => setIsCloseBtnHovered(false)}
+              >
+                <Close isAnimating={isCloseBtnHovered} size={20} strokeWidth={2} />
               </button>
             </div>
           </div>
