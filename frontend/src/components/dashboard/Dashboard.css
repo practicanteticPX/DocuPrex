@@ -5369,7 +5369,7 @@
 }
 
 .pdf-viewer-action-btn.sign {
-  color: #22c55e;
+  color: #6B7280;
   background-color: transparent;
   border: none;
   padding: 10px 20px;
@@ -5377,15 +5377,16 @@
   font-weight: 600;
   min-width: 110px;
   justify-content: center;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .pdf-viewer-action-btn.sign:hover {
   background-color: #dcfce7;
+  color: #22c55e;
 }
 
 .pdf-viewer-action-btn.reject {
-  color: #ef4444;
+  color: #6B7280;
   background-color: transparent;
   border: none;
   padding: 10px 20px;
@@ -5393,11 +5394,12 @@
   font-weight: 600;
   min-width: 110px;
   justify-content: center;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .pdf-viewer-action-btn.reject:hover {
   background-color: #fee2e2;
+  color: #ef4444;
 }
 
 .pdf-viewer-action-btn.consecutivo {

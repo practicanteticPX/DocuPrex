@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
+import { motion } from 'framer-motion';
 import './Dashboard.css';
 import './Dashboard.overrides.css';
 import './Rejected.css';
@@ -14,6 +15,7 @@ import Loader from '../Loader/Loader';
 import LogoutButton from '../LogoutButton/LogoutButton';
 import HelpModal from '../HelpModal/HelpModal';
 import RealSignerModal from './RealSignerModal';
+import { Download } from '../ui/animated-icons';
 import clockImage from '../../assets/clock.png';
 import {
   API_URL,
@@ -64,6 +66,7 @@ function Dashboard({ user, onLogout }) {
   const [viewingDocument, setViewingDocument] = useState(null);
   const [isViewingPending, setIsViewingPending] = useState(false);
   const [isWaitingTurn, setIsWaitingTurn] = useState(false);
+  const [isDownloadBtnHovered, setIsDownloadBtnHovered] = useState(false);
   const [documentLoadedFromUrl, setDocumentLoadedFromUrl] = useState(false);
   // Establecer isCheckingDocumentFromUrl en true si hay un documento en la URL desde el inicio
   const [isCheckingDocumentFromUrl, setIsCheckingDocumentFromUrl] = useState(() => {
@@ -5651,13 +5654,13 @@ function Dashboard({ user, onLogout }) {
                       Consecutivo
                     </button>
                   )}
-                  <button className="pdf-viewer-action-btn sign" onClick={handleOpenSignConfirm}>
+                  <button className={`pdf-viewer-action-btn pdf-sign-btn ${showSignConfirm || (showRealSignerModal && realSignerAction === 'firmar') ? 'active' : ''}`} onClick={handleOpenSignConfirm}>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                     Firmar
                   </button>
-                  <button className="pdf-viewer-action-btn reject" onClick={handleOpenRejectConfirm}>
+                  <button className={`pdf-viewer-action-btn pdf-reject-btn ${showRejectConfirm || (showRealSignerModal && realSignerAction === 'rechazar') ? 'active' : ''}`} onClick={handleOpenRejectConfirm}>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
@@ -5679,10 +5682,10 @@ function Dashboard({ user, onLogout }) {
                 title="Descargar"
                 target="_blank"
                 rel="noopener noreferrer"
+                onMouseEnter={() => setIsDownloadBtnHovered(true)}
+                onMouseLeave={() => setIsDownloadBtnHovered(false)}
               >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M7 10L12 15M12 15L17 10M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <Download isAnimating={isDownloadBtnHovered} size={20} strokeWidth={2} />
               </a>
               <button className="pdf-viewer-action-btn close" onClick={handleCloseViewer} title="Cerrar">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -5739,10 +5742,10 @@ function Dashboard({ user, onLogout }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="fallback-download-btn"
+                  onMouseEnter={() => setIsDownloadBtnHovered(true)}
+                  onMouseLeave={() => setIsDownloadBtnHovered(false)}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M7 10L12 15M12 15L17 10M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  <Download isAnimating={isDownloadBtnHovered} size={20} strokeWidth={2} />
                   Descargar PDF
                 </a>
               </div>

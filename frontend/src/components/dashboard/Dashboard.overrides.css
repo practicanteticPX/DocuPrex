@@ -579,6 +579,30 @@ textarea.form-input:focus {
   color: #DC2626 !important;
 }
 
+.pdf-sign-btn {
+  color: #6B7280 !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+.pdf-sign-btn:hover,
+.pdf-sign-btn.active {
+  background-color: #dcfce7 !important;
+  color: #22c55e !important;
+  border: 1px solid #22c55e !important;
+}
+
+.pdf-reject-btn {
+  color: #6B7280 !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+.pdf-reject-btn:hover,
+.pdf-reject-btn.active {
+  background-color: #fee2e2 !important;
+  color: #ef4444 !important;
+  border: 1px solid #ef4444 !important;
+}
+
 /* Iframe del PDF */
 .pdf-viewer-minimal-iframe {
   width: 100% !important;
