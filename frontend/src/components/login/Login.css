@@ -319,26 +319,16 @@
 .help-text {
   font-size: 13px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-weight: 400;
-  color: #6B7280;
+  font-weight: 600;
+  background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   line-height: 1.5;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-}
-
-.help-text a {
-  color: #6366F1;
-  text-decoration: none;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-weight: 400;
-  transition: all 0.2s ease;
-}
-
-.help-text a:hover {
-  color: #4F46E5;
-  text-decoration: underline;
 }
 
 .copyright-text {

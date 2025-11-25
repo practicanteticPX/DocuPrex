@@ -14,6 +14,7 @@ import Loader from '../Loader/Loader';
 import LogoutButton from '../LogoutButton/LogoutButton';
 import HelpModal from '../HelpModal/HelpModal';
 import RealSignerModal from './RealSignerModal';
+import CountUp from '../CountUp';
 import { Download, Close, Settings } from '../ui/animated-icons';
 import clockImage from '../../assets/clock.png';
 import estebanPhoto from '../../assets/esteban.JPG';
@@ -5173,7 +5174,17 @@ function Dashboard({ user, onLogout }) {
                           (myDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                         return matchesSearch && matchesStatus && matchesType;
                       }).length;
-                      return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''}`;
+                      return (
+                        <>
+                          <CountUp
+                            from={0}
+                            to={filteredCount}
+                            duration={0.8}
+                            direction="up"
+                          />
+                          {` documento${filteredCount !== 1 ? 's' : ''}`}
+                        </>
+                      );
                     })()}
                   </p>
                 </div>
