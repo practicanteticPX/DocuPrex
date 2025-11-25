@@ -16,6 +16,8 @@ interface BalatroProps {
   isRotate?: boolean;
   mouseInteraction?: boolean;
   className?: string;
+  blur?: boolean;
+  opacity?: number;
 }
 
 function hexToVec4(hex: string): [number, number, number, number] {
@@ -119,7 +121,9 @@ const BalatroBackground = ({
   spinEase = 1.0,
   isRotate = false,
   mouseInteraction = true,
-  className = ''
+  className = '',
+  blur = false,
+  opacity = 1.0
 }: BalatroProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -237,7 +241,9 @@ const BalatroBackground = ({
         width: '100%',
         height: '100%',
         zIndex: 0,
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        filter: blur ? 'blur(4px)' : 'none',
+        opacity: opacity
       }}
     />
   );

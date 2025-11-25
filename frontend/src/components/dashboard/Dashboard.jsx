@@ -6230,111 +6230,152 @@ function Dashboard({ user, onLogout }) {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.4)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            width: '100%',
+            height: '100vh',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 10002,
-            animation: 'fadeIn 0.2s ease'
+            backgroundColor: '#000000',
+            overflow: 'hidden'
           }}
           onClick={() => setSelectedDeveloper(null)}
         >
+          <BalatroBackground
+            isRotate={false}
+            mouseInteraction={true}
+            pixelFilter={700}
+            blur={true}
+            opacity={0.85}
+          />
+
           <div
             style={{
               position: 'relative',
-              backgroundColor: 'white',
-              borderRadius: '16px',
-              padding: '40px',
-              maxWidth: '350px',
-              width: '90%',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              animation: 'slideUp 0.3s ease',
-              textAlign: 'center',
+              zIndex: 10,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
+              gap: '32px',
+              padding: '40px',
+              maxWidth: '500px',
+              width: '90%',
               overflow: 'hidden'
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <BalatroBackground
-              isRotate={false}
-              mouseInteraction={true}
-              pixelFilter={700}
-              className=""
-            />
-            <img
-              src={selectedDeveloper.photo}
-              alt={selectedDeveloper.name}
-              loading="eager"
-              decoding="sync"
-              style={{
-                position: 'relative',
-                zIndex: 1,
-                width: '140px',
-                height: '140px',
-                borderRadius: '50%',
-                objectFit: 'cover',
-                objectPosition: 'center',
-                border: '4px solid white',
-                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15)',
-                marginBottom: '20px',
-                imageRendering: '-webkit-optimize-contrast',
-                WebkitBackfaceVisibility: 'hidden',
-                backfaceVisibility: 'hidden',
-                transform: 'translateZ(0)',
-                filter: 'contrast(1.05) brightness(1.02)',
-                WebkitFontSmoothing: 'antialiased',
-                MozOsxFontSmoothing: 'grayscale'
-              }}
-            />
-            <h3 style={{
-              position: 'relative',
-              zIndex: 1,
-              fontSize: '20px',
-              fontWeight: '700',
-              color: '#111827',
-              marginBottom: '6px'
-            }}>
-              {selectedDeveloper.name}
-            </h3>
-            <p style={{
-              position: 'relative',
-              zIndex: 1,
-              fontSize: '14px',
-              color: '#6b7280',
-              marginBottom: '24px',
-              fontWeight: '500'
-            }}>
-              {selectedDeveloper.role}
-            </p>
             <button
               onClick={() => setSelectedDeveloper(null)}
               style={{
-                position: 'relative',
-                zIndex: 1,
-                padding: '10px 28px',
-                backgroundColor: '#3b82f6',
-                color: 'white',
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
                 border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '600',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
                 cursor: 'pointer',
-                transition: 'background-color 0.2s ease'
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s ease',
+                zIndex: 20
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#2563eb';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.transform = 'scale(1.1)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#3b82f6';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.transform = 'scale(1)';
               }}
             >
-              Cerrar
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 6L6 18M6 6L18 18" />
+              </svg>
             </button>
+
+            <div
+              style={{
+                position: 'relative',
+                width: '220px',
+                height: '220px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '6px solid rgba(255, 255, 255, 0.15)',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(255, 255, 255, 0.1)',
+                transition: 'transform 0.4s ease, box-shadow 0.4s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 25px 80px rgba(0, 0, 0, 0.5), 0 0 100px rgba(255, 255, 255, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(255, 255, 255, 0.1)';
+              }}
+            >
+              <img
+                src={selectedDeveloper.photo}
+                alt={selectedDeveloper.name}
+                loading="eager"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center'
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: '32px',
+                  fontWeight: '700',
+                  color: '#ffffff',
+                  letterSpacing: '0.5px',
+                  textShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+                  fontFamily: 'system-ui, -apple-system, sans-serif'
+                }}
+              >
+                {selectedDeveloper.name}
+              </h2>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '400',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  letterSpacing: '0.5px',
+                  textShadow: '0 2px 10px rgba(0, 0, 0, 0.5)',
+                  fontFamily: 'system-ui, -apple-system, sans-serif'
+                }}
+              >
+                {selectedDeveloper.role}
+              </p>
+            </div>
           </div>
         </div>
       )}
