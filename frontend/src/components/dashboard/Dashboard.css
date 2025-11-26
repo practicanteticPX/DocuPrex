@@ -5245,6 +5245,13 @@
    VISOR DE PDF MINIMALISTA - PANTALLA COMPLETA
    ======================================== */
 
+/* Bloquear scroll del body cuando el modal está abierto */
+body:has(.pdf-viewer-minimal-overlay),
+html:has(.pdf-viewer-minimal-overlay) {
+  overflow: hidden;
+  height: 100vh;
+}
+
 /* Overlay que cubre toda la pantalla */
 .pdf-viewer-minimal-overlay {
   position: fixed;
@@ -5256,6 +5263,9 @@
   z-index: 10000;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
 }
 
 /* Header del visor - minimalista */
@@ -5267,14 +5277,18 @@
   background-color: white;
   border-bottom: 1px solid #E5E7EB;
   flex-shrink: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .pdf-viewer-header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex: 1;
   min-width: 0;
+  overflow: visible;
 }
 
 .pdf-viewer-back-btn {
@@ -5291,6 +5305,7 @@
   border-radius: 8px;
   transition: all 0.2s;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .pdf-viewer-back-btn:hover {
@@ -5305,9 +5320,11 @@
 
 .pdf-viewer-title {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  flex: 0 1 auto;
+  overflow: visible;
 }
 
 .pdf-viewer-title h2 {
@@ -5318,6 +5335,34 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.pdf-viewer-description-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.pdf-viewer-description-btn:hover {
+  background-color: #F3F4F6;
+  color: #6366F1;
+}
+
+.pdf-viewer-description-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .pdf-viewer-title p {
@@ -5334,6 +5379,8 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .pdf-viewer-action-btn {
@@ -5350,6 +5397,17 @@
   cursor: pointer;
   transition: all 0.2s;
   text-decoration: none;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  will-change: auto;
+}
+
+.pdf-viewer-action-btn svg,
+.pdf-viewer-action-btn svg * {
+  overflow: visible;
+  will-change: auto;
 }
 
 .pdf-viewer-action-btn:hover {
@@ -5450,9 +5508,11 @@
   color: #1E40AF;
   font-size: 14px;
   font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.4;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 1;
 }
 
 .pdf-viewer-waiting-message svg {
@@ -5461,7 +5521,10 @@
 }
 
 .pdf-viewer-waiting-message span {
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  flex: 1;
+  min-width: 0;
 }
 
 /* Contenedor del PDF */
@@ -5471,7 +5534,10 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  overflow: hidden;
+  overflow: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
 }
 
 .pdf-viewer-minimal-iframe {

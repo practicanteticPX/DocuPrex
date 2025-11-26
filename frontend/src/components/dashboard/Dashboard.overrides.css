@@ -424,6 +424,13 @@ textarea.form-input:focus {
    VISOR DE PDF MINIMALISTA
    ======================================== */
 
+/* Bloquear scroll del body cuando el modal está abierto */
+body:has(.pdf-viewer-minimal-overlay),
+html:has(.pdf-viewer-minimal-overlay) {
+  overflow: hidden !important;
+  height: 100vh !important;
+}
+
 /* Overlay de pantalla completa */
 .pdf-viewer-minimal-overlay {
   position: fixed !important;
@@ -433,6 +440,11 @@ textarea.form-input:focus {
   bottom: 0 !important;
   background-color: #F9FAFB !important;
   z-index: 10000 !important;
+  overflow: hidden !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Header del visor */
@@ -440,12 +452,48 @@ textarea.form-input:focus {
   background-color: white !important;
   border-bottom: 1px solid #E5E7EB !important;
   padding: 16px 24px !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
 }
 
 .pdf-viewer-header-left {
   display: flex !important;
   align-items: center !important;
-  gap: 16px !important;
+  gap: 12px !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+
+.pdf-viewer-header-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+  max-width: 100% !important;
+}
+
+.pdf-viewer-action-btn {
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+.pdf-viewer-action-btn svg {
+  display: block !important;
+  flex-shrink: 0 !important;
+}
+
+.pdf-viewer-title {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
 }
 
 .pdf-viewer-title h2 {
@@ -453,6 +501,11 @@ textarea.form-input:focus {
   font-weight: 600 !important;
   color: #111827 !important;
   margin: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
 }
 
 .pdf-viewer-description-btn {
@@ -468,6 +521,7 @@ textarea.form-input:focus {
   align-items: center !important;
   justify-content: center !important;
   flex-shrink: 0 !important;
+  box-sizing: border-box !important;
 }
 
 .pdf-viewer-description-btn:hover {
@@ -485,8 +539,11 @@ textarea.form-input:focus {
   position: absolute !important;
   top: 80px !important;
   left: 24px !important;
+  right: 24px !important;
   z-index: 10001 !important;
   animation: slideDown 0.2s ease !important;
+  max-width: 400px !important;
+  width: auto !important;
 }
 
 @keyframes slideDown {
@@ -506,8 +563,8 @@ textarea.form-input:focus {
   border-radius: 12px !important;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
   padding: 16px !important;
-  max-width: 400px !important;
-  min-width: 300px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .pdf-description-header {
@@ -562,6 +619,8 @@ textarea.form-input:focus {
   color: #374151 !important;
   padding: 8px 12px !important;
   border-radius: 8px !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
 }
 
 .pdf-viewer-back-btn:hover {
