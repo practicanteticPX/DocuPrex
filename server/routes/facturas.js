@@ -21,7 +21,9 @@ router.get('/search/:numeroControl', async (req, res) => {
       `SELECT
         numero_control,
         proveedor,
-        numero_factura
+        numero_factura,
+        fecha_factura,
+        fecha_entrega
        FROM crud_facturas."T_Facturas"
        WHERE numero_control = $1
        LIMIT 1`,

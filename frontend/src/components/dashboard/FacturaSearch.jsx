@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Edit } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Item, ItemContent, ItemTitle, ItemActions } from '../ui/item';
+import FacturaTemplate from './FacturaTemplate';
 import './FacturaSearch.css';
 
 /**
@@ -15,6 +16,7 @@ const FacturaSearch = ({ onFacturaSelect }) => {
   const [loading, setLoading] = useState(false);
   const [factura, setFactura] = useState(null);
   const [searched, setSearched] = useState(false);
+  const [showTemplate, setShowTemplate] = useState(false);
 
   useEffect(() => {
     const searchFactura = async () => {
@@ -61,12 +63,32 @@ const FacturaSearch = ({ onFacturaSelect }) => {
   };
 
   const handleEdit = () => {
-    if (factura && onFacturaSelect) {
-      onFacturaSelect(factura);
+    if (factura) {
+      setShowTemplate(true);
+      if (onFacturaSelect) {
+        onFacturaSelect(factura);
+      }
     }
   };
 
+  const handleCloseTemplate = () => {
+    setShowTemplate(false);
+  };
+
+  const handleSaveTemplate = (data) => {
+    console.log('Guardando datos de factura:', data);
+    setShowTemplate(false);
+  };
+
   return (
+    <>
+      {showTemplate && factura && (
+        <FacturaTemplate
+          factura={factura}
+          onClose={handleCloseTemplate}
+          onSave={handleSaveTemplate}
+        />
+      )}
     <div className="factura-search-container">
       <div className="factura-search-header">
         <label htmlFor="numero-control-input" className="factura-search-label">
@@ -137,6 +159,7 @@ const FacturaSearch = ({ onFacturaSelect }) => {
         </Item>
       )}
     </div>
+    </>
   );
 };
 
