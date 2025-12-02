@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Edit } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Edit } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Item, ItemContent, ItemTitle, ItemActions } from '../ui/item';
 import './FacturaSearch.css';
@@ -8,51 +8,56 @@ import './FacturaSearch.css';
  * FacturaSearch - Buscador de facturas por consecutivo
  *
  * Permite buscar facturas en la tabla T_Facturas por consecutivo
- * y muestra los resultados en una carta.
+ * y muestra los resultados en una carta. La búsqueda es en tiempo real.
  */
 const FacturaSearch = ({ onFacturaSelect }) => {
   const [numeroControl, setNumeroControl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [factura, setFactura] = useState(null);
+  const [searched, setSearched] = useState(false);
 
-  const handleSearch = async () => {
-    if (!numeroControl.trim()) {
-      setError('Ingresa un consecutivo');
-      return;
-    }
+  useEffect(() => {
+    const searchFactura = async () => {
+      const trimmed = numeroControl.trim();
 
-    setLoading(true);
-    setError('');
-    setFactura(null);
-
-    try {
-      const response = await fetch(
-        `http://192.168.0.30:5001/api/facturas/search/${encodeURIComponent(numeroControl.trim())}`
-      );
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        setError(result.message || 'No se encontró la factura');
-        setLoading(false);
+      if (!trimmed) {
+        setFactura(null);
+        setSearched(false);
         return;
       }
 
-      setFactura(result.data);
-      setError('');
-    } catch (err) {
-      console.error('Error buscando factura:', err);
-      setError('Error al buscar la factura. Intenta nuevamente.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      setLoading(true);
+      setSearched(false);
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+      try {
+        const response = await fetch(
+          `http://192.168.0.30:5001/api/facturas/search/${encodeURIComponent(trimmed)}`
+        );
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          setFactura(result.data);
+        } else {
+          setFactura(null);
+        }
+      } catch (err) {
+        console.error('Error buscando factura:', err);
+        setFactura(null);
+      } finally {
+        setLoading(false);
+        setSearched(true);
+      }
+    };
+
+    const timeoutId = setTimeout(searchFactura, 300);
+    return () => clearTimeout(timeoutId);
+  }, [numeroControl]);
+
+  const handleClear = () => {
+    setNumeroControl('');
+    setFactura(null);
+    setSearched(false);
   };
 
   const handleEdit = () => {
@@ -76,37 +81,44 @@ const FacturaSearch = ({ onFacturaSelect }) => {
           placeholder="Ingresa el consecutivo..."
           value={numeroControl}
           onChange={(e) => setNumeroControl(e.target.value)}
-          onKeyPress={handleKeyPress}
-          disabled={loading}
           className="factura-search-modern-input"
         />
-        <button
-          className="factura-search-icon-button"
-          onClick={handleSearch}
-          disabled={loading || !numeroControl.trim()}
-          title="Buscar"
-        >
-          {loading ? (
-            <svg className="factura-search-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
-            </svg>
-          ) : (
-            <Search size={18} />
-          )}
-        </button>
+        {numeroControl && (
+          <button
+            className="factura-search-icon-button"
+            onClick={handleClear}
+            title="Limpiar búsqueda"
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
-      {error && (
-        <div className="factura-search-error">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 8V12M12 16H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      {loading && (
+        <div className="factura-search-loading">
+          <svg className="factura-search-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
           </svg>
-          <span>{error}</span>
         </div>
       )}
 
-      {factura && (
+      {!loading && searched && !factura && numeroControl.trim() && (
+        <div className="factura-search-empty">
+          <div className="factura-search-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
+              <path d="M21 21L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h3 className="factura-search-empty-title">No se encontraron documentos</h3>
+          <p className="factura-search-empty-text">
+            No hay documentos que coincidan con "{numeroControl.trim()}"
+          </p>
+        </div>
+      )}
+
+      {!loading && factura && (
         <Item variant="outline">
           <ItemContent>
             <ItemTitle>

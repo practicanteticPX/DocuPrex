@@ -70,23 +70,55 @@
   }
 }
 
-.factura-search-error {
+.factura-search-loading {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 0.5rem;
-  color: #dc2626;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
+  justify-content: center;
+  padding: 3rem 1rem;
 }
 
-.factura-search-error svg {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
+.factura-search-loading svg {
+  width: 32px;
+  height: 32px;
+  color: #9CA3AF;
+}
+
+.factura-search-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px solid #E5E7EB;
+}
+
+.factura-search-empty-icon {
+  width: 64px;
+  height: 64px;
+  background: #F3F4F6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+
+.factura-search-empty-icon svg {
+  width: 32px;
+  height: 32px;
+  color: #9CA3AF;
+}
+
+.factura-search-empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 0.5rem 0;
+}
+
+.factura-search-empty-text {
+  font-size: 0.875rem;
+  color: #6B7280;
+  margin: 0;
 }
 
 .factura-action-btn {
