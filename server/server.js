@@ -10,6 +10,7 @@ require('dotenv').config();
 const { typeDefs, resolvers } = require('./graphql');
 const uploadRoutes = require('./routes/upload');
 const logsRoutes = require('./routes/logs');
+const facturasRoutes = require('./routes/facturas');
 const pdfLogger = require('./utils/pdfLogger');
 const { startCleanupService } = require('./services/notificationCleanup');
 const { startDocumentCleanupService } = require('./services/documentCleanup');
@@ -127,6 +128,9 @@ async function startServer() {
 
   // Rutas REST para logs en TXT/PDF
   app.use('/api/logs', logsRoutes);
+
+  // Rutas REST para facturas
+  app.use('/api/facturas', facturasRoutes);
 
   // Ruta para visualizar documentos con el nombre correcto
   app.get('/api/view/:documentId', async (req, res) => {

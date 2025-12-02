@@ -22,7 +22,7 @@ async function sendPendingSignatureReminders() {
         u.email as signer_email,
         u.email_notifications,
         d.title as document_title,
-        d.uploaded_by_id,
+        d.uploaded_by,
         uploader.name as uploader_name,
         -- Verificar si es el turno del firmante (no hay firmas pendientes con orderPosition menor)
         CASE
@@ -41,7 +41,7 @@ async function sendPendingSignatureReminders() {
       FROM signatures s
       JOIN users u ON s.signer_id = u.id
       JOIN documents d ON s.document_id = d.id
-      JOIN users uploader ON d.uploaded_by_id = uploader.id
+      JOIN users uploader ON d.uploaded_by = uploader.id
       WHERE s.status = 'pending'
         AND d.status = 'pending'
         AND s.created_at < NOW() - INTERVAL '2 days'

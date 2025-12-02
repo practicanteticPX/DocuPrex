@@ -1,0 +1,117 @@
+.factura-search-container {
+  width: 100%;
+}
+
+.factura-search-header {
+  margin-bottom: 0.75rem;
+}
+
+.factura-search-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.factura-search-input-wrapper {
+  position: relative;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.factura-search-modern-input {
+  padding-right: 3rem !important;
+}
+
+.factura-search-icon-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: #6b7280;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.factura-search-icon-button:hover:not(:disabled) {
+  background-color: #f3f4f6;
+  color: #3b82f6;
+}
+
+.factura-search-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.factura-search-icon-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.factura-search-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.factura-search-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.factura-search-error svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.factura-action-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #F3F4F6;
+  border: 1px solid #D1D5DB;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #374151;
+}
+
+.factura-action-btn:hover {
+  background-color: #E5E7EB;
+  border-color: #9CA3AF;
+  color: #1F2937;
+}
+
+@media (max-width: 768px) {
+  .factura-action-btn {
+    width: 36px;
+    height: 36px;
+  }
+}

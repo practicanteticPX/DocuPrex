@@ -8,6 +8,7 @@ import './SignersOrder.css';
 import './WaitingTurn.css';
 import Notifications from './Notifications';
 import DocumentTypeSelector from './DocumentTypeSelector';
+import FacturaSearch from './FacturaSearch';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
@@ -3933,7 +3934,17 @@ function Dashboard({ user, onLogout }) {
                         />
                       </div>
 
-                      <div className="form-group">
+                      {/* Cuando es Legalización de Facturas, mostrar solo el buscador */}
+                      {selectedDocumentType?.code === 'FV' ? (
+                        <FacturaSearch
+                          onFacturaSelect={(factura) => {
+                            setDocumentTitle(`${factura.proveedor} - ${factura.numero_factura}`);
+                            console.log('Factura seleccionada:', factura);
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <div className="form-group">
                         <label htmlFor="document-title">
                           Título del documento
                         </label>
@@ -4081,6 +4092,8 @@ function Dashboard({ user, onLogout }) {
                       </div>
                     )}
                       </div>
+                        </>
+                      )}
                     </>
                   )}
 
