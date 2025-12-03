@@ -28,7 +28,13 @@
       "Bash(dir:*)",
       "Bash(timeout 8 docker logs:*)",
       "Bash(node -e:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(node scripts/check_activa_column.js:*)",
+      "Bash(timeout 5 docker logs:*)",
+      "Bash(timeout 3 docker logs:*)",
+      "Bash(del serverscriptscheck_activa_column.js)",
+      "Bash(node scripts/check_duplicates.js:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

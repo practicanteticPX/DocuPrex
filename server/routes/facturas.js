@@ -10,13 +10,14 @@ const { queryCuentas } = require('../database/cuentas-db');
 router.get('/cuentas-contables', async (req, res) => {
   try {
     const result = await queryCuentas(
-      `SELECT
+      `SELECT DISTINCT ON ("Cuenta")
         "Cuenta" as cuenta,
         "NombreCuenta" as nombre_cuenta,
         "NombreResp" as nombre_responsable,
         "Cargo" as cargo
        FROM public."T_Master_Responsable_Cuenta"
-       ORDER BY "Cuenta" ASC`,
+       WHERE "Activa" = true
+       ORDER BY "Cuenta" ASC, "Cia" ASC`,
       []
     );
 
@@ -98,6 +99,7 @@ router.get('/validar-responsable/:nombre', async (req, res) => {
         "Cargo" as cargo
        FROM public."T_Master_Responsable_Cuenta"
        WHERE UPPER("NombreResp") = UPPER($1)
+       AND "Activa" = true
        LIMIT 1`,
       [nombre.trim()]
     );
