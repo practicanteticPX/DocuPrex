@@ -332,9 +332,33 @@
   background: #4338CA;
 }
 
+@media (max-width: 1366px) {
+  .factura-template-content {
+    overflow-y: auto !important;
+  }
+
+  .factura-template-content::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .factura-template-content::-webkit-scrollbar-track {
+    background: #F3F4F6;
+  }
+
+  .factura-template-content::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 10px;
+  }
+
+  .factura-template-content::-webkit-scrollbar-thumb:hover {
+    background: #9CA3AF;
+  }
+}
+
 @media (max-width: 768px) {
   .factura-template-content {
     padding: 20px;
+    overflow-y: auto !important;
   }
 
   .factura-section {
