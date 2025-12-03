@@ -3,6 +3,7 @@ import { X, Edit } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Item, ItemContent, ItemTitle, ItemActions } from '../ui/item';
 import FacturaTemplate from './FacturaTemplate';
+import { BACKEND_HOST } from '../../config/api';
 import './FacturaSearch.css';
 
 /**
@@ -33,7 +34,7 @@ const FacturaSearch = ({ onFacturaSelect }) => {
 
       try {
         const response = await fetch(
-          `http://192.168.0.30:5001/api/facturas/search/${encodeURIComponent(trimmed)}`
+          `${BACKEND_HOST}/api/facturas/search/${encodeURIComponent(trimmed)}`
         );
 
         const result = await response.json();

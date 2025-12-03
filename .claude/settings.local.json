@@ -27,7 +27,8 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(dir:*)",
       "Bash(timeout 8 docker logs:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

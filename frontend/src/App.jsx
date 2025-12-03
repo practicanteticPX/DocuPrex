@@ -56,7 +56,21 @@ function App() {
           }
         } catch (error) {
           console.error('Error al obtener datos del usuario:', error);
-          // Si falla, usar datos guardados
+
+          // Si el error es de autenticación (token expirado o inválido), hacer logout
+          const isAuthError =
+            error.response?.status === 401 ||
+            error.response?.status === 403 ||
+            error.response?.data?.errors?.[0]?.message?.toLowerCase().includes('no autenticado') ||
+            error.response?.data?.errors?.[0]?.message?.toLowerCase().includes('autenticado');
+
+          if (isAuthError) {
+            console.warn('⚠️ Token expirado o inválido. Cerrando sesión...');
+            handleLogout();
+            return;
+          }
+
+          // Si es otro tipo de error, usar datos guardados
           setUser(JSON.parse(savedUser));
         }
       };

@@ -5,6 +5,88 @@ Implementaci�n de buscador de facturas para tipo de documento "Legalizaci�n 
 
 ## Recent Changes
 
+### Session: 2025-12-03 (Parte 2) - Configuración de Expiración de JWT a 24 Horas
+
+#### Problem:
+Las sesiones JWT no tenían una expiración definida apropiada:
+- La configuración era de 8 horas (JWT_EXPIRES=8h)
+- Una ruta tenía hardcodeado 24h pero inconsistente
+- El frontend no manejaba correctamente la expiración de tokens en GraphQL
+- Requisito del usuario: sesiones deben durar máximo 1 día (24 horas)
+
+#### Files Modified:
+1. **`server/.env`**
+   - Cambiado `JWT_EXPIRES=8h` → `JWT_EXPIRES=24h`
+   - Ahora todas las sesiones expiran después de 24 horas
+
+2. **`server/graphql/resolvers-db.js`**
+   - Línea 514 (login local): Ya usaba `process.env.JWT_EXPIRES || '8h'` ✅
+   - Línea 563 (login LDAP): Ya usaba `process.env.JWT_EXPIRES || '8h'` ✅
+   - Línea 614 (register): Cambiado de hardcoded `'24h'` a `process.env.JWT_EXPIRES || '24h'`
+   - Ahora todos los flujos usan la misma configuración centralizada
+
+3. **`frontend/src/App.jsx`**
+   - Agregado manejo de errores de autenticación en la query `me`
+   - Detecta cuando el token expira y cierra la sesión automáticamente
+   - Maneja tanto errores HTTP (401/403) como errores GraphQL ("No autenticado")
+   - Líneas 61-71: Nueva lógica de detección de errores de autenticación
+
+#### Technical Implementation:
+**Backend (JWT Generation):**
+- JWT configurado para expirar en 24 horas vía variable de entorno
+- Middleware de autenticación [middleware/auth.js](server/middleware/auth.js#L32) ya detecta tokens expirados
+- Retorna error "Token inválido o expirado" cuando jwt.verify() falla
+
+**Frontend (Token Expiration Handling):**
+- Al cargar la app, ejecuta query `me` para obtener datos del usuario
+- Si el token expiró:
+  1. Backend devuelve error "No autenticado"
+  2. Frontend detecta el error de autenticación
+  3. Ejecuta `handleLogout()` automáticamente
+  4. Usuario es redirigido a login
+- Detección dual: errores HTTP (REST) y errores GraphQL (queries)
+
+#### Result:
+✅ **Sistema de sesiones configurado correctamente:**
+- Todas las sesiones expiran después de 24 horas
+- Los usuarios son deslogueados automáticamente cuando el token expira
+- Configuración centralizada y consistente en todo el código
+- Manejo robusto de expiración tanto en backend como frontend
+
+### Session: 2025-12-03 (Parte 1) - Correcci�n de URLs para Acceso HTTP/HTTPS
+
+#### Problem:
+La funcionalidad de facturas fallaba con "Failed to fetch" porque las URLs del backend estaban hardcodeadas con IP y protocolo HTTP. Esto causaba:
+- Errores CORS cuando se accede por HTTPS (mixed content)
+- Falta de flexibilidad para acceso por DNS o IP
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/FacturaSearch.jsx`**
+   - Eliminada URL hardcodeada: `http://192.168.0.30:5001/api/facturas/search`
+   - Agregado import de `BACKEND_HOST` desde `config/api.js`
+   - Ahora usa URL din�mica: `${BACKEND_HOST}/api/facturas/search`
+   - Funciona autom�ticamente con HTTP y HTTPS
+
+2. **`frontend/src/hooks/useSigners.js`**
+   - Eliminada URL hardcodeada: `http://192.168.0.30:5001/graphql`
+   - Agregado import de `API_URL` desde `config/api.js`
+   - Ahora usa URL din�mica: `API_URL`
+   - Consistente con el resto de la aplicaci�n
+
+#### Technical Implementation:
+La estrategia centralizada en [config/api.js](frontend/src/config/api.js) detecta autom�ticamente el protocolo:
+- **HTTPS**: Usa rutas relativas (`''`) que pasan por el proxy de Vite configurado en [vite.config.js](frontend/vite.config.js)
+  - El proxy redirige internamente a `http://firmas_server:5001` (comunicaci�n interna de Docker)
+  - Evita errores de "mixed content" (HTTPS frontend → HTTP backend)
+- **HTTP**: Usa URLs absolutas (`http://${hostname}:5001`)
+  - Acceso directo al backend por IP o hostname
+
+#### Result:
+✅ La aplicaci�n ahora funciona correctamente tanto:
+  - Por HTTPS: `https://docuprex.com`
+  - Por HTTP con IP: `http://192.168.0.30:5173`
+  - Ambos protocolos comparten el mismo c�digo sin URLs hardcodeadas
+
 ### Session: 2025-12-02 (Parte 2) - Implementaci�n de Buscador de Facturas
 
 #### Files Created:

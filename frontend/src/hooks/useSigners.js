@@ -1,6 +1,7 @@
 import { useState, useCallback, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { getErrorMessage } from '../utils/helpers';
+import { API_URL } from '../config/api';
 
 /**
  * Hook personalizado para manejar firmantes
@@ -22,7 +23,7 @@ export const useSigners = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(import.meta.env.VITE_API_URL || 'http://192.168.0.30:5001/graphql', {
+      const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
