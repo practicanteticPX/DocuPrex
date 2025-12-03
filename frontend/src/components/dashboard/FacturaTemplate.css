@@ -63,7 +63,7 @@
 
 .factura-template-content {
   flex: 1;
-  overflow-y: hidden;
+  overflow: visible;
   padding: 24px 32px;
 }
 
@@ -73,6 +73,7 @@
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
+  overflow: visible;
 }
 
 .factura-section:last-child {
@@ -177,9 +178,8 @@
 }
 
 .factura-table-wrapper {
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: 250px;
+  overflow: visible;
+  max-height: none;
   border: 1px solid #E5E7EB;
   border-radius: 8px;
   background: white;
@@ -212,6 +212,14 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+.factura-table tbody {
+  overflow: visible;
+}
+
+.factura-table td {
+  overflow: visible;
+}
+
 .factura-table thead {
   background: #F9FAFB;
 }
@@ -242,6 +250,73 @@
   min-width: 100px;
   font-size: 0.875rem;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+}
+
+.factura-autocomplete-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.factura-autocomplete-dropdown {
+  position: fixed;
+  background: white;
+  border: 1px solid #D1D5DB;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  max-height: 192px;
+  overflow-y: auto;
+  z-index: 10000;
+  margin-top: 4px;
+  box-sizing: border-box;
+}
+
+.factura-autocomplete-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.factura-autocomplete-dropdown::-webkit-scrollbar-track {
+  background: #F3F4F6;
+  border-radius: 10px;
+}
+
+.factura-autocomplete-dropdown::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.factura-autocomplete-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+.factura-autocomplete-option {
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  border-bottom: 1px solid #F3F4F6;
+  font-size: 0.875rem;
+  color: #1F2937;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.factura-autocomplete-option:last-child {
+  border-bottom: none;
+}
+
+.factura-autocomplete-option:hover {
+  background-color: #F9FAFB;
+}
+
+.factura-autocomplete-option:active {
+  background-color: #F3F4F6;
+}
+
+.factura-autocomplete-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #9CA3AF;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .factura-table-input[type="number"]::-webkit-inner-spin-button,

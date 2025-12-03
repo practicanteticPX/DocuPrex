@@ -42,6 +42,88 @@ router.get('/cuentas-contables', async (req, res) => {
 });
 
 /**
+ * GET /api/facturas/centros-costos
+ * Obtiene todos los centros de costos disponibles
+ */
+router.get('/centros-costos', async (req, res) => {
+  try {
+    const result = await queryFacturas(
+      `SELECT
+        "Cia_CC" as codigo,
+        "Responsable" as responsable
+       FROM crud_facturas."T_CentrosCostos"
+       ORDER BY "Cia_CC" ASC`,
+      []
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontraron centros de costos'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo centros de costos:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno al obtener centros de costos',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/facturas/validar-responsable/:nombre
+ * Valida el nombre del responsable y obtiene su cargo
+ */
+router.get('/validar-responsable/:nombre', async (req, res) => {
+  try {
+    const { nombre } = req.params;
+
+    if (!nombre || nombre.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre del responsable es requerido'
+      });
+    }
+
+    const result = await queryCuentas(
+      `SELECT
+        "NombreResp" as nombre,
+        "Cargo" as cargo
+       FROM public."T_Master_Responsable_Cuenta"
+       WHERE UPPER("NombreResp") = UPPER($1)
+       LIMIT 1`,
+      [nombre.trim()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontró información del responsable'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('❌ Error validando responsable:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno al validar responsable',
+      error: error.message
+    });
+  }
+});
+
+/**
  * GET /api/facturas/search/:numeroControl
  * Busca una factura por consecutivo (coincidencia exacta)
  */

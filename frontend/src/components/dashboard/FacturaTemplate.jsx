@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { X, Plus } from 'lucide-react';
 import { Input } from '../ui/input';
-import { useCuentasContables } from '../../hooks';
+import { useCuentasContables, useCentrosCostos } from '../../hooks';
 import './FacturaTemplate.css';
 
 /**
@@ -33,6 +34,7 @@ const formatDate = (dateString) => {
  */
 const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
+  const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
 
   // Estados para campos automáticos desde T_Facturas
   const [consecutivo, setConsecutivo] = useState('');
@@ -62,6 +64,18 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       porcentaje: ''
     }
   ]);
+
+  // Estados para el dropdown de cuentas contables
+  const [dropdownAbierto, setDropdownAbierto] = useState({});
+  const [dropdownPositions, setDropdownPositions] = useState({});
+  const [inputValues, setInputValues] = useState({});
+  const dropdownRefs = useRef({});
+
+  // Estados para el dropdown de centros de costos
+  const [dropdownCentrosAbierto, setDropdownCentrosAbierto] = useState({});
+  const [dropdownCentrosPositions, setDropdownCentrosPositions] = useState({});
+  const [inputCentrosValues, setInputCentrosValues] = useState({});
+  const dropdownCentrosRefs = useRef({});
 
   // Bloquear scroll del body cuando el componente está montado
   useEffect(() => {
@@ -113,13 +127,16 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   };
 
   const handleRemoveFila = (id) => {
-    if (filasControl.length > 1) {
-      setFilasControl(filasControl.filter(f => f.id !== id));
-    }
+    setFilasControl(prevFilas => {
+      if (prevFilas.length > 1) {
+        return prevFilas.filter(f => f.id !== id);
+      }
+      return prevFilas;
+    });
   };
 
   const handleFilaChange = (id, field, value) => {
-    setFilasControl(filasControl.map(fila =>
+    setFilasControl(prevFilas => prevFilas.map(fila =>
       fila.id === id ? { ...fila, [field]: value } : fila
     ));
   };
@@ -127,8 +144,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const handleCuentaContableChange = (id, codigoCuenta) => {
     const cuentaData = cuentas.find(c => c.cuenta === codigoCuenta);
 
+    setInputValues(prev => ({ ...prev, [id]: codigoCuenta }));
+
     if (cuentaData) {
-      setFilasControl(filasControl.map(fila =>
+      setFilasControl(prevFilas => prevFilas.map(fila =>
         fila.id === id ? {
           ...fila,
           noCuentaContable: codigoCuenta,
@@ -137,8 +156,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
           nombreCuentaContable: cuentaData.nombre_cuenta || ''
         } : fila
       ));
+      setDropdownAbierto(prevDropdown => ({ ...prevDropdown, [id]: false }));
     } else {
-      setFilasControl(filasControl.map(fila =>
+      setFilasControl(prevFilas => prevFilas.map(fila =>
         fila.id === id ? {
           ...fila,
           noCuentaContable: codigoCuenta,
@@ -149,6 +169,168 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       ));
     }
   };
+
+  const handleInputChange = (id, value) => {
+    flushSync(() => {
+      setInputValues(prev => ({ ...prev, [id]: value }));
+
+      setFilasControl(prevFilas => prevFilas.map(fila =>
+        fila.id === id ? { ...fila, noCuentaContable: value } : fila
+      ));
+
+      const element = dropdownRefs.current[id];
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        setDropdownPositions(prevPositions => ({
+          ...prevPositions,
+          [id]: {
+            top: rect.bottom,
+            left: rect.left,
+            width: rect.width
+          }
+        }));
+      }
+
+      setDropdownAbierto(prevDropdown => ({ ...prevDropdown, [id]: true }));
+    });
+  };
+
+  const handleFocus = (id) => {
+    const fila = filasControl.find(f => f.id === id);
+
+    if (inputValues[id] === undefined && fila) {
+      const valorInicial = fila.noCuentaContable || '';
+      setInputValues(prev => ({ ...prev, [id]: valorInicial }));
+    }
+
+    const element = dropdownRefs.current[id];
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      setDropdownPositions(prevPositions => ({
+        ...prevPositions,
+        [id]: {
+          top: rect.bottom,
+          left: rect.left,
+          width: rect.width
+        }
+      }));
+    }
+    setDropdownAbierto(prevDropdown => ({ ...prevDropdown, [id]: true }));
+  };
+
+  const getFiltradas = (filtro) => {
+    if (!filtro || filtro.trim() === '') {
+      return cuentas;
+    }
+
+    return cuentas.filter(cuenta =>
+      cuenta.cuenta.toString().startsWith(filtro)
+    );
+  };
+
+  const handleCentroCostosChange = async (id, codigo) => {
+    const centroData = centros.find(c => c.codigo === codigo);
+
+    setInputCentrosValues(prev => ({ ...prev, [id]: codigo }));
+
+    if (centroData) {
+      const responsableData = await validarResponsable(centroData.responsable);
+
+      setFilasControl(prevFilas => prevFilas.map(fila =>
+        fila.id === id ? {
+          ...fila,
+          centroCostos: codigo,
+          respCentroCostos: centroData.responsable || '',
+          cargoCentroCostos: responsableData?.cargo || ''
+        } : fila
+      ));
+      setDropdownCentrosAbierto(prevDropdown => ({ ...prevDropdown, [id]: false }));
+    } else {
+      setFilasControl(prevFilas => prevFilas.map(fila =>
+        fila.id === id ? {
+          ...fila,
+          centroCostos: codigo,
+          respCentroCostos: '',
+          cargoCentroCostos: ''
+        } : fila
+      ));
+    }
+  };
+
+  const handleInputCentrosChange = (id, value) => {
+    flushSync(() => {
+      setInputCentrosValues(prev => ({ ...prev, [id]: value }));
+
+      setFilasControl(prevFilas => prevFilas.map(fila =>
+        fila.id === id ? { ...fila, centroCostos: value } : fila
+      ));
+
+      const element = dropdownCentrosRefs.current[id];
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        setDropdownCentrosPositions(prevPositions => ({
+          ...prevPositions,
+          [id]: {
+            top: rect.bottom,
+            left: rect.left,
+            width: rect.width
+          }
+        }));
+      }
+
+      setDropdownCentrosAbierto(prevDropdown => ({ ...prevDropdown, [id]: true }));
+    });
+  };
+
+  const handleCentrosFocus = (id) => {
+    const fila = filasControl.find(f => f.id === id);
+    if (inputCentrosValues[id] === undefined && fila) {
+      setInputCentrosValues(prev => ({ ...prev, [id]: fila.centroCostos }));
+    }
+
+    const element = dropdownCentrosRefs.current[id];
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      setDropdownCentrosPositions(prevPositions => ({
+        ...prevPositions,
+        [id]: {
+          top: rect.bottom,
+          left: rect.left,
+          width: rect.width
+        }
+      }));
+    }
+    setDropdownCentrosAbierto(prevDropdown => ({ ...prevDropdown, [id]: true }));
+  };
+
+  const getCentrosFiltrados = (filtro) => {
+    if (!filtro || filtro.trim() === '') {
+      return centros;
+    }
+
+    return centros.filter(centro =>
+      centro.codigo.toString().startsWith(filtro)
+    );
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      Object.keys(dropdownRefs.current).forEach((id) => {
+        if (dropdownRefs.current[id] && !dropdownRefs.current[id].contains(event.target)) {
+          setDropdownAbierto(prev => ({ ...prev, [id]: false }));
+        }
+      });
+
+      Object.keys(dropdownCentrosRefs.current).forEach((id) => {
+        if (dropdownCentrosRefs.current[id] && !dropdownCentrosRefs.current[id].contains(event.target)) {
+          setDropdownCentrosAbierto(prev => ({ ...prev, [id]: false }));
+        }
+      });
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const calcularTotalPorcentaje = () => {
     return filasControl.reduce((total, fila) => {
@@ -351,20 +533,40 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                         />
                       </td>
                       <td>
-                        <Input
-                          type="text"
-                          value={fila.noCuentaContable}
-                          onChange={(e) => handleCuentaContableChange(fila.id, e.target.value)}
-                          placeholder={loadingCuentas ? "Cargando..." : "Seleccionar..."}
-                          className="factura-table-input"
-                          list={`cuentas-list-${fila.id}`}
-                          disabled={loadingCuentas}
-                        />
-                        <datalist id={`cuentas-list-${fila.id}`}>
-                          {cuentas.map((cuenta) => (
-                            <option key={cuenta.cuenta} value={cuenta.cuenta} />
-                          ))}
-                        </datalist>
+                        <div
+                          className="factura-autocomplete-wrapper"
+                          ref={(el) => dropdownRefs.current[fila.id] = el}
+                        >
+                          <Input
+                            type="text"
+                            value={inputValues[fila.id] !== undefined ? inputValues[fila.id] : fila.noCuentaContable}
+                            onChange={(e) => handleInputChange(fila.id, e.target.value)}
+                            onFocus={() => handleFocus(fila.id)}
+                            placeholder={loadingCuentas ? "Cargando..." : "Buscar cuenta..."}
+                            className="factura-table-input"
+                            disabled={loadingCuentas}
+                          />
+                          {dropdownAbierto[fila.id] && !loadingCuentas && dropdownPositions[fila.id] && getFiltradas(inputValues[fila.id] || '').length > 0 && (
+                            <div
+                              className="factura-autocomplete-dropdown"
+                              style={{
+                                top: `${dropdownPositions[fila.id].top}px`,
+                                left: `${dropdownPositions[fila.id].left}px`,
+                                width: `${dropdownPositions[fila.id].width}px`
+                              }}
+                            >
+                              {getFiltradas(inputValues[fila.id] || '').map((cuenta, index) => (
+                                <div
+                                  key={`cuenta-${cuenta.cuenta}-${index}`}
+                                  className="factura-autocomplete-option"
+                                  onClick={() => handleCuentaContableChange(fila.id, cuenta.cuenta)}
+                                >
+                                  {cuenta.cuenta}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <Input
@@ -391,13 +593,40 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                         />
                       </td>
                       <td>
-                        <Input
-                          type="text"
-                          value={fila.centroCostos}
-                          onChange={(e) => handleFilaChange(fila.id, 'centroCostos', e.target.value)}
-                          placeholder="Seleccionar..."
-                          className="factura-table-input"
-                        />
+                        <div
+                          className="factura-autocomplete-wrapper"
+                          ref={(el) => dropdownCentrosRefs.current[fila.id] = el}
+                        >
+                          <Input
+                            type="text"
+                            value={inputCentrosValues[fila.id] !== undefined ? inputCentrosValues[fila.id] : fila.centroCostos}
+                            onChange={(e) => handleInputCentrosChange(fila.id, e.target.value)}
+                            onFocus={() => handleCentrosFocus(fila.id)}
+                            placeholder={loadingCentros ? "Cargando..." : "Buscar centro..."}
+                            className="factura-table-input"
+                            disabled={loadingCentros}
+                          />
+                          {dropdownCentrosAbierto[fila.id] && !loadingCentros && dropdownCentrosPositions[fila.id] && getCentrosFiltrados(inputCentrosValues[fila.id] || '').length > 0 && (
+                            <div
+                              className="factura-autocomplete-dropdown"
+                              style={{
+                                top: `${dropdownCentrosPositions[fila.id].top}px`,
+                                left: `${dropdownCentrosPositions[fila.id].left}px`,
+                                width: `${dropdownCentrosPositions[fila.id].width}px`
+                              }}
+                            >
+                              {getCentrosFiltrados(inputCentrosValues[fila.id] || '').map((centro, index) => (
+                                <div
+                                  key={`centro-${centro.codigo}-${index}`}
+                                  className="factura-autocomplete-option"
+                                  onClick={() => handleCentroCostosChange(fila.id, centro.codigo)}
+                                >
+                                  {centro.codigo}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <Input

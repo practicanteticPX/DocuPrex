@@ -1,9 +1,237 @@
 # Project Status - DocuPrex
 
 ## Current Objective
-Implementación de plantilla de facturas con campos automáticos de cuentas contables desde DB_QPREX.
+Implementación completa de autocompletado para Centros de Costos en plantilla de facturas.
 
 ## Recent Changes
+
+### Session: 2025-12-03 (Parte 5) - Autocompletado de Centros de Costos con Validación de Responsables
+
+#### Problem:
+La plantilla de facturas necesita autocompletado tipo Excel para la columna "C.Co" (Centro de Costos) con las siguientes características:
+- Buscar en tiempo real desde tabla `T_CentrosCostos` de SERV_QPREX
+- Autocompletar "Resp. C.Co" con el responsable del centro de costos seleccionado
+- Validar el nombre del responsable en `T_Master_Responsable_Cuenta` de DB_QPREX
+- Autocompletar "Cargo Resp. C.Co" con el cargo del responsable validado
+
+#### Files Created:
+1. **`frontend/src/hooks/useCentrosCostos.js`**
+   - Hook React para gestionar centros de costos
+   - Función `fetchCentrosCostos()`: Carga automática al montar el componente
+   - Estados: `centros`, `loading`, `error`
+   - Funciones helper:
+     - `getCentroData(codigo)`: Obtener datos de un centro por código
+     - `validarResponsable(nombre)`: Validar y obtener cargo del responsable
+   - Manejo de errores robusto con logging
+
+#### Files Modified:
+1. **`server/routes/facturas.js`**
+   - Líneas 44-78: Nuevo endpoint `GET /api/facturas/centros-costos`
+     - Consulta tabla: `crud_facturas.T_CentrosCostos`
+     - Columnas: `Cia_CC` (código), `Responsable` (nombre responsable)
+     - Ordenado por código ascendente
+     - Retorna success: true/false y data
+   - Líneas 80-124: Nuevo endpoint `GET /api/facturas/validar-responsable/:nombre`
+     - Consulta tabla: `public.T_Master_Responsable_Cuenta` (DB_QPREX)
+     - Búsqueda case-insensitive con UPPER()
+     - Columnas: `NombreResp` (nombre), `Cargo` (cargo)
+     - Retorna datos del responsable si existe, 404 si no se encuentra
+
+2. **`frontend/src/hooks/index.js`**
+   - Línea 14: Agregada exportación de `useCentrosCostos`
+   - Mantenida consistencia con estructura existente
+
+3. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Línea 5: Agregado import de `useCentrosCostos`
+   - Línea 37: Agregado uso del hook con destructuring
+   - Líneas 74-78: Nuevos estados para dropdown de centros de costos:
+     - `dropdownCentrosAbierto`: Estado abierto/cerrado por fila
+     - `dropdownCentrosPositions`: Posiciones absolutas de cada dropdown
+     - `inputCentrosValues`: Valores de búsqueda por fila
+     - `dropdownCentrosRefs`: Referencias DOM para detectar clicks fuera
+   - Líneas 227-254: Nueva función `handleCentroCostosChange`:
+     - Busca datos del centro seleccionado
+     - Autocompleta "Resp. C.Co" con el responsable
+     - Valida el responsable llamando a `validarResponsable()`
+     - Autocompleta "Cargo Resp. C.Co" con el cargo validado
+     - Cierra el dropdown automáticamente
+   - Líneas 256-279: Nueva función `handleInputCentrosChange`:
+     - Actualiza el filtro de búsqueda en tiempo real
+     - Recalcula posición del dropdown
+     - Abre el dropdown automáticamente al escribir
+   - Líneas 281-300: Nueva función `handleCentrosFocus`:
+     - Inicializa valor del input al recibir foco
+     - Calcula posición del dropdown
+     - Abre el dropdown
+   - Líneas 302-308: Nueva función `getCentrosFiltrados`:
+     - Filtra centros según texto ingresado
+     - Lógica: busca coincidencias que empiezan con el filtro
+     - Similar a comportamiento de Excel
+   - Líneas 318-322: Actualizado `useEffect` de click outside:
+     - Detecta clicks fuera de dropdowns de centros de costos
+     - Cierra automáticamente el dropdown correspondiente
+   - Líneas 589-624: Reemplazado input simple por componente de autocompletado:
+     - Wrapper con posición relativa
+     - Input controlado con valores independientes por fila
+     - Dropdown absoluto posicionado con portal-like behavior
+     - Lista filtrada de centros con scroll
+     - Placeholder dinámico: "Cargando..." o "Buscar centro..."
+     - Disabled durante carga de datos
+
+#### Technical Implementation:
+
+**Arquitectura de Múltiples Bases de Datos:**
+- **DB Local (firmas_db)**: PostgreSQL local en Docker
+  - Gestión de usuarios y documentos
+- **SERV_QPREX (crud_facturas)**: Base de datos externa para facturas y centros de costos
+  - Tabla: `T_Facturas` (datos de facturas)
+  - Tabla: `T_CentrosCostos` (códigos y responsables de centros de costos)
+- **DB_QPREX (public)**: Base de datos externa para maestros
+  - Tabla: `T_Master_Responsable_Cuenta` (cuentas contables, responsables y cargos)
+
+**Flujo de Datos Completo:**
+1. Usuario abre plantilla de factura
+2. Hook `useCentrosCostos` se ejecuta automáticamente
+3. Frontend llama a `GET /api/facturas/centros-costos`
+4. Backend consulta `SERV_QPREX.crud_facturas.T_CentrosCostos`
+5. Datos se cargan en el estado del componente
+6. Usuario escribe en columna "C.Co"
+7. Dropdown muestra centros filtrados en tiempo real
+8. Usuario selecciona un centro de costos
+9. Función `handleCentroCostosChange`:
+   - Obtiene el responsable del centro desde los datos cargados
+   - Llama a `validarResponsable(nombre)`
+10. Frontend llama a `GET /api/facturas/validar-responsable/:nombre`
+11. Backend consulta `DB_QPREX.public.T_Master_Responsable_Cuenta`
+12. Backend retorna nombre validado y cargo
+13. Frontend autocompleta 3 campos:
+    - "C.Co": código del centro de costos
+    - "Resp. C.Co": nombre del responsable
+    - "Cargo Resp. C.Co": cargo del responsable validado
+
+**Características del Autocompletado:**
+- **Búsqueda en tiempo real**: Filtra mientras el usuario escribe
+- **Lógica tipo Excel**: Si escribes "1", muestra todos los que comienzan con "1"
+- **Independencia por fila**: Cada fila tiene su propio dropdown y estado
+- **Click outside detection**: useEffect detecta clicks fuera y cierra dropdown
+- **Posicionamiento dinámico**: Dropdown se posiciona debajo del input usando coordenadas absolutas
+- **Estados de carga**: Muestra "Cargando..." mientras obtiene datos
+- **Validación asíncrona**: Valida responsable en DB_QPREX después de seleccionar
+
+**Integración con Sistema Existente:**
+- Reutiliza estilos CSS existentes (`.factura-autocomplete-*`)
+- Sigue patrón arquitectónico de cuentas contables
+- Mantiene consistencia con UX existente
+- Estados completamente independientes entre dropdowns de cuentas y centros
+
+#### Result:
+✅ **Sistema de centros de costos completamente funcional:**
+- Conexión exitosa a SERV_QPREX para centros de costos
+- Endpoint retorna lista completa con código y responsable
+- Frontend carga y muestra opciones en dropdown
+- Autocompletado tipo Excel: filtra según lo que el usuario digita
+- Autocompletado funciona correctamente para 3 campos:
+  1. C.Co (código del centro)
+  2. Resp. C.Co (responsable del centro)
+  3. Cargo Resp. C.Co (cargo del responsable validado en DB_QPREX)
+- Validación cross-database: consulta SERV_QPREX y valida en DB_QPREX
+- UX consistente con autocompletado de cuentas contables
+- Múltiples filas funcionan independientemente
+- Tres bases de datos externas trabajando simultáneamente sin conflictos
+
+### Session: 2025-12-03 (Parte 4) - Componente de Autocompletar Personalizado para "No. Cta Contable"
+
+#### Problem:
+El campo "No. Cta Contable" requería un componente de autocompletar que permitiera:
+- Escribir y buscar cuentas contables en tiempo real
+- Dropdown desplegable hacia abajo con altura limitada (mostrar solo 4 opciones)
+- Scroll interno cuando hay más opciones
+- Mostrar tanto el código de cuenta como el nombre de la cuenta en las opciones
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Línea 1: Agregado import de `useRef` para referencias del DOM
+   - Líneas 66-69: Agregados estados para controlar:
+     - `dropdownAbierto`: objeto que guarda el estado abierto/cerrado por cada fila
+     - `filtrosCuentas`: objeto que guarda el texto de búsqueda por cada fila
+     - `dropdownRefs`: referencias al DOM para detectar clics fuera del componente
+   - Líneas 132-158: Modificada función `handleCuentaContableChange`:
+     - Al seleccionar una cuenta, cierra el dropdown automáticamente
+     - Limpia el filtro de búsqueda
+     - Autocompleta los 3 campos dependientes (responsable, cargo, nombre cuenta)
+   - Líneas 160-167: Nueva función `handleInputChange`:
+     - Actualiza el filtro de búsqueda en tiempo real
+     - Abre el dropdown automáticamente al escribir
+     - Actualiza el valor del input
+   - Líneas 169-176: Nueva función `getFiltradas`:
+     - Filtra las cuentas según el texto ingresado
+     - Busca coincidencias tanto en código de cuenta como en nombre
+     - Retorna todas las cuentas si no hay filtro
+   - Líneas 178-189: Nuevo useEffect para detectar clics fuera del dropdown:
+     - Cierra el dropdown cuando se hace clic fuera del componente
+     - Usa referencias del DOM para cada fila independientemente
+   - Líneas 391-428: Reemplazado `<select>` por componente de autocompletar personalizado:
+     - Wrapper con posición relativa
+     - Input para escribir y buscar
+     - Dropdown absoluto que se muestra cuando `dropdownAbierto[fila.id]` es true
+     - Cada opción muestra código de cuenta (bold) y nombre (gris)
+     - Mensaje "No se encontraron cuentas" cuando el filtro no tiene resultados
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Líneas 247-327: Agregados estilos para el componente de autocompletar:
+     - `.factura-autocomplete-wrapper`: contenedor relativo (posición base)
+     - `.factura-autocomplete-dropdown`: dropdown con:
+       - Posición absoluta debajo del input
+       - Max-height: 192px (aprox 4 opciones de 48px cada una)
+       - Overflow-y: auto (scroll automático)
+       - Z-index: 1000 (aparece sobre otros elementos)
+       - Box-shadow y border-radius para estilo moderno
+     - Scrollbar personalizado:
+       - Width: 6px
+       - Track gris claro (#F3F4F6)
+       - Thumb gris (#D1D5DB) con hover más oscuro (#9CA3AF)
+     - `.factura-autocomplete-option`: cada opción con:
+       - Padding: 12px 16px
+       - Hover: fondo gris claro (#F9FAFB)
+       - Active: fondo gris más oscuro (#F3F4F6)
+       - Border-bottom separando opciones
+     - `.factura-autocomplete-cuenta`: código de cuenta (bold, color oscuro)
+     - `.factura-autocomplete-nombre`: nombre de cuenta (pequeño, gris)
+     - `.factura-autocomplete-empty`: mensaje cuando no hay resultados
+
+#### Technical Implementation:
+**Arquitectura del Componente:**
+- **Estado por fila independiente**: Cada fila tiene su propio dropdown y filtro
+- **Búsqueda en tiempo real**: Filtra mientras el usuario escribe
+- **Click outside detection**: useEffect con event listener en document
+- **Referencias DOM**: useRef para trackear cada wrapper y detectar clics fuera
+
+**Flujo de interacción:**
+1. Usuario hace clic en el input → `onFocus` abre el dropdown
+2. Usuario escribe "1234" → `handleInputChange` actualiza el filtro y muestra opciones filtradas
+3. Usuario hace clic en una opción → `handleCuentaContableChange`:
+   - Autocompleta los 3 campos dependientes
+   - Cierra el dropdown
+   - Limpia el filtro
+4. Usuario hace clic fuera → useEffect detecta y cierra el dropdown
+
+**Altura y Scroll:**
+- Max-height fijo: 192px (4 opciones × 48px aprox)
+- Cuando hay >4 opciones: scroll aparece automáticamente
+- Scrollbar personalizado con estilos webkit (Chrome, Edge, Safari)
+
+#### Result:
+✅ **Componente de autocompletar completamente funcional:**
+- Input donde se puede escribir libremente para buscar
+- Búsqueda en tiempo real (filtra por código y nombre de cuenta)
+- Dropdown se despliega hacia abajo debajo del input
+- Altura limitada a ~4 opciones visibles (192px)
+- Scroll personalizado cuando hay más de 4 resultados
+- Cada opción muestra código (bold) y nombre (gris) en dos líneas
+- Al seleccionar: autocompleta campos dependientes y cierra el dropdown
+- Click fuera del componente cierra el dropdown automáticamente
+- Múltiples filas funcionan independientemente (cada una con su dropdown)
+- Experiencia similar a Google/Select2/React-Select pero personalizado
 
 ### Session: 2025-12-03 (Parte 3) - Integración de Cuentas Contables desde DB_QPREX
 
