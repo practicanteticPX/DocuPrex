@@ -206,7 +206,7 @@
 .factura-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1400px;
+  min-width: 1200px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -240,6 +240,16 @@
   min-width: 100px;
   font-size: 0.875rem;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+}
+
+.factura-table-input[type="number"]::-webkit-inner-spin-button,
+.factura-table-input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.factura-table-input[type="number"] {
+  -moz-appearance: textfield;
 }
 
 .factura-firma-cell {

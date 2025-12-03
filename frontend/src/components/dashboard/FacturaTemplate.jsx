@@ -53,12 +53,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       respCuentaContable: '',
       cargoCuentaContable: '',
       nombreCuentaContable: '',
-      firmaCuentaContable: '',
       centroCostos: '',
       respCentroCostos: '',
       cargoCentroCostos: '',
-      firmaCentroCostos: '',
-      porcentaje: '100'
+      porcentaje: ''
     }
   ]);
 
@@ -103,11 +101,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
         respCuentaContable: '',
         cargoCuentaContable: '',
         nombreCuentaContable: '',
-        firmaCuentaContable: '',
         centroCostos: '',
         respCentroCostos: '',
         cargoCentroCostos: '',
-        firmaCentroCostos: '',
         porcentaje: ''
       }
     ]);
@@ -132,10 +128,21 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
     }, 0);
   };
 
+  const esPorcentajeValido = (total) => {
+    return total >= 99.5 && total <= 100.5;
+  };
+
+  const getPorcentajeMostrado = (total) => {
+    if (total >= 99.5 && total <= 100.5) {
+      return 100;
+    }
+    return total;
+  };
+
   const handleSave = () => {
     const totalPorcentaje = calcularTotalPorcentaje();
-    if (totalPorcentaje !== 100) {
-      alert(`El porcentaje total debe ser 100%. Actualmente es ${totalPorcentaje}%`);
+    if (!esPorcentajeValido(totalPorcentaje)) {
+      alert(`El porcentaje total debe estar entre 99.5% y 100.5%. Actualmente es ${totalPorcentaje.toFixed(2)}%`);
       return;
     }
 
@@ -296,11 +303,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                     <th>Resp. Cta Contable</th>
                     <th>Cargo Resp Cta Contable</th>
                     <th>Cta Contable</th>
-                    <th>Firma Resp Cta Contable</th>
                     <th>C.Co</th>
                     <th>Resp. C.Co</th>
                     <th>Cargo Resp. C.Co</th>
-                    <th>Firma Resp C.Co</th>
                     <th>% C.Co</th>
                     <th></th>
                   </tr>
@@ -350,11 +355,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                         />
                       </td>
                       <td>
-                        <div className="factura-firma-cell">
-                          {fila.firmaCuentaContable || '-'}
-                        </div>
-                      </td>
-                      <td>
                         <Input
                           type="text"
                           value={fila.centroCostos}
@@ -378,11 +378,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                           disabled
                           className="factura-table-input factura-input-disabled"
                         />
-                      </td>
-                      <td>
-                        <div className="factura-firma-cell">
-                          {fila.firmaCentroCostos || '-'}
-                        </div>
                       </td>
                       <td>
                         <Input
@@ -412,12 +407,12 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'right', fontWeight: '600' }}>
+                    <td colSpan="8" style={{ textAlign: 'right', fontWeight: '600', color: '#374151' }}>
                       Total Porcentaje:
                     </td>
                     <td>
-                      <div className={`factura-total-porcentaje ${calcularTotalPorcentaje() !== 100 ? 'factura-total-error' : 'factura-total-ok'}`}>
-                        {calcularTotalPorcentaje().toFixed(2)}%
+                      <div className={`factura-total-porcentaje ${!esPorcentajeValido(calcularTotalPorcentaje()) ? 'factura-total-error' : 'factura-total-ok'}`}>
+                        {getPorcentajeMostrado(calcularTotalPorcentaje()).toFixed(2)}%
                       </div>
                     </td>
                     <td></td>
