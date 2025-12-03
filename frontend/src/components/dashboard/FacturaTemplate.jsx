@@ -533,6 +533,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   value={consecutivo}
                   disabled
                   className="factura-input-disabled"
+                  title={consecutivo}
                 />
               </div>
 
@@ -543,6 +544,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   value={proveedor}
                   disabled
                   className="factura-input-disabled"
+                  title={proveedor}
                 />
               </div>
 
@@ -553,6 +555,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   value={numeroFactura}
                   disabled
                   className="factura-input-disabled"
+                  title={numeroFactura}
                 />
               </div>
 
@@ -602,6 +605,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   value={nombreNegociador}
                   onChange={(e) => setNombreNegociador(e.target.value)}
                   placeholder="Seleccionar negociador..."
+                  title={nombreNegociador}
                 />
               </div>
 
@@ -613,6 +617,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   disabled
                   className="factura-input-disabled"
                   placeholder="Se completa automáticamente"
+                  title={cargoNegociador}
                 />
               </div>
             </div>
@@ -704,6 +709,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                           value={fila.respCuentaContable}
                           disabled
                           className="factura-table-input factura-input-disabled"
+                          title={fila.respCuentaContable}
                         />
                       </td>
                       <td>
@@ -712,6 +718,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                           value={fila.cargoCuentaContable}
                           disabled
                           className="factura-table-input factura-input-disabled"
+                          title={fila.cargoCuentaContable}
                         />
                       </td>
                       <td>
@@ -720,6 +727,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                           value={fila.nombreCuentaContable}
                           disabled
                           className="factura-table-input factura-input-disabled"
+                          title={fila.nombreCuentaContable}
                         />
                       </td>
                       <td>
@@ -767,6 +775,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                           value={fila.respCentroCostos}
                           disabled
                           className="factura-table-input factura-input-disabled"
+                          title={fila.respCentroCostos}
                         />
                       </td>
                       <td>
@@ -775,6 +784,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                           value={fila.cargoCentroCostos}
                           disabled
                           className="factura-table-input factura-input-disabled"
+                          title={fila.cargoCentroCostos}
                         />
                       </td>
                       <td>
