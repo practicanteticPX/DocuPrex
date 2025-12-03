@@ -223,8 +223,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       return cuentas;
     }
 
+    const filtroUpper = filtro.toUpperCase();
     return cuentas.filter(cuenta =>
-      cuenta.cuenta.toString().startsWith(filtro)
+      cuenta.cuenta.toString().toUpperCase().startsWith(filtroUpper)
     );
   };
 
@@ -308,8 +309,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       return centros;
     }
 
+    const filtroUpper = filtro.toUpperCase();
     return centros.filter(centro =>
-      centro.codigo.toString().startsWith(filtro)
+      centro.codigo.toString().toUpperCase().startsWith(filtroUpper)
     );
   };
 
@@ -340,20 +342,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   };
 
   const esPorcentajeValido = (total) => {
-    return total >= 99.5 && total <= 100.5;
-  };
-
-  const getPorcentajeMostrado = (total) => {
-    if (total >= 99.5 && total <= 100.5) {
-      return 100;
-    }
-    return total;
+    return total === 100;
   };
 
   const handleSave = () => {
     const totalPorcentaje = calcularTotalPorcentaje();
     if (!esPorcentajeValido(totalPorcentaje)) {
-      alert(`El porcentaje total debe estar entre 99.5% y 100.5%. Actualmente es ${totalPorcentaje.toFixed(2)}%`);
+      alert(`El porcentaje total debe ser exactamente 100%. Actualmente es ${totalPorcentaje.toFixed(2)}%`);
       return;
     }
 
@@ -677,7 +672,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                     </td>
                     <td>
                       <div className={`factura-total-porcentaje ${!esPorcentajeValido(calcularTotalPorcentaje()) ? 'factura-total-error' : 'factura-total-ok'}`}>
-                        {getPorcentajeMostrado(calcularTotalPorcentaje()).toFixed(2)}%
+                        {calcularTotalPorcentaje().toFixed(2)}%
                       </div>
                     </td>
                     <td></td>

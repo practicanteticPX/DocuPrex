@@ -1,7 +1,7 @@
 # Project Status - DocuPrex
 
 ## Current Objective
-Implementación completa de autocompletado para Centros de Costos en plantilla de facturas.
+Sistema de autocompletado tipo Excel completamente funcional para Cuentas Contables y Centros de Costos.
 
 ## Recent Changes
 
