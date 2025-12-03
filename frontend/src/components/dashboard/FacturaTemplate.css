@@ -311,6 +311,11 @@
   background-color: #F3F4F6;
 }
 
+.factura-autocomplete-option-selected {
+  background-color: #EEF2FF !important;
+  font-weight: 600;
+}
+
 .factura-autocomplete-empty {
   padding: 16px;
   text-align: center;

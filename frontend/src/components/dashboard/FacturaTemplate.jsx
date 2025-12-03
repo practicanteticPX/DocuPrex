@@ -69,12 +69,14 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const [dropdownAbierto, setDropdownAbierto] = useState({});
   const [dropdownPositions, setDropdownPositions] = useState({});
   const [inputValues, setInputValues] = useState({});
+  const [selectedIndexCuentas, setSelectedIndexCuentas] = useState({});
   const dropdownRefs = useRef({});
 
   // Estados para el dropdown de centros de costos
   const [dropdownCentrosAbierto, setDropdownCentrosAbierto] = useState({});
   const [dropdownCentrosPositions, setDropdownCentrosPositions] = useState({});
   const [inputCentrosValues, setInputCentrosValues] = useState({});
+  const [selectedIndexCentros, setSelectedIndexCentros] = useState({});
   const dropdownCentrosRefs = useRef({});
 
   // Bloquear scroll del body cuando el componente está montado
@@ -141,6 +143,134 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
     ));
   };
 
+  const handlePorcentajeKeyDown = (e, currentFilaId) => {
+    if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+
+      const currentIndex = filasControl.findIndex(f => f.id === currentFilaId);
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex < filasControl.length) {
+        const nextFilaId = filasControl[nextIndex].id;
+        const nextInput = document.querySelector(`input[data-porcentaje-id="${nextFilaId}"]`);
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.select();
+        }
+      }
+    }
+  };
+
+  const handleCuentaContableKeyDown = (e, currentFilaId) => {
+    const cuentasFiltradas = getFiltradas(inputValues[currentFilaId] || '');
+    const dropdownVisible = dropdownAbierto[currentFilaId] && cuentasFiltradas.length > 0;
+    const currentSelectedIndex = selectedIndexCuentas[currentFilaId] ?? -1;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (dropdownVisible) {
+        const newIndex = currentSelectedIndex < cuentasFiltradas.length - 1 ? currentSelectedIndex + 1 : 0;
+        setSelectedIndexCuentas(prev => ({ ...prev, [currentFilaId]: newIndex }));
+
+        setTimeout(() => {
+          const selectedOption = document.querySelector(`[data-cuenta-option="${currentFilaId}-${newIndex}"]`);
+          if (selectedOption) {
+            selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (dropdownVisible) {
+        const newIndex = currentSelectedIndex > 0 ? currentSelectedIndex - 1 : cuentasFiltradas.length - 1;
+        setSelectedIndexCuentas(prev => ({ ...prev, [currentFilaId]: newIndex }));
+
+        setTimeout(() => {
+          const selectedOption = document.querySelector(`[data-cuenta-option="${currentFilaId}-${newIndex}"]`);
+          if (selectedOption) {
+            selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (dropdownVisible && currentSelectedIndex >= 0) {
+        const cuentaSeleccionada = cuentasFiltradas[currentSelectedIndex];
+        handleCuentaContableChange(currentFilaId, cuentaSeleccionada.cuenta);
+        setSelectedIndexCuentas(prev => ({ ...prev, [currentFilaId]: -1 }));
+      }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+
+      const currentIndex = filasControl.findIndex(f => f.id === currentFilaId);
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex < filasControl.length) {
+        const nextFilaId = filasControl[nextIndex].id;
+        const nextInput = document.querySelector(`input[data-cuenta-id="${nextFilaId}"]`);
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.select();
+        }
+      }
+    }
+  };
+
+  const handleCentroCostosKeyDown = (e, currentFilaId) => {
+    const centrosFiltrados = getCentrosFiltrados(inputCentrosValues[currentFilaId] || '');
+    const dropdownVisible = dropdownCentrosAbierto[currentFilaId] && centrosFiltrados.length > 0;
+    const currentSelectedIndex = selectedIndexCentros[currentFilaId] ?? -1;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (dropdownVisible) {
+        const newIndex = currentSelectedIndex < centrosFiltrados.length - 1 ? currentSelectedIndex + 1 : 0;
+        setSelectedIndexCentros(prev => ({ ...prev, [currentFilaId]: newIndex }));
+
+        setTimeout(() => {
+          const selectedOption = document.querySelector(`[data-centro-option="${currentFilaId}-${newIndex}"]`);
+          if (selectedOption) {
+            selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (dropdownVisible) {
+        const newIndex = currentSelectedIndex > 0 ? currentSelectedIndex - 1 : centrosFiltrados.length - 1;
+        setSelectedIndexCentros(prev => ({ ...prev, [currentFilaId]: newIndex }));
+
+        setTimeout(() => {
+          const selectedOption = document.querySelector(`[data-centro-option="${currentFilaId}-${newIndex}"]`);
+          if (selectedOption) {
+            selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (dropdownVisible && currentSelectedIndex >= 0) {
+        const centroSeleccionado = centrosFiltrados[currentSelectedIndex];
+        handleCentroCostosChange(currentFilaId, centroSeleccionado.codigo);
+        setSelectedIndexCentros(prev => ({ ...prev, [currentFilaId]: -1 }));
+      }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+
+      const currentIndex = filasControl.findIndex(f => f.id === currentFilaId);
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex < filasControl.length) {
+        const nextFilaId = filasControl[nextIndex].id;
+        const nextInput = document.querySelector(`input[data-centro-id="${nextFilaId}"]`);
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.select();
+        }
+      }
+    }
+  };
+
   const handleCuentaContableChange = (id, codigoCuenta) => {
     const cuentaData = cuentas.find(c => c.cuenta === codigoCuenta);
 
@@ -173,6 +303,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const handleInputChange = (id, value) => {
     flushSync(() => {
       setInputValues(prev => ({ ...prev, [id]: value }));
+      setSelectedIndexCuentas(prev => ({ ...prev, [id]: -1 }));
 
       setFilasControl(prevFilas => prevFilas.map(fila =>
         fila.id === id ? { ...fila, noCuentaContable: value } : fila
@@ -261,6 +392,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const handleInputCentrosChange = (id, value) => {
     flushSync(() => {
       setInputCentrosValues(prev => ({ ...prev, [id]: value }));
+      setSelectedIndexCentros(prev => ({ ...prev, [id]: -1 }));
 
       setFilasControl(prevFilas => prevFilas.map(fila =>
         fila.id === id ? { ...fila, centroCostos: value } : fila
@@ -540,6 +672,8 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                             placeholder={loadingCuentas ? "Cargando..." : "Buscar cuenta..."}
                             className="factura-table-input"
                             disabled={loadingCuentas}
+                            data-cuenta-id={fila.id}
+                            onKeyDown={(e) => handleCuentaContableKeyDown(e, fila.id)}
                           />
                           {dropdownAbierto[fila.id] && !loadingCuentas && dropdownPositions[fila.id] && getFiltradas(inputValues[fila.id] || '').length > 0 && (
                             <div
@@ -553,7 +687,8 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                               {getFiltradas(inputValues[fila.id] || '').map((cuenta, index) => (
                                 <div
                                   key={`cuenta-${cuenta.cuenta}-${index}`}
-                                  className="factura-autocomplete-option"
+                                  data-cuenta-option={`${fila.id}-${index}`}
+                                  className={`factura-autocomplete-option ${index === selectedIndexCuentas[fila.id] ? 'factura-autocomplete-option-selected' : ''}`}
                                   onClick={() => handleCuentaContableChange(fila.id, cuenta.cuenta)}
                                 >
                                   {cuenta.cuenta}
@@ -600,6 +735,8 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                             placeholder={loadingCentros ? "Cargando..." : "Buscar centro..."}
                             className="factura-table-input"
                             disabled={loadingCentros}
+                            data-centro-id={fila.id}
+                            onKeyDown={(e) => handleCentroCostosKeyDown(e, fila.id)}
                           />
                           {dropdownCentrosAbierto[fila.id] && !loadingCentros && dropdownCentrosPositions[fila.id] && getCentrosFiltrados(inputCentrosValues[fila.id] || '').length > 0 && (
                             <div
@@ -613,7 +750,8 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                               {getCentrosFiltrados(inputCentrosValues[fila.id] || '').map((centro, index) => (
                                 <div
                                   key={`centro-${centro.codigo}-${index}`}
-                                  className="factura-autocomplete-option"
+                                  data-centro-option={`${fila.id}-${index}`}
+                                  className={`factura-autocomplete-option ${index === selectedIndexCentros[fila.id] ? 'factura-autocomplete-option-selected' : ''}`}
                                   onClick={() => handleCentroCostosChange(fila.id, centro.codigo)}
                                 >
                                   {centro.codigo}
@@ -649,6 +787,8 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                           max="100"
                           step="0.01"
                           className="factura-table-input"
+                          data-porcentaje-id={fila.id}
+                          onKeyDown={(e) => handlePorcentajeKeyDown(e, fila.id)}
                         />
                       </td>
                       <td>
