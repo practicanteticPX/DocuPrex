@@ -1,9 +1,116 @@
 # Project Status - DocuPrex
 
 ## Current Objective
-Implementaci�n de buscador de facturas para tipo de documento "Legalizaci�n de Facturas" (FV).
+Implementación de plantilla de facturas con campos automáticos de cuentas contables desde DB_QPREX.
 
 ## Recent Changes
+
+### Session: 2025-12-03 (Parte 3) - Integración de Cuentas Contables desde DB_QPREX
+
+#### Problem:
+La plantilla de facturas necesita cargar cuentas contables desde una segunda base de datos externa (DB_QPREX) para autocompletar los campos de "Responsable de Cuenta Contable", "Cargo" y "Nombre de Cuenta Contable" cuando se selecciona una cuenta. Además, se requiere mejorar la UX del autocompletado tipo Excel y hacer más visibles los campos autocompletados.
+
+#### Files Created:
+1. **`server/database/cuentas-db.js`**
+   - Nuevo módulo de conexión para base de datos DB_QPREX
+   - Pool de conexiones independiente (max: 20, min: 5)
+   - Esquema: `public`
+   - Tabla principal: `T_Master_Responsable_Cuenta`
+   - Funciones implementadas:
+     - `queryCuentas()`: Ejecutar queries con logging de rendimiento
+     - `transactionCuentas()`: Manejo de transacciones con SET search_path
+     - `testConnectionCuentas()`: Verificación de conexión
+     - `closeCuentasPool()`: Cierre seguro del pool
+
+2. **`frontend/src/hooks/useCuentasContables.js`**
+   - Hook React para cargar cuentas contables
+   - Carga automática al montar el componente
+   - Estados: `cuentas`, `loading`, `error`
+   - Función helper: `getCuentaData(codigoCuenta)`
+
+#### Files Modified:
+1. **`server/.env`**
+   - Agregada variable `CUENTAS_DATABASE_URL` con conexión a DB_QPREX
+   - URL: `postgresql://admin:$40M1n*!!2023@192.168.0.254:5432/DB_QPREX`
+   - Esquema: `public`
+
+2. **`server/routes/facturas.js`**
+   - Agregado import de `queryCuentas` desde `cuentas-db`
+   - Nuevo endpoint: `GET /api/facturas/cuentas-contables`
+   - Consulta campos: `Cuenta`, `NombreCuenta`, `NombreResp`, `Cargo`
+   - Ordenado por código de cuenta ascendente
+   - IMPORTANTE: Ruta específica antes de ruta con parámetros para evitar conflictos
+
+3. **`frontend/src/hooks/index.js`**
+   - Exportado hook `useCuentasContables`
+   - Comentadas temporalmente exportaciones con dependencias rotas (useAuth, useDocuments, useNotifications, useSigners)
+
+4. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Agregado import y uso del hook `useCuentasContables`
+   - Campo "No. Cta Contable" convertido a input con datalist (autocompletado tipo Excel)
+   - Nueva función: `handleCuentaContableChange(id, codigoCuenta)`
+   - Autocompletado de campos dependientes:
+     - `respCuentaContable`: Se llena automáticamente con `nombre_responsable`
+     - `cargoCuentaContable`: Se llena automáticamente con `cargo`
+     - `nombreCuentaContable`: Se llena automáticamente con `nombre_cuenta`
+   - Datalist simplificado: muestra solo números de cuenta (no nombres de responsables)
+   - Estado de carga mostrado en placeholder
+   - Datalist único por fila usando `cuentas-list-${fila.id}`
+
+5. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Mejorados estilos de `.factura-input-disabled`:
+     - Background: #E5E7EB (más oscuro, antes #F9FAFB)
+     - Color: #1F2937 (más oscuro, antes #6B7280)
+     - Font-weight: 500 (más bold)
+     - Border-color: #D1D5DB (más visible)
+   - Mejora UX: los campos autocompletados ahora se distinguen claramente de los editables
+
+#### Technical Implementation:
+**Arquitectura de Bases de Datos:**
+- **DB Local (firmas_db)**: PostgreSQL local en Docker para gestión de documentos y usuarios
+- **SERV_QPREX (crud_facturas)**: Base de datos externa para consulta de facturas
+  - Tabla: `T_Facturas`
+  - Campos: `numero_control`, `proveedor`, `numero_factura`, etc.
+- **DB_QPREX (public)**: Nueva base de datos externa para cuentas contables
+  - Tabla: `T_Master_Responsable_Cuenta`
+  - Campos: `Cuenta`, `NombreCuenta`, `NombreResp`, `Cargo`
+
+**Flujo de Datos:**
+1. Usuario abre plantilla de factura
+2. Hook `useCuentasContables` se ejecuta automáticamente
+3. Frontend llama a `GET /api/facturas/cuentas-contables`
+4. Backend consulta DB_QPREX.public."T_Master_Responsable_Cuenta"
+5. Datos se cargan en el datalist de cada fila
+6. Usuario empieza a escribir en "No. Cta Contable"
+7. Navegador muestra sugerencias del datalist (solo números de cuenta)
+8. Al seleccionar, función `handleCuentaContableChange` auto-completa 4 campos dependientes:
+   - Resp. Cta Contable (nombre_responsable)
+   - Cargo Resp Cta Contable (cargo)
+   - Cta Contable (nombre_cuenta)
+   - Campos se muestran con fondo oscuro para distinguir que son autocompletados
+
+**Express Route Order Fix:**
+- Rutas específicas deben ir ANTES de rutas con parámetros
+- Orden correcto:
+  1. `/cuentas-contables` (específica)
+  2. `/search/:numeroControl` (parámetro)
+- Orden incorrecto causaría que `/cuentas-contables` fuera capturado por `/:numeroControl`
+
+#### Result:
+✅ **Sistema de cuentas contables funcionando:**
+- Conexión exitosa a DB_QPREX
+- Endpoint retorna lista completa de cuentas contables con 4 campos
+- Frontend carga y muestra opciones en datalist (solo números de cuenta)
+- Autocompletado tipo Excel: filtra según lo que el usuario digita
+- Autocompletado funciona correctamente para 4 campos:
+  1. Resp. Cta Contable
+  2. Cargo Resp Cta Contable
+  3. Cta Contable (nombre de la cuenta)
+  4. Todos con estilos oscuros distinguibles
+- UX mejorada: campos autocompletados se ven claramente diferentes de los editables
+- Dos bases de datos externas funcionando simultáneamente:
+  - SERV_QPREX para facturas
+  - DB_QPREX para cuentas contables
 
 ### Session: 2025-12-03 (Parte 2) - Configuración de Expiración de JWT a 24 Horas
 

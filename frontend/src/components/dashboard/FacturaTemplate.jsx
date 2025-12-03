@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import { Input } from '../ui/input';
+import { useCuentasContables } from '../../hooks';
 import './FacturaTemplate.css';
 
 /**
@@ -31,6 +32,8 @@ const formatDate = (dateString) => {
  * con campos automáticos desde T_Facturas y campos manuales
  */
 const FacturaTemplate = ({ factura, onClose, onSave }) => {
+  const { cuentas, loading: loadingCuentas } = useCuentasContables();
+
   // Estados para campos automáticos desde T_Facturas
   const [consecutivo, setConsecutivo] = useState('');
   const [proveedor, setProveedor] = useState('');
@@ -119,6 +122,32 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
     setFilasControl(filasControl.map(fila =>
       fila.id === id ? { ...fila, [field]: value } : fila
     ));
+  };
+
+  const handleCuentaContableChange = (id, codigoCuenta) => {
+    const cuentaData = cuentas.find(c => c.cuenta === codigoCuenta);
+
+    if (cuentaData) {
+      setFilasControl(filasControl.map(fila =>
+        fila.id === id ? {
+          ...fila,
+          noCuentaContable: codigoCuenta,
+          respCuentaContable: cuentaData.nombre_responsable || '',
+          cargoCuentaContable: cuentaData.cargo || '',
+          nombreCuentaContable: cuentaData.nombre_cuenta || ''
+        } : fila
+      ));
+    } else {
+      setFilasControl(filasControl.map(fila =>
+        fila.id === id ? {
+          ...fila,
+          noCuentaContable: codigoCuenta,
+          respCuentaContable: '',
+          cargoCuentaContable: '',
+          nombreCuentaContable: ''
+        } : fila
+      ));
+    }
   };
 
   const calcularTotalPorcentaje = () => {
@@ -325,10 +354,17 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                         <Input
                           type="text"
                           value={fila.noCuentaContable}
-                          onChange={(e) => handleFilaChange(fila.id, 'noCuentaContable', e.target.value)}
-                          placeholder="Seleccionar..."
+                          onChange={(e) => handleCuentaContableChange(fila.id, e.target.value)}
+                          placeholder={loadingCuentas ? "Cargando..." : "Seleccionar..."}
                           className="factura-table-input"
+                          list={`cuentas-list-${fila.id}`}
+                          disabled={loadingCuentas}
                         />
+                        <datalist id={`cuentas-list-${fila.id}`}>
+                          {cuentas.map((cuenta) => (
+                            <option key={cuenta.cuenta} value={cuenta.cuenta} />
+                          ))}
+                        </datalist>
                       </td>
                       <td>
                         <Input
