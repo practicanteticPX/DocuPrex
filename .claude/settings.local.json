@@ -26,7 +26,8 @@
       "Bash(npm cache clean:*)",
       "Bash(npx shadcn@latest add:*)",
       "Bash(dir:*)",
-      "Bash(timeout 8 docker logs:*)"
+      "Bash(timeout 8 docker logs:*)",
+      "Bash(node -e:*)"
     ],
     "deny": [],
     "ask": []

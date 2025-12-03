@@ -37,9 +37,24 @@ router.get('/search/:numeroControl', async (req, res) => {
       });
     }
 
+    const facturaData = result.rows[0];
+    console.log('📋 Factura encontrada:', JSON.stringify(facturaData, null, 2));
+    console.log('📅 fecha_factura:', facturaData.fecha_factura);
+    console.log('📅 fecha_entrega:', facturaData.fecha_entrega);
+
+    const response = {
+      numero_control: facturaData.numero_control,
+      proveedor: facturaData.proveedor,
+      numero_factura: facturaData.numero_factura,
+      fecha_factura: facturaData.fecha_factura,
+      fecha_entrega: facturaData.fecha_entrega
+    };
+
+    console.log('📤 Enviando respuesta:', JSON.stringify(response, null, 2));
+
     return res.status(200).json({
       success: true,
-      data: result.rows[0]
+      data: response
     });
   } catch (error) {
     console.error('❌ Error buscando factura:', error);

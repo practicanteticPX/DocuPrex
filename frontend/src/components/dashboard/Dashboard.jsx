@@ -230,6 +230,20 @@ function Dashboard({ user, onLogout }) {
     }
   }, [user]);
 
+  // Limpiar título y descripción cuando cambie el tipo de documento
+  useEffect(() => {
+    setDocumentTitle('');
+    setDocumentDescription('');
+  }, [selectedDocumentType]);
+
+  // Limpiar título y descripción cuando se cambie de tab
+  useEffect(() => {
+    if (activeTab !== 'upload') {
+      setDocumentTitle('');
+      setDocumentDescription('');
+    }
+  }, [activeTab]);
+
   // Bloquear scroll cuando la pantalla de "Aún no es tu turno" esté activa
   useEffect(() => {
     if (showWaitingTurnScreen) {

@@ -38,6 +38,9 @@ const FacturaSearch = ({ onFacturaSelect }) => {
 
         const result = await response.json();
 
+        console.log('🔍 Respuesta del backend:', result);
+        console.log('📦 Data recibida:', result.data);
+
         if (response.ok && result.success) {
           setFactura(result.data);
         } else {
@@ -133,9 +136,9 @@ const FacturaSearch = ({ onFacturaSelect }) => {
               <path d="M21 21L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
           </div>
-          <h3 className="factura-search-empty-title">No se encontraron documentos</h3>
+          <h3 className="factura-search-empty-title">No se encontraron facturas</h3>
           <p className="factura-search-empty-text">
-            No hay documentos que coincidan con "{numeroControl.trim()}"
+            No hay facturas que coincidan con "{numeroControl.trim()}"
           </p>
         </div>
       )}

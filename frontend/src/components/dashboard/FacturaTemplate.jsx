@@ -4,6 +4,27 @@ import { Input } from '../ui/input';
 import './FacturaTemplate.css';
 
 /**
+ * Helper para formatear fechas de PostgreSQL a formato YYYY-MM-DD
+ * Usa UTC para evitar problemas de zona horaria
+ */
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+  } catch (error) {
+    console.error('Error formateando fecha:', error);
+    return '';
+  }
+};
+
+/**
  * FacturaTemplate - Plantilla de legalización de facturas
  *
  * Formulario completo para diligenciar información de factura
@@ -41,14 +62,33 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
     }
   ]);
 
+  // Bloquear scroll del body cuando el componente está montado
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   // Cargar datos automáticos de la factura
   useEffect(() => {
     if (factura) {
+      console.log('📋 Datos de factura recibidos:', factura);
+      console.log('📅 fecha_factura:', factura.fecha_factura);
+      console.log('📅 fecha_entrega:', factura.fecha_entrega);
+
       setConsecutivo(factura.numero_control || '');
       setProveedor(factura.proveedor || '');
       setNumeroFactura(factura.numero_factura || '');
-      setFechaFactura(factura.fecha_factura || '');
-      setFechaRecepcion(factura.fecha_entrega || '');
+
+      const fechaFacturaFormateada = formatDate(factura.fecha_factura);
+      const fechaRecepcionFormateada = formatDate(factura.fecha_entrega);
+
+      console.log('✅ Fecha factura formateada:', fechaFacturaFormateada);
+      console.log('✅ Fecha recepción formateada:', fechaRecepcionFormateada);
+
+      setFechaFactura(fechaFacturaFormateada);
+      setFechaRecepcion(fechaRecepcionFormateada);
     }
   }, [factura]);
 
@@ -229,13 +269,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   className="factura-input-disabled"
                   placeholder="Se completa automáticamente"
                 />
-              </div>
-
-              <div className="factura-field">
-                <label className="factura-label">Firma Negociador</label>
-                <div className="factura-firma">
-                  {firmaNegociador || 'Se generará automáticamente'}
-                </div>
               </div>
             </div>
           </div>
