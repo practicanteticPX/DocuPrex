@@ -53,7 +53,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const [filasControl, setFilasControl] = useState([
     {
       id: 1,
-      proceso: 'Aprobación',
       noCuentaContable: '',
       respCuentaContable: '',
       cargoCuentaContable: '',
@@ -115,7 +114,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       ...filasControl,
       {
         id: newId,
-        proceso: 'Aprobación',
         noCuentaContable: '',
         respCuentaContable: '',
         cargoCuentaContable: '',
@@ -652,7 +650,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
               <table className="factura-table">
                 <thead>
                   <tr>
-                    <th>Proceso</th>
                     <th>No. Cta Contable</th>
                     <th>Resp. Cta Contable</th>
                     <th>Cargo Resp Cta Contable</th>
@@ -667,14 +664,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 <tbody>
                   {filasControl.map((fila) => (
                     <tr key={fila.id}>
-                      <td>
-                        <Input
-                          type="text"
-                          value={fila.proceso}
-                          disabled
-                          className="factura-table-input factura-input-disabled"
-                        />
-                      </td>
                       <td>
                         <div
                           className="factura-autocomplete-wrapper"
@@ -828,7 +817,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan="8" style={{ textAlign: 'right', fontWeight: '600', color: '#374151' }}>
+                    <td colSpan="7" style={{ textAlign: 'right', fontWeight: '600', color: '#374151' }}>
                       Total Porcentaje:
                     </td>
                     <td>

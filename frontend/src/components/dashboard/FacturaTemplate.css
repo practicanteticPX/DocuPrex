@@ -235,10 +235,26 @@
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+.factura-table th:first-child {
+  padding-left: 16px;
+}
+
+.factura-table th:last-child {
+  padding-right: 16px;
+}
+
 .factura-table td {
   padding: 8px;
   border-bottom: 1px solid #F3F4F6;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.factura-table td:first-child {
+  padding-left: 16px;
+}
+
+.factura-table td:last-child {
+  padding-right: 16px;
 }
 
 .factura-table tbody tr:hover {
@@ -254,7 +270,6 @@
   transition: box-shadow 0.2s ease, z-index 0s;
 }
 
-.factura-table-input:hover,
 .factura-table-input:focus {
   position: relative;
   z-index: 50;
