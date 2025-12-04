@@ -80,7 +80,7 @@ router.get('/centros-costos', async (req, res) => {
 
 /**
  * GET /api/facturas/validar-responsable/:nombre
- * Valida el nombre del responsable y obtiene su cargo
+ * Valida el nombre del responsable en T_Personas (SERV_QPREX.crud_facturas) y obtiene su cargo
  */
 router.get('/validar-responsable/:nombre', async (req, res) => {
   try {
@@ -93,21 +93,20 @@ router.get('/validar-responsable/:nombre', async (req, res) => {
       });
     }
 
-    const result = await queryCuentas(
+    const result = await queryFacturas(
       `SELECT
-        "NombreResp" as nombre,
-        "Cargo" as cargo
-       FROM public."T_Master_Responsable_Cuenta"
-       WHERE UPPER("NombreResp") = UPPER($1)
-       AND "Activa" = true
+        "nombre" as nombre,
+        "cargo" as cargo
+       FROM crud_facturas."T_Personas"
+       WHERE UPPER(TRIM("nombre")) = UPPER(TRIM($1))
        LIMIT 1`,
-      [nombre.trim()]
+      [nombre]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No se encontró información del responsable'
+        message: 'No se encontró información del responsable en T_Personas'
       });
     }
 

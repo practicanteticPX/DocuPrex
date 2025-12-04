@@ -306,7 +306,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       setSelectedIndexCuentas(prev => ({ ...prev, [id]: -1 }));
 
       setFilasControl(prevFilas => prevFilas.map(fila =>
-        fila.id === id ? { ...fila, noCuentaContable: value } : fila
+        fila.id === id ? {
+          ...fila,
+          noCuentaContable: value,
+          respCuentaContable: value.trim() === '' ? '' : fila.respCuentaContable,
+          cargoCuentaContable: value.trim() === '' ? '' : fila.cargoCuentaContable,
+          nombreCuentaContable: value.trim() === '' ? '' : fila.nombreCuentaContable
+        } : fila
       ));
 
       const element = dropdownRefs.current[id];
@@ -395,7 +401,12 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       setSelectedIndexCentros(prev => ({ ...prev, [id]: -1 }));
 
       setFilasControl(prevFilas => prevFilas.map(fila =>
-        fila.id === id ? { ...fila, centroCostos: value } : fila
+        fila.id === id ? {
+          ...fila,
+          centroCostos: value,
+          respCentroCostos: value.trim() === '' ? '' : fila.respCentroCostos,
+          cargoCentroCostos: value.trim() === '' ? '' : fila.cargoCentroCostos
+        } : fila
       ));
 
       const element = dropdownCentrosRefs.current[id];
