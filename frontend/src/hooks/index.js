@@ -12,3 +12,4 @@
 export { useFileUpload } from './useFileUpload';
 export { useCuentasContables } from './useCuentasContables';
 export { useCentrosCostos } from './useCentrosCostos';
+export { useNegociadores } from './useNegociadores';

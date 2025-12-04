@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { X, Plus } from 'lucide-react';
 import { Input } from '../ui/input';
-import { useCuentasContables, useCentrosCostos } from '../../hooks';
+import { useCuentasContables, useCentrosCostos, useNegociadores } from '../../hooks';
 import './FacturaTemplate.css';
 
 /**
@@ -35,6 +35,7 @@ const formatDate = (dateString) => {
 const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
   const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
+  const { negociadores, loading: loadingNegociadores } = useNegociadores();
 
   // Estados para campos automáticos desde T_Facturas
   const [consecutivo, setConsecutivo] = useState('');
@@ -77,6 +78,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const [inputCentrosValues, setInputCentrosValues] = useState({});
   const [selectedIndexCentros, setSelectedIndexCentros] = useState({});
   const dropdownCentrosRefs = useRef({});
+
+  // Estados para el dropdown de negociadores
+  const [dropdownNegociadoresAbierto, setDropdownNegociadoresAbierto] = useState(false);
+  const [dropdownNegociadoresPosition, setDropdownNegociadoresPosition] = useState({});
+  const [inputNegociadorValue, setInputNegociadorValue] = useState('');
+  const [selectedIndexNegociadores, setSelectedIndexNegociadores] = useState(-1);
+  const dropdownNegociadoresRef = useRef(null);
 
   // Bloquear scroll del body cuando el componente está montado
   useEffect(() => {
@@ -456,6 +464,111 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
     );
   };
 
+  const handleNegociadorChange = (nombre) => {
+    const negociadorData = negociadores.find(n => n.negociador === nombre);
+
+    setInputNegociadorValue(nombre);
+
+    if (negociadorData) {
+      setNombreNegociador(nombre);
+      setCargoNegociador(negociadorData.cargo || '');
+      setDropdownNegociadoresAbierto(false);
+    } else {
+      setNombreNegociador(nombre);
+      setCargoNegociador('');
+    }
+  };
+
+  const handleInputNegociadorChange = (value) => {
+    flushSync(() => {
+      setInputNegociadorValue(value);
+      setSelectedIndexNegociadores(-1);
+
+      setNombreNegociador(value);
+      setCargoNegociador(value.trim() === '' ? '' : cargoNegociador);
+
+      const element = dropdownNegociadoresRef.current;
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        setDropdownNegociadoresPosition({
+          top: rect.bottom,
+          left: rect.left,
+          width: rect.width
+        });
+      }
+
+      setDropdownNegociadoresAbierto(true);
+    });
+  };
+
+  const handleNegociadorFocus = () => {
+    if (inputNegociadorValue === undefined) {
+      setInputNegociadorValue(nombreNegociador || '');
+    }
+
+    const element = dropdownNegociadoresRef.current;
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      setDropdownNegociadoresPosition({
+        top: rect.bottom,
+        left: rect.left,
+        width: rect.width
+      });
+    }
+    setDropdownNegociadoresAbierto(true);
+  };
+
+  const handleNegociadorKeyDown = (e) => {
+    const negociadoresFiltrados = getNegociadoresFiltrados(inputNegociadorValue || '');
+    const dropdownVisible = dropdownNegociadoresAbierto && negociadoresFiltrados.length > 0;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (dropdownVisible) {
+        const newIndex = selectedIndexNegociadores < negociadoresFiltrados.length - 1 ? selectedIndexNegociadores + 1 : 0;
+        setSelectedIndexNegociadores(newIndex);
+
+        setTimeout(() => {
+          const selectedOption = document.querySelector(`[data-negociador-option="${newIndex}"]`);
+          if (selectedOption) {
+            selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (dropdownVisible) {
+        const newIndex = selectedIndexNegociadores > 0 ? selectedIndexNegociadores - 1 : negociadoresFiltrados.length - 1;
+        setSelectedIndexNegociadores(newIndex);
+
+        setTimeout(() => {
+          const selectedOption = document.querySelector(`[data-negociador-option="${newIndex}"]`);
+          if (selectedOption) {
+            selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (dropdownVisible && selectedIndexNegociadores >= 0) {
+        const negociadorSeleccionado = negociadoresFiltrados[selectedIndexNegociadores];
+        handleNegociadorChange(negociadorSeleccionado.negociador);
+        setSelectedIndexNegociadores(-1);
+      }
+    }
+  };
+
+  const getNegociadoresFiltrados = (filtro) => {
+    if (!filtro || filtro.trim() === '') {
+      return negociadores;
+    }
+
+    const filtroUpper = filtro.toUpperCase();
+    return negociadores.filter(negociador =>
+      negociador.negociador.toUpperCase().includes(filtroUpper)
+    );
+  };
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       Object.keys(dropdownRefs.current).forEach((id) => {
@@ -469,6 +582,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
           setDropdownCentrosAbierto(prev => ({ ...prev, [id]: false }));
         }
       });
+
+      if (dropdownNegociadoresRef.current && !dropdownNegociadoresRef.current.contains(event.target)) {
+        setDropdownNegociadoresAbierto(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -609,13 +726,42 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
             <div className="factura-grid">
               <div className="factura-field">
                 <label className="factura-label">Nombre Negociador</label>
-                <Input
-                  type="text"
-                  value={nombreNegociador}
-                  onChange={(e) => setNombreNegociador(e.target.value)}
-                  placeholder="Seleccionar negociador..."
-                  title={nombreNegociador}
-                />
+                <div
+                  className="factura-autocomplete-wrapper"
+                  ref={dropdownNegociadoresRef}
+                >
+                  <Input
+                    type="text"
+                    value={inputNegociadorValue !== undefined && inputNegociadorValue !== '' ? inputNegociadorValue : nombreNegociador}
+                    onChange={(e) => handleInputNegociadorChange(e.target.value)}
+                    onFocus={handleNegociadorFocus}
+                    onKeyDown={handleNegociadorKeyDown}
+                    placeholder={loadingNegociadores ? "Cargando..." : "Buscar negociador..."}
+                    disabled={loadingNegociadores}
+                    title={nombreNegociador}
+                  />
+                  {dropdownNegociadoresAbierto && !loadingNegociadores && dropdownNegociadoresPosition.top && getNegociadoresFiltrados(inputNegociadorValue || '').length > 0 && (
+                    <div
+                      className="factura-autocomplete-dropdown"
+                      style={{
+                        top: `${dropdownNegociadoresPosition.top}px`,
+                        left: `${dropdownNegociadoresPosition.left}px`,
+                        width: `${dropdownNegociadoresPosition.width}px`
+                      }}
+                    >
+                      {getNegociadoresFiltrados(inputNegociadorValue || '').map((negociador, index) => (
+                        <div
+                          key={`negociador-${negociador.negociador}-${index}`}
+                          data-negociador-option={index}
+                          className={`factura-autocomplete-option ${index === selectedIndexNegociadores ? 'factura-autocomplete-option-selected' : ''}`}
+                          onClick={() => handleNegociadorChange(negociador.negociador)}
+                        >
+                          {negociador.negociador}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="factura-field">

@@ -18,8 +18,8 @@
 
 .ui-input:focus {
   outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  border-color: #6b7280;
+  box-shadow: 0 0 0 3px rgba(107, 116, 128, 0.1);
 }
 
 .ui-input:disabled {

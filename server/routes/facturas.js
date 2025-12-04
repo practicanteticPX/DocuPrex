@@ -79,6 +79,42 @@ router.get('/centros-costos', async (req, res) => {
 });
 
 /**
+ * GET /api/facturas/negociadores
+ * Obtiene todos los negociadores disponibles desde SERV_QPREX.crud_facturas.T_Negociadores
+ */
+router.get('/negociadores', async (req, res) => {
+  try {
+    const result = await queryFacturas(
+      `SELECT
+        "negociador" as negociador,
+        "cargo" as cargo
+       FROM crud_facturas."T_Negociadores"
+       ORDER BY "negociador" ASC`,
+      []
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontraron negociadores'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('❌ Error obteniendo negociadores:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno al obtener negociadores',
+      error: error.message
+    });
+  }
+});
+
+/**
  * GET /api/facturas/validar-responsable/:nombre
  * Valida el nombre del responsable en T_Personas (SERV_QPREX.crud_facturas) y obtiene su cargo
  */
