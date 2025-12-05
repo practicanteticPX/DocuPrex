@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Info } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import { Modal } from '../ui/modal';
@@ -29,6 +29,19 @@ const formatDate = (dateString) => {
 };
 
 /**
+ * Mensajes informativos para tooltips del checklist
+ */
+const CHECKLIST_TOOLTIPS = {
+  fechaEmision: 'Marque si revisó la fecha de emisión de la factura y es correcta. En caso contrario solicite a su proveedor la modificación de la misma.',
+  fechaVencimiento: 'Marque si revisó la Fecha de vencimiento de la factura y es correcta. En caso contrario solicite a su proveedor la modificación de la misma.',
+  cantidades: 'Marque si revisó que las cantidades cobradas en la factura son correctas. Si no son correctas, por favor solicite a su proveedor la modificación de la factura.',
+  precioUnitario: 'Marque si revisó que el precio unitario cobrado en la factura es correcto. Si no es correcto, por favor solicite a su proveedor la modificación de la factura.',
+  fletes: 'Marque si revisó que los fletes cobrados en la factura son correctos. Si no son correctos, por favor solicite a su proveedor la modificación de la factura.',
+  valoresTotales: 'Marque si revisó que el total de la factura fuera igual al total de la Orden de compra emitida. En caso contrario solicite a su proveedor la modificación de la misma.',
+  descuentosTotales: 'Marque si revisó que los descuentos totales en la factura son correctos. Si no son correctos, por favor solicite a su proveedor la modificación de la factura.'
+};
+
+/**
  * FacturaTemplate - Plantilla de legalización de facturas
  *
  * Formulario completo para diligenciar información de factura
@@ -47,10 +60,20 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const [fechaRecepcion, setFechaRecepcion] = useState('');
   const [legalizaAnticipo, setLegalizaAnticipo] = useState(false);
 
+  // Estados para el checklist de revisión
+  const [checklistRevision, setChecklistRevision] = useState({
+    fechaEmision: false,
+    fechaVencimiento: false,
+    cantidades: false,
+    precioUnitario: false,
+    fletes: false,
+    valoresTotales: false,
+    descuentosTotales: false
+  });
+
   // Estados para campos manuales
   const [nombreNegociador, setNombreNegociador] = useState('');
   const [cargoNegociador, setCargoNegociador] = useState('');
-  const [firmaNegociador, setFirmaNegociador] = useState('');
 
   // Estado para las filas de la tabla de control de firmas
   const [filasControl, setFilasControl] = useState([
@@ -91,6 +114,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   // Estados para el modal de validación
   const [modalAbierto, setModalAbierto] = useState(false);
   const [mensajeError, setMensajeError] = useState('');
+
+  // Estado para tooltips del checklist
+  const [tooltipAbierto, setTooltipAbierto] = useState(null);
 
   // Bloquear scroll del body cuando el componente está montado
   useEffect(() => {
@@ -147,6 +173,17 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       }
       return prevFilas;
     });
+  };
+
+  const handleChecklistChange = (field) => {
+    setChecklistRevision(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  const handleTooltipToggle = (tooltipId) => {
+    setTooltipAbierto(prev => prev === tooltipId ? null : tooltipId);
   };
 
   const handleFilaChange = (id, field, value) => {
@@ -592,11 +629,15 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       if (dropdownNegociadoresRef.current && !dropdownNegociadoresRef.current.contains(event.target)) {
         setDropdownNegociadoresAbierto(false);
       }
+
+      if (tooltipAbierto && !event.target.closest('.factura-info-btn') && !event.target.closest('.factura-tooltip')) {
+        setTooltipAbierto(null);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [tooltipAbierto]);
 
   const calcularTotalPorcentaje = () => {
     return filasControl.reduce((total, fila) => {
@@ -611,6 +652,22 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
 
   const validarFormulario = () => {
     const errores = [];
+
+    const checklistLabels = {
+      fechaEmision: 'Fecha de Emisión',
+      fechaVencimiento: 'Fecha de Vencimiento',
+      cantidades: 'Cantidades',
+      precioUnitario: 'Precio Unitario',
+      fletes: 'Fletes',
+      valoresTotales: 'Vlr Totales = Vlr Orden de Compra',
+      descuentosTotales: 'Descuentos Totales'
+    };
+
+    Object.keys(checklistRevision).forEach(key => {
+      if (!checklistRevision[key]) {
+        errores.push(`Debe marcar el checklist: "${checklistLabels[key]}"`);
+      }
+    });
 
     if (!nombreNegociador.trim()) {
       errores.push('El nombre del negociador es obligatorio');
@@ -669,7 +726,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
         legalizaAnticipo,
         nombreNegociador,
         cargoNegociador,
-        firmaNegociador,
         filasControl
       });
     }
@@ -762,6 +818,223 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   />
                   <span className="factura-checkbox-simple-text">Legaliza Anticipo</span>
                 </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Sección: Checklist de Revisión */}
+          <div className="factura-section">
+            <h2 className="factura-section-title">Checklist de Revisión de Condiciones de Negociación</h2>
+
+            <div className="factura-checklist-grid">
+              <div className="factura-checklist-item">
+                <label className="factura-checklist-label" htmlFor="checklist-fecha-emision">
+                  <Checkbox
+                    id="checklist-fecha-emision"
+                    checked={checklistRevision.fechaEmision}
+                    onCheckedChange={() => handleChecklistChange('fechaEmision')}
+                  />
+                  <span className="factura-checklist-text">Fecha de Emisión</span>
+                </label>
+                <div className="factura-info-btn-wrapper">
+                  <button
+                    type="button"
+                    className="factura-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTooltipToggle('fechaEmision');
+                    }}
+                    title="Ver información"
+                  >
+                    <Info size={14} />
+                  </button>
+                  {tooltipAbierto === 'fechaEmision' && (
+                    <div className="factura-tooltip">
+                      {CHECKLIST_TOOLTIPS.fechaEmision}
+                      <div className="factura-tooltip-arrow"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="factura-checklist-item">
+                <label className="factura-checklist-label" htmlFor="checklist-fecha-vencimiento">
+                  <Checkbox
+                    id="checklist-fecha-vencimiento"
+                    checked={checklistRevision.fechaVencimiento}
+                    onCheckedChange={() => handleChecklistChange('fechaVencimiento')}
+                  />
+                  <span className="factura-checklist-text">Fecha de Vencimiento</span>
+                </label>
+                <div className="factura-info-btn-wrapper">
+                  <button
+                    type="button"
+                    className="factura-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTooltipToggle('fechaVencimiento');
+                    }}
+                    title="Ver información"
+                  >
+                    <Info size={14} />
+                  </button>
+                  {tooltipAbierto === 'fechaVencimiento' && (
+                    <div className="factura-tooltip">
+                      {CHECKLIST_TOOLTIPS.fechaVencimiento}
+                      <div className="factura-tooltip-arrow"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="factura-checklist-item">
+                <label className="factura-checklist-label" htmlFor="checklist-cantidades">
+                  <Checkbox
+                    id="checklist-cantidades"
+                    checked={checklistRevision.cantidades}
+                    onCheckedChange={() => handleChecklistChange('cantidades')}
+                  />
+                  <span className="factura-checklist-text">Cantidades</span>
+                </label>
+                <div className="factura-info-btn-wrapper">
+                  <button
+                    type="button"
+                    className="factura-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTooltipToggle('cantidades');
+                    }}
+                    title="Ver información"
+                  >
+                    <Info size={14} />
+                  </button>
+                  {tooltipAbierto === 'cantidades' && (
+                    <div className="factura-tooltip">
+                      {CHECKLIST_TOOLTIPS.cantidades}
+                      <div className="factura-tooltip-arrow"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="factura-checklist-item">
+                <label className="factura-checklist-label" htmlFor="checklist-precio-unitario">
+                  <Checkbox
+                    id="checklist-precio-unitario"
+                    checked={checklistRevision.precioUnitario}
+                    onCheckedChange={() => handleChecklistChange('precioUnitario')}
+                  />
+                  <span className="factura-checklist-text">Precio Unitario</span>
+                </label>
+                <div className="factura-info-btn-wrapper">
+                  <button
+                    type="button"
+                    className="factura-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTooltipToggle('precioUnitario');
+                    }}
+                    title="Ver información"
+                  >
+                    <Info size={14} />
+                  </button>
+                  {tooltipAbierto === 'precioUnitario' && (
+                    <div className="factura-tooltip">
+                      {CHECKLIST_TOOLTIPS.precioUnitario}
+                      <div className="factura-tooltip-arrow"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="factura-checklist-item">
+                <label className="factura-checklist-label" htmlFor="checklist-fletes">
+                  <Checkbox
+                    id="checklist-fletes"
+                    checked={checklistRevision.fletes}
+                    onCheckedChange={() => handleChecklistChange('fletes')}
+                  />
+                  <span className="factura-checklist-text">Fletes</span>
+                </label>
+                <div className="factura-info-btn-wrapper">
+                  <button
+                    type="button"
+                    className="factura-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTooltipToggle('fletes');
+                    }}
+                    title="Ver información"
+                  >
+                    <Info size={14} />
+                  </button>
+                  {tooltipAbierto === 'fletes' && (
+                    <div className="factura-tooltip">
+                      {CHECKLIST_TOOLTIPS.fletes}
+                      <div className="factura-tooltip-arrow"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="factura-checklist-item factura-checklist-item-wide">
+                <label className="factura-checklist-label" htmlFor="checklist-valores-totales">
+                  <Checkbox
+                    id="checklist-valores-totales"
+                    checked={checklistRevision.valoresTotales}
+                    onCheckedChange={() => handleChecklistChange('valoresTotales')}
+                  />
+                  <span className="factura-checklist-text">Vlr Totales = Vlr Orden de Compra</span>
+                </label>
+                <div className="factura-info-btn-wrapper">
+                  <button
+                    type="button"
+                    className="factura-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTooltipToggle('valoresTotales');
+                    }}
+                    title="Ver información"
+                  >
+                    <Info size={14} />
+                  </button>
+                  {tooltipAbierto === 'valoresTotales' && (
+                    <div className="factura-tooltip">
+                      {CHECKLIST_TOOLTIPS.valoresTotales}
+                      <div className="factura-tooltip-arrow"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="factura-checklist-item">
+                <label className="factura-checklist-label" htmlFor="checklist-descuentos-totales">
+                  <Checkbox
+                    id="checklist-descuentos-totales"
+                    checked={checklistRevision.descuentosTotales}
+                    onCheckedChange={() => handleChecklistChange('descuentosTotales')}
+                  />
+                  <span className="factura-checklist-text">Descuentos Totales</span>
+                </label>
+                <div className="factura-info-btn-wrapper">
+                  <button
+                    type="button"
+                    className="factura-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTooltipToggle('descuentosTotales');
+                    }}
+                    title="Ver información"
+                  >
+                    <Info size={14} />
+                  </button>
+                  {tooltipAbierto === 'descuentosTotales' && (
+                    <div className="factura-tooltip">
+                      {CHECKLIST_TOOLTIPS.descuentosTotales}
+                      <div className="factura-tooltip-arrow"></div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

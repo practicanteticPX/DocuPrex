@@ -5,6 +5,317 @@ Sistema de autocompletado tipo Excel completamente funcional para Cuentas Contab
 
 ## Recent Changes
 
+### Session: 2025-12-05 (Parte 4) - Ajuste de Layout del Checklist (Grid 4 Columnas)
+
+#### Problem:
+El usuario proporcionó una imagen mostrando el layout exacto deseado para el checklist de revisión. El grid usaba `repeat(auto-fit, minmax(300px, 1fr))` que creaba un número variable de columnas dependiendo del ancho de pantalla, resultando en un layout inconsistente con el diseño solicitado. Se necesitaba un grid fijo de 4 columnas en desktop que coincidiera exactamente con la imagen proporcionada.
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Líneas 476-492: Modificado `.factura-checklist-grid`:
+     - Cambiado de: `grid-template-columns: repeat(auto-fit, minmax(300px, 1fr))`
+     - Cambiado a: `grid-template-columns: repeat(4, 1fr)`
+     - Gap aumentado de 12px a 16px para mejor separación visual
+     - Agregado media query @media (max-width: 1200px):
+       - Grid cambia a 2 columnas en pantallas medianas
+     - Agregado media query @media (max-width: 768px):
+       - Grid cambia a 1 columna en móviles
+
+#### Technical Implementation:
+
+**Layout Exacto según Diseño:**
+- **Desktop (>1200px)**: 4 columnas iguales
+  - Fila 1: Fecha de Emisión | Fecha de Vencimiento | Cantidades | Precio Unitario
+  - Fila 2: Fletes | Vlr Totales = Vlr Orden de Compra | Descuentos Totales
+- **Tablet (768px - 1200px)**: 2 columnas
+- **Mobile (<768px)**: 1 columna
+
+**Diferencias vs Implementación Anterior:**
+- **Antes**: Grid flexible con columnas variables según espacio disponible
+  - Pros: Adaptable automáticamente
+  - Contras: Layout inconsistente, no coincide con diseño
+- **Ahora**: Grid fijo con breakpoints responsive definidos
+  - Pros: Layout exacto y predecible, coincide con mockup
+  - Contras: Ninguno - mejor UX y consistencia visual
+
+**Ventajas del Enfoque Actual:**
+- Consistencia visual: Siempre 4 columnas en desktop
+- Coincide exactamente con el diseño proporcionado por el usuario
+- Responsive definido con breakpoints profesionales
+- Gap de 16px proporciona mejor separación visual
+
+#### Result:
+✅ **Layout de checklist ajustado exitosamente:**
+- Grid fijo de 4 columnas en desktop (>1200px)
+- Layout coincide exactamente con imagen proporcionada por usuario
+- Responsive breakpoints profesionales:
+  - 4 columnas → 2 columnas → 1 columna
+- Gap aumentado a 16px para mejor legibilidad
+- Cards de checklist mantienen tamaño consistente en cada breakpoint
+- UX mejorada con layout predecible y profesional
+
+### Session: 2025-12-05 (Parte 3) - Tooltips Personalizados para Checklist
+
+#### Problem:
+Los botones de información del checklist usaban `alert()` del navegador, lo cual es intrusivo y poco elegante. El usuario solicitó reemplazarlos con tooltips/popovers personalizados que aparezcan como ventanas de texto arriba de cada botón, similares a una ventana modal pequeña.
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Líneas 31-42: Agregado objeto constante `CHECKLIST_TOOLTIPS`:
+     - Contiene los 7 mensajes informativos del checklist
+     - Centralizado para mantener principio DRY
+     - Fácil de mantener y actualizar
+   - Línea 107: Agregado estado `tooltipAbierto`:
+     - Controla qué tooltip está visible (null o ID del tooltip)
+     - Solo un tooltip puede estar abierto a la vez
+   - Líneas 173-175: Nueva función `handleTooltipToggle(tooltipId)`:
+     - Toggle del tooltip: abre si está cerrado, cierra si está abierto
+     - Cierra cualquier otro tooltip al abrir uno nuevo
+   - Líneas 634-636: Actualizado `useEffect` de click outside:
+     - Detecta clicks fuera de tooltips y botones de info
+     - Cierra tooltip automáticamente al hacer click fuera
+     - Dependencia: `tooltipAbierto`
+   - Líneas 844-1042: Actualizados los 7 items del checklist:
+     - Cada botón envuelto en `.factura-info-btn-wrapper`
+     - `onClick` llama a `handleTooltipToggle()` en lugar de `alert()`
+     - Tooltip condicional renderizado cuando `tooltipAbierto === [id]`
+     - Tooltip incluye flecha decorativa (`.factura-tooltip-arrow`)
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Líneas 514-519: Nuevo contenedor `.factura-info-btn-wrapper`:
+     - Position: relative (base para tooltip absoluto)
+     - Display: flex con flex-shrink: 0
+   - Líneas 545-562: Estilos para `.factura-tooltip`:
+     - Position: absolute, bottom: calc(100% + 12px) (arriba del botón)
+     - Width: 280px, max-width: 90vw (responsive)
+     - Background: blanco con borde gris (#D1D5DB)
+     - Box-shadow elegante para dar profundidad
+     - Z-index: 10001 (sobre otros elementos)
+     - Animación fadeInTooltip de 0.2s
+   - Líneas 564-586: Estilos para `.factura-tooltip-arrow`:
+     - Flecha CSS usando borders
+     - Posicionada en top: 100% (debajo del tooltip)
+     - Borde superior blanco simulando continuidad
+     - Pseudo-elemento ::before con borde gris (#D1D5DB)
+     - Filter drop-shadow para sombra sutil
+   - Líneas 588-597: Animación `@keyframes fadeInTooltip`:
+     - Fade in suave de opacity 0 → 1
+     - Transform translateY de 4px → 0
+     - Duración: 0.2s con easing
+
+#### Technical Implementation:
+
+**Arquitectura de Tooltips:**
+- **Estado global único**: Un solo estado controla todos los tooltips (evita múltiples tooltips abiertos)
+- **Posicionamiento absoluto**: Tooltip se posiciona arriba del botón usando `bottom: calc(100% + 12px)`
+- **Click outside detection**: useEffect detecta clicks fuera y cierra automáticamente
+- **Animación fluida**: Fade in suave con translateY para UX profesional
+
+**Ventajas sobre `alert()`:**
+- No bloquea la interfaz
+- Estilo consistente con el diseño de la aplicación
+- Cierre automático al hacer click fuera
+- Animación suave y profesional
+- Flecha decorativa apuntando al botón de origen
+- Tooltip se alinea a la derecha del botón
+
+**Responsive Design:**
+- Max-width: 90vw para evitar que el tooltip se salga en pantallas pequeñas
+- Width fijo de 280px en pantallas grandes
+- Flecha siempre alineada con el botón (right: 8px)
+
+**UX Mejorada:**
+- Un solo tooltip visible a la vez
+- Click en el mismo botón cierra el tooltip (toggle)
+- Click fuera cierra el tooltip automáticamente
+- Animación fade in suave al abrir
+- No interfiere con el scroll principal
+
+#### Result:
+✅ **Tooltips personalizados implementados exitosamente:**
+- Eliminados todos los `alert()` del navegador
+- Tooltips elegantes con ventanas de texto arriba de cada botón
+- Flecha decorativa apuntando hacia el botón
+- Animación fade in suave de 0.2s
+- Click outside cierra automáticamente
+- Solo un tooltip abierto a la vez
+- Responsive: max-width 90vw para pantallas pequeñas
+- Z-index: 10001 para aparecer sobre todos los elementos
+- Estilos consistentes con el diseño existente
+- Código DRY: mensajes centralizados en constante CHECKLIST_TOOLTIPS
+
+### Session: 2025-12-05 (Parte 2) - Mejoras UX del Checklist y Scroll del Modal
+
+#### Problem:
+Tres problemas de UX reportados por el usuario:
+1. Los botones de información del checklist no eran clicables (el label capturaba el click)
+2. El modal de factura no tenía scroll Y principal, dificultando ver contenido inferior
+3. Los dropdowns de autocompletado tenían scroll Y individual, creando múltiples scrolls conflictivos
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Líneas 812-963: Actualizados los 7 items del checklist:
+     - Agregado `htmlFor` a cada label para asociación correcta con checkbox
+     - Agregado handler `onClick` en cada botón con `e.stopPropagation()` para prevenir propagación del evento
+     - Cambiado de tooltip estático a `alert()` mostrando mensaje informativo completo
+     - Los botones ahora son 100% funcionales y clicables
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Líneas 64-85: Modificado `.factura-template-content`:
+     - Cambiado `overflow: visible` → `overflow-y: auto`
+     - Agregados estilos de scrollbar personalizado (width: 8px, colores consistentes)
+     - Ahora el contenedor principal maneja TODO el scroll vertical
+   - Líneas 308-317: Modificado `.factura-autocomplete-dropdown`:
+     - Eliminado `max-height: 192px` y `overflow-y: auto`
+     - Eliminados estilos de scrollbar (`::-webkit-scrollbar`)
+     - Dropdowns ahora se expanden completamente sin scroll propio
+   - Líneas 202-226: Modificado `.factura-table-wrapper`:
+     - Eliminado `overflow-y: auto` y `max-height: 240px`
+     - Mantenido solo `overflow-x: auto` para scroll horizontal de tabla ancha
+     - Eliminado `::-webkit-scrollbar` para width (solo mantiene height para scroll X)
+   - Líneas 538-541: Limpiado media query `@media (max-width: 1366px)`:
+     - Eliminado por completo (duplicaba estilos ahora globales)
+   - Líneas 538-541: Actualizado media query `@media (max-width: 768px)`:
+     - Eliminado `overflow-y: auto !important` (redundante)
+
+#### Technical Implementation:
+
+**Arquitectura de Scroll Unificado:**
+- **Un solo scroll principal**: `.factura-template-content` maneja TODO el desplazamiento vertical
+- **Sin scrolls anidados**: Dropdowns y tablas se expanden libremente dentro del contenedor scrollable
+- **Mejora de rendimiento**: Elimina conflictos entre múltiples contenedores con scroll
+- **UX más intuitiva**: El usuario solo controla un scroll, más predecible y fluido
+
+**Fix de Botones de Info:**
+- **Problema original**: El `<label>` envolvía todo el contenedor, capturando clicks del botón
+- **Solución**:
+  - Agregado `htmlFor` al label para asociación semántica con el checkbox
+  - Agregado `onClick` con `e.stopPropagation()` para aislar el evento del botón
+  - Cambiado de tooltip pasivo a `alert()` activo con mensaje completo
+- **Resultado**: Botones 100% funcionales, independientes del checkbox
+
+**Scrollbar Personalizado:**
+- Width: 8px (no intrusivo)
+- Track: Gris claro (#F3F4F6)
+- Thumb: Gris medio (#D1D5DB) con hover más oscuro (#9CA3AF)
+- Border-radius: 10px (esquinas redondeadas)
+- Consistente con el diseño existente
+
+#### Result:
+✅ **Mejoras UX implementadas exitosamente:**
+- Botones de información del checklist ahora son completamente clicables
+- Modal tiene scroll Y principal unificado y suave
+- Eliminados todos los scrolls anidados de dropdowns y tabla
+- Scrollbar personalizado consistente con el diseño de la aplicación
+- UX más limpia: un solo scroll controla todo el contenido
+- Mejor visibilidad: usuario puede ver todo el contenido sin conflictos
+- Performance mejorado: menos contenedores con overflow
+
+### Session: 2025-12-05 (Parte 1) - Checklist de Revisión de Condiciones de Negociación
+
+#### Problem:
+La plantilla de facturas requería un checklist obligatorio de validación de condiciones de negociación antes de permitir guardar el formulario. Los usuarios necesitan confirmar que revisaron cada aspecto de la factura:
+- Fecha de Emisión
+- Fecha de Vencimiento
+- Cantidades
+- Precio Unitario
+- Fletes
+- Valores Totales = Valor Orden de Compra
+- Descuentos Totales
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Línea 3: Agregado import de icono `Info` desde lucide-react
+   - Líneas 50-59: Nuevo estado `checklistRevision` con objeto conteniendo 7 campos booleanos:
+     - `fechaEmision`, `fechaVencimiento`, `cantidades`, `precioUnitario`, `fletes`, `valoresTotales`, `descuentosTotales`
+   - Líneas 163-168: Nueva función `handleChecklistChange(field)`:
+     - Toggle del estado de cada checkbox del checklist
+     - Actualiza el estado inmutablemente usando spread operator
+   - Líneas 633-647: Actualizada función `validarFormulario()`:
+     - Agregada validación de checklist antes de otras validaciones
+     - Mapeo de keys a labels legibles en español
+     - Verifica que todos los checkboxes estén marcados antes de permitir guardar
+     - Genera mensajes de error específicos por cada item no marcado
+   - Líneas 803-937: Nueva sección "Checklist de Revisión" en JSX:
+     - Ubicación: Después de "Información General" y antes de "Información del Negociador"
+     - Título: "Checklist de Revisión de Condiciones de Negociación - Firma de Negociadores"
+     - Descripción explicativa para el usuario
+     - Grid responsive con 7 items del checklist
+     - Cada item incluye:
+       - Checkbox controlado vinculado a estado
+       - Label semántico con texto descriptivo
+       - Botón de información circular con icono Info
+       - Tooltip (title) con explicación detallada de cada validación
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Líneas 475-481: Estilos para `.factura-checklist-description`:
+     - Descripción explicativa en gris suave (#6B7280)
+     - Font-size: 0.875rem con line-height: 1.5
+   - Líneas 483-487: Estilos para `.factura-checklist-grid`:
+     - Grid responsive con auto-fit y minmax(300px, 1fr)
+     - Gap de 12px entre items
+   - Líneas 489-503: Estilos para `.factura-checklist-item`:
+     - Cada item con fondo blanco, borde gris claro
+     - Border-radius: 8px con padding: 12px 16px
+     - Hover effect: borde más oscuro + box-shadow sutil
+     - Layout flexbox con space-between para checkbox y botón info
+   - Líneas 505-512: Estilos para `.factura-checklist-label`:
+     - Display inline-flex con gap de 10px
+     - Cursor pointer, flex: 1 para ocupar espacio disponible
+   - Líneas 514-519: Estilos para `.factura-checklist-text`:
+     - Font-weight: 500, color gris oscuro (#374151)
+     - User-select: none para prevenir selección accidental
+   - Líneas 521-543: Estilos para `.factura-info-btn`:
+     - Botón circular (border-radius: 50%)
+     - Tamaño fijo: 28x28px con min-width/min-height
+     - Borde gris claro con background transparente
+     - Icono color gris (#6B7280)
+     - Hover: fondo gris claro (#F3F4F6) + borde más oscuro
+
+#### Technical Implementation:
+
+**Arquitectura del Checklist:**
+- **Estado centralizado**: Un objeto con 7 propiedades booleanas en lugar de 7 estados separados
+- **Validación bloqueante**: El botón "Guardar y Continuar" valida el checklist ANTES que cualquier otro campo
+- **UX moderna**: Cada item en una card individual con hover effects
+- **Tooltips informativos**: Cada botón de información muestra instrucciones detalladas al hacer hover
+
+**Flujo de Validación:**
+1. Usuario completa formulario de factura
+2. Usuario debe marcar los 7 checkboxes del checklist
+3. Al hacer clic en "Guardar y Continuar":
+   - Se ejecuta `validarFormulario()`
+   - Primero valida checklist (orden de prioridad)
+   - Si algún checkbox falta: muestra modal con errores específicos
+   - Si todos están marcados: continúa con validaciones restantes
+4. Formulario solo se guarda si TODO está validado correctamente
+
+**Información de cada Checklist Item:**
+- **Fecha de Emisión**: Verificar que la fecha de emisión de la factura es correcta
+- **Fecha de Vencimiento**: Verificar que la fecha de vencimiento es correcta
+- **Cantidades**: Verificar que las cantidades cobradas son correctas
+- **Precio Unitario**: Verificar que el precio unitario cobrado es correcto
+- **Fletes**: Verificar que los fletes cobrados son correctos
+- **Vlr Totales = Vlr Orden de Compra**: Verificar que el total de factura = total de orden de compra
+- **Descuentos Totales**: Verificar que los descuentos totales son correctos
+
+**Responsive Design:**
+- Grid adapta automáticamente el número de columnas según ancho de pantalla
+- Mínimo 300px por item, máximo lo que permita el contenedor
+- Items apilan verticalmente en pantallas pequeñas
+
+#### Result:
+✅ **Checklist de Revisión implementado exitosamente:**
+- 7 items de validación obligatorios antes de guardar
+- Cada item con tooltip informativo usando botón circular con icono Info
+- Validación bloqueante: no permite continuar sin marcar todos los items
+- UX moderna con cards individuales y hover effects
+- Grid responsive que se adapta a cualquier tamaño de pantalla
+- Mensajes de error específicos por cada item no marcado
+- Integrado perfectamente entre "Información General" y "Información del Negociador"
+- Estilos consistentes con el diseño existente del FacturaTemplate
+- Código limpio siguiendo principios DRY (función helper para toggle)
+
 ### Session: 2025-12-03 (Parte 5) - Autocompletado de Centros de Costos con Validación de Responsables
 
 #### Problem:
