@@ -827,7 +827,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
             <h2 className="factura-section-title">Checklist de Revisión de Condiciones de Negociación</h2>
 
             <div className="factura-checklist-grid">
-              <div className="factura-checklist-item">
+              <div
+                className="factura-checklist-item"
+                onClick={() => handleChecklistChange('fechaEmision')}
+              >
                 <label className="factura-checklist-label" htmlFor="checklist-fecha-emision">
                   <Checkbox
                     id="checklist-fecha-emision"
@@ -857,7 +860,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </div>
               </div>
 
-              <div className="factura-checklist-item">
+              <div
+                className="factura-checklist-item"
+                onClick={() => handleChecklistChange('fechaVencimiento')}
+              >
                 <label className="factura-checklist-label" htmlFor="checklist-fecha-vencimiento">
                   <Checkbox
                     id="checklist-fecha-vencimiento"
@@ -887,7 +893,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </div>
               </div>
 
-              <div className="factura-checklist-item">
+              <div
+                className="factura-checklist-item"
+                onClick={() => handleChecklistChange('cantidades')}
+              >
                 <label className="factura-checklist-label" htmlFor="checklist-cantidades">
                   <Checkbox
                     id="checklist-cantidades"
@@ -917,7 +926,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </div>
               </div>
 
-              <div className="factura-checklist-item">
+              <div
+                className="factura-checklist-item"
+                onClick={() => handleChecklistChange('precioUnitario')}
+              >
                 <label className="factura-checklist-label" htmlFor="checklist-precio-unitario">
                   <Checkbox
                     id="checklist-precio-unitario"
@@ -947,7 +959,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </div>
               </div>
 
-              <div className="factura-checklist-item">
+              <div
+                className="factura-checklist-item"
+                onClick={() => handleChecklistChange('fletes')}
+              >
                 <label className="factura-checklist-label" htmlFor="checklist-fletes">
                   <Checkbox
                     id="checklist-fletes"
@@ -977,7 +992,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </div>
               </div>
 
-              <div className="factura-checklist-item factura-checklist-item-wide">
+              <div
+                className="factura-checklist-item factura-checklist-item-wide"
+                onClick={() => handleChecklistChange('valoresTotales')}
+              >
                 <label className="factura-checklist-label" htmlFor="checklist-valores-totales">
                   <Checkbox
                     id="checklist-valores-totales"
@@ -1007,7 +1025,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 </div>
               </div>
 
-              <div className="factura-checklist-item">
+              <div
+                className="factura-checklist-item"
+                onClick={() => handleChecklistChange('descuentosTotales')}
+              >
                 <label className="factura-checklist-label" htmlFor="checklist-descuentos-totales">
                   <Checkbox
                     id="checklist-descuentos-totales"

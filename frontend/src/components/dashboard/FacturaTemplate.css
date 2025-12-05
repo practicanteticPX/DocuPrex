@@ -521,6 +521,7 @@
   border: 1px solid #E5E7EB;
   border-radius: 8px;
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .factura-checklist-item-wide {
