@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { X, Plus } from 'lucide-react';
 import { Input } from '../ui/input';
+import { Checkbox } from '../ui/checkbox';
+import { Modal } from '../ui/modal';
 import { useCuentasContables, useCentrosCostos, useNegociadores } from '../../hooks';
 import './FacturaTemplate.css';
 
@@ -85,6 +87,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const [inputNegociadorValue, setInputNegociadorValue] = useState('');
   const [selectedIndexNegociadores, setSelectedIndexNegociadores] = useState(-1);
   const dropdownNegociadoresRef = useRef(null);
+
+  // Estados para el modal de validación
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [mensajeError, setMensajeError] = useState('');
 
   // Bloquear scroll del body cuando el componente está montado
   useEffect(() => {
@@ -603,14 +609,56 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
     return total === 100;
   };
 
-  const handleSave = () => {
+  const validarFormulario = () => {
+    const errores = [];
+
+    if (!nombreNegociador.trim()) {
+      errores.push('El nombre del negociador es obligatorio');
+    }
+
+    if (!cargoNegociador.trim()) {
+      errores.push('El cargo del negociador es obligatorio');
+    }
+
+    for (let i = 0; i < filasControl.length; i++) {
+      const fila = filasControl[i];
+      const numeroFila = i + 1;
+
+      if (!fila.noCuentaContable.trim()) {
+        errores.push(`Fila ${numeroFila}: El campo "No. Cuenta Contable" es obligatorio`);
+      }
+
+      if (!fila.centroCostos.trim()) {
+        errores.push(`Fila ${numeroFila}: El campo "Centro de Costos" es obligatorio`);
+      }
+
+      if (!fila.porcentaje || fila.porcentaje.trim() === '') {
+        errores.push(`Fila ${numeroFila}: El campo "Porcentaje" es obligatorio`);
+      } else {
+        const porcentajeNum = parseFloat(fila.porcentaje);
+        if (isNaN(porcentajeNum) || porcentajeNum <= 0) {
+          errores.push(`Fila ${numeroFila}: El porcentaje debe ser un número mayor a 0`);
+        }
+      }
+    }
+
     const totalPorcentaje = calcularTotalPorcentaje();
     if (!esPorcentajeValido(totalPorcentaje)) {
-      alert(`El porcentaje total debe ser exactamente 100%. Actualmente es ${totalPorcentaje.toFixed(2)}%`);
+      errores.push(`El porcentaje total debe ser exactamente 100%. Actualmente es ${totalPorcentaje.toFixed(2)}%`);
+    }
+
+    return errores;
+  };
+
+  const handleSave = () => {
+    const errores = validarFormulario();
+
+    if (errores.length > 0) {
+      setMensajeError(errores.join('\n'));
+      setModalAbierto(true);
       return;
     }
 
-    // Aquí se implementará la lógica de guardado
     if (onSave) {
       onSave({
         consecutivo,
@@ -705,15 +753,14 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 />
               </div>
 
-              <div className="factura-field factura-field-checkbox">
-                <label className="factura-checkbox-label">
-                  <input
-                    type="checkbox"
+              <div className="factura-field factura-field-checkbox-simple">
+                <label className="factura-checkbox-simple-label">
+                  <Checkbox
+                    id="legaliza-anticipo"
                     checked={legalizaAnticipo}
-                    onChange={(e) => setLegalizaAnticipo(e.target.checked)}
-                    className="factura-checkbox"
+                    onCheckedChange={setLegalizaAnticipo}
                   />
-                  <span>Legaliza Anticipo</span>
+                  <span className="factura-checkbox-simple-text">Legaliza Anticipo</span>
                 </label>
               </div>
             </div>
@@ -771,7 +818,6 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   value={cargoNegociador}
                   disabled
                   className="factura-input-disabled"
-                  placeholder="Se completa automáticamente"
                   title={cargoNegociador}
                 />
               </div>
@@ -995,6 +1041,17 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
           </button>
         </div>
       </div>
+
+      {/* Modal de validación */}
+      <Modal
+        isOpen={modalAbierto}
+        onClose={() => setModalAbierto(false)}
+        title="Error de Validación"
+      >
+        <div style={{ whiteSpace: 'pre-line' }}>
+          {mensajeError}
+        </div>
+      </Modal>
     </div>
   );
 };
