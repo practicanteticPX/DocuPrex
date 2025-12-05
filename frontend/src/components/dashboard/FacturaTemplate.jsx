@@ -75,6 +75,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
   const [nombreNegociador, setNombreNegociador] = useState('');
   const [cargoNegociador, setCargoNegociador] = useState('');
 
+  // Estado para grupo de causación
+  const [grupoCausacion, setGrupoCausacion] = useState('');
+
   // Estado para las filas de la tabla de control de firmas
   const [filasControl, setFilasControl] = useState([
     {
@@ -677,6 +680,10 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       errores.push('El cargo del negociador es obligatorio');
     }
 
+    if (!grupoCausacion) {
+      errores.push('Debe seleccionar un grupo de causación');
+    }
+
     for (let i = 0; i < filasControl.length; i++) {
       const fila = filasControl[i];
       const numeroFila = i + 1;
@@ -726,6 +733,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
         legalizaAnticipo,
         nombreNegociador,
         cargoNegociador,
+        grupoCausacion,
         filasControl
       });
     }
@@ -1308,6 +1316,58 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                   </tr>
                 </tfoot>
               </table>
+            </div>
+          </div>
+
+          {/* Sección: Grupo de Causación */}
+          <div className="factura-section">
+            <h2 className="factura-section-title">Grupo de Causación</h2>
+            <p className="factura-checklist-description">
+              Seleccione el grupo que realizará el proceso de causación. Todas las personas del grupo seleccionado recibirán una notificación para firmar.
+            </p>
+
+            <div className="factura-causacion-group">
+              <div
+                className={`factura-causacion-option ${grupoCausacion === 'financiera' ? 'factura-causacion-option-selected' : ''}`}
+                onClick={() => setGrupoCausacion('financiera')}
+              >
+                <div className="factura-causacion-radio">
+                  <input
+                    type="radio"
+                    name="grupoCausacion"
+                    value="financiera"
+                    checked={grupoCausacion === 'financiera'}
+                    onChange={() => setGrupoCausacion('financiera')}
+                  />
+                </div>
+                <div className="factura-causacion-content">
+                  <div className="factura-causacion-title">Financiera</div>
+                  <div className="factura-causacion-description">
+                    Grupo de causación del área financiera
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={`factura-causacion-option ${grupoCausacion === 'logistica' ? 'factura-causacion-option-selected' : ''}`}
+                onClick={() => setGrupoCausacion('logistica')}
+              >
+                <div className="factura-causacion-radio">
+                  <input
+                    type="radio"
+                    name="grupoCausacion"
+                    value="logistica"
+                    checked={grupoCausacion === 'logistica'}
+                    onChange={() => setGrupoCausacion('logistica')}
+                  />
+                </div>
+                <div className="factura-causacion-content">
+                  <div className="factura-causacion-title">Logística</div>
+                  <div className="factura-causacion-description">
+                    Grupo de causación del área de logística
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
