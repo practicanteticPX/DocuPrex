@@ -522,6 +522,7 @@
   border-radius: 8px;
   transition: all 0.2s ease;
   cursor: pointer;
+  position: relative;
 }
 
 .factura-checklist-item-wide {
@@ -540,6 +541,7 @@
   cursor: pointer;
   flex: 1;
   font-family: 'Google Sans', sans-serif;
+  pointer-events: none;
 }
 
 .factura-checklist-text {
@@ -554,6 +556,7 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  pointer-events: auto;
 }
 
 .factura-info-btn {
@@ -594,6 +597,7 @@
   max-width: 90vw;
   font-family: 'Google Sans', sans-serif;
   animation: fadeInTooltip 0.2s ease;
+  pointer-events: auto;
 }
 
 .factura-tooltip-arrow {

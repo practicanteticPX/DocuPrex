@@ -831,14 +831,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 className="factura-checklist-item"
                 onClick={() => handleChecklistChange('fechaEmision')}
               >
-                <label className="factura-checklist-label" htmlFor="checklist-fecha-emision">
+                <div className="factura-checklist-label">
                   <Checkbox
-                    id="checklist-fecha-emision"
                     checked={checklistRevision.fechaEmision}
-                    onCheckedChange={() => handleChecklistChange('fechaEmision')}
+                    onCheckedChange={() => {}}
                   />
                   <span className="factura-checklist-text">Fecha de Emisión</span>
-                </label>
+                </div>
                 <div className="factura-info-btn-wrapper">
                   <button
                     type="button"
@@ -864,14 +863,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 className="factura-checklist-item"
                 onClick={() => handleChecklistChange('fechaVencimiento')}
               >
-                <label className="factura-checklist-label" htmlFor="checklist-fecha-vencimiento">
+                <div className="factura-checklist-label">
                   <Checkbox
-                    id="checklist-fecha-vencimiento"
                     checked={checklistRevision.fechaVencimiento}
-                    onCheckedChange={() => handleChecklistChange('fechaVencimiento')}
+                    onCheckedChange={() => {}}
                   />
                   <span className="factura-checklist-text">Fecha de Vencimiento</span>
-                </label>
+                </div>
                 <div className="factura-info-btn-wrapper">
                   <button
                     type="button"
@@ -897,14 +895,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 className="factura-checklist-item"
                 onClick={() => handleChecklistChange('cantidades')}
               >
-                <label className="factura-checklist-label" htmlFor="checklist-cantidades">
+                <div className="factura-checklist-label">
                   <Checkbox
-                    id="checklist-cantidades"
                     checked={checklistRevision.cantidades}
-                    onCheckedChange={() => handleChecklistChange('cantidades')}
+                    onCheckedChange={() => {}}
                   />
                   <span className="factura-checklist-text">Cantidades</span>
-                </label>
+                </div>
                 <div className="factura-info-btn-wrapper">
                   <button
                     type="button"
@@ -930,14 +927,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 className="factura-checklist-item"
                 onClick={() => handleChecklistChange('precioUnitario')}
               >
-                <label className="factura-checklist-label" htmlFor="checklist-precio-unitario">
+                <div className="factura-checklist-label">
                   <Checkbox
-                    id="checklist-precio-unitario"
                     checked={checklistRevision.precioUnitario}
-                    onCheckedChange={() => handleChecklistChange('precioUnitario')}
+                    onCheckedChange={() => {}}
                   />
                   <span className="factura-checklist-text">Precio Unitario</span>
-                </label>
+                </div>
                 <div className="factura-info-btn-wrapper">
                   <button
                     type="button"
@@ -963,14 +959,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 className="factura-checklist-item"
                 onClick={() => handleChecklistChange('fletes')}
               >
-                <label className="factura-checklist-label" htmlFor="checklist-fletes">
+                <div className="factura-checklist-label">
                   <Checkbox
-                    id="checklist-fletes"
                     checked={checklistRevision.fletes}
-                    onCheckedChange={() => handleChecklistChange('fletes')}
+                    onCheckedChange={() => {}}
                   />
                   <span className="factura-checklist-text">Fletes</span>
-                </label>
+                </div>
                 <div className="factura-info-btn-wrapper">
                   <button
                     type="button"
@@ -996,14 +991,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 className="factura-checklist-item factura-checklist-item-wide"
                 onClick={() => handleChecklistChange('valoresTotales')}
               >
-                <label className="factura-checklist-label" htmlFor="checklist-valores-totales">
+                <div className="factura-checklist-label">
                   <Checkbox
-                    id="checklist-valores-totales"
                     checked={checklistRevision.valoresTotales}
-                    onCheckedChange={() => handleChecklistChange('valoresTotales')}
+                    onCheckedChange={() => {}}
                   />
                   <span className="factura-checklist-text">Vlr Totales = Vlr Orden de Compra</span>
-                </label>
+                </div>
                 <div className="factura-info-btn-wrapper">
                   <button
                     type="button"
@@ -1029,14 +1023,13 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
                 className="factura-checklist-item"
                 onClick={() => handleChecklistChange('descuentosTotales')}
               >
-                <label className="factura-checklist-label" htmlFor="checklist-descuentos-totales">
+                <div className="factura-checklist-label">
                   <Checkbox
-                    id="checklist-descuentos-totales"
                     checked={checklistRevision.descuentosTotales}
-                    onCheckedChange={() => handleChecklistChange('descuentosTotales')}
+                    onCheckedChange={() => {}}
                   />
                   <span className="factura-checklist-text">Descuentos Totales</span>
-                </label>
+                </div>
                 <div className="factura-info-btn-wrapper">
                   <button
                     type="button"
