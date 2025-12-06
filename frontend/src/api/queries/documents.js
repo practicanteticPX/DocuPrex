@@ -189,7 +189,7 @@ export const GET_REJECTED_BY_OTHERS_DOCUMENTS = `
  * Obtiene un documento por ID
  */
 export const GET_DOCUMENT_BY_ID = `
-  query GetDocumentById($id: ID!) {
+  query GetDocumentById($id: Int!) {
     document(id: $id) {
       id
       title
@@ -263,7 +263,7 @@ export const GET_DOCUMENT_TYPES = `
  * Obtiene roles por tipo de documento
  */
 export const GET_DOCUMENT_TYPE_ROLES = `
-  query GetDocumentTypeRoles($documentTypeId: ID!) {
+  query GetDocumentTypeRoles($documentTypeId: Int!) {
     documentTypeRoles(documentTypeId: $documentTypeId) {
       id
       document_type_id

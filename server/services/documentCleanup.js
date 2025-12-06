@@ -42,7 +42,7 @@ async function cleanupOldDocuments() {
       // 1. Eliminar notificaciones asociadas a estos documentos
       const notificationsResult = await query(
         `DELETE FROM notifications
-         WHERE document_id = ANY($1::uuid[])
+         WHERE document_id = ANY($1::integer[])
          RETURNING id`,
         [documentIds]
       );
@@ -52,7 +52,7 @@ async function cleanupOldDocuments() {
       // 2. Eliminar firmas asociadas a estos documentos
       const signaturesResult = await query(
         `DELETE FROM signatures
-         WHERE document_id = ANY($1::uuid[])
+         WHERE document_id = ANY($1::integer[])
          RETURNING id`,
         [documentIds]
       );
@@ -62,7 +62,7 @@ async function cleanupOldDocuments() {
       // 3. Eliminar asignaciones de firmantes
       const signersResult = await query(
         `DELETE FROM document_signers
-         WHERE document_id = ANY($1::uuid[])
+         WHERE document_id = ANY($1::integer[])
          RETURNING document_id`,
         [documentIds]
       );
@@ -71,7 +71,7 @@ async function cleanupOldDocuments() {
       // 4. Eliminar los documentos
       const documentsResult = await query(
         `DELETE FROM documents
-         WHERE id = ANY($1::uuid[])
+         WHERE id = ANY($1::integer[])
          RETURNING id`,
         [documentIds]
       );

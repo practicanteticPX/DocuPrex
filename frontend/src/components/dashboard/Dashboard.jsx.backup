@@ -545,7 +545,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetDocumentForUrl($documentId: Int!) {
+            query GetDocumentForUrl($documentId: ID!) {
               document(id: $documentId) {
                 id
                 title
@@ -2024,7 +2024,7 @@ function Dashboard({ user, onLogout }) {
             API_URL,
             {
               query: `
-                mutation AssignSigners($documentId: Int!, $signerAssignments: [SignerAssignmentInput!]!) {
+                mutation AssignSigners($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
                   assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
                 }
               `,
@@ -2049,7 +2049,7 @@ function Dashboard({ user, onLogout }) {
                 API_URL,
                 {
                   query: `
-                    mutation SignDocument($documentId: Int!, $signatureData: String!) {
+                    mutation SignDocument($documentId: ID!, $signatureData: String!) {
                       signDocument(documentId: $documentId, signatureData: $signatureData) {
                         id
                         status
@@ -2168,7 +2168,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation SignDocument($documentId: Int!, $signatureData: String!, $consecutivo: String, $realSignerName: String) {
+            mutation SignDocument($documentId: ID!, $signatureData: String!, $consecutivo: String, $realSignerName: String) {
               signDocument(documentId: $documentId, signatureData: $signatureData, consecutivo: $consecutivo, realSignerName: $realSignerName) {
                 id
                 status
@@ -2274,7 +2274,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation RejectDocument($documentId: Int!, $reason: String, $realSignerName: String) {
+            mutation RejectDocument($documentId: ID!, $reason: String, $realSignerName: String) {
               rejectDocument(documentId: $documentId, reason: $reason, realSignerName: $realSignerName)
             }
           `,
@@ -2352,7 +2352,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetDocument($id: Int!) {
+            query GetDocument($id: ID!) {
               document(id: $id) {
                 id
                 title
@@ -2643,7 +2643,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation DeleteDocument($id: Int!) {
+            mutation DeleteDocument($id: ID!) {
               deleteDocument(id: $id)
             }
           `,
@@ -2698,7 +2698,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetDocumentSigners($documentId: Int!) {
+            query GetDocumentSigners($documentId: ID!) {
               documentSigners(documentId: $documentId) {
                 userId
                 orderPosition
@@ -2817,7 +2817,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation AssignSigners($documentId: Int!, $userIds: [Int!]!) {
+            mutation AssignSigners($documentId: ID!, $userIds: [ID!]!) {
               assignSigners(documentId: $documentId, userIds: $userIds)
             }
           `,
@@ -2840,7 +2840,7 @@ function Dashboard({ user, onLogout }) {
             API_URL,
             {
               query: `
-                mutation SignDocument($documentId: Int!, $signatureData: String!) {
+                mutation SignDocument($documentId: ID!, $signatureData: String!) {
                   signDocument(documentId: $documentId, signatureData: $signatureData) {
                     id
                     status
@@ -2873,7 +2873,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetSignatures($documentId: Int!) {
+            query GetSignatures($documentId: ID!) {
               signatures(documentId: $documentId) {
                 id
                 signer { id name email }
@@ -2961,7 +2961,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation RemoveSigner($documentId: Int!, $userId: Int!) {
+            mutation RemoveSigner($documentId: ID!, $userId: ID!) {
               removeSigner(documentId: $documentId, userId: $userId)
             }
           `,
@@ -2983,7 +2983,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetDocumentSigners($documentId: Int!) {
+            query GetDocumentSigners($documentId: ID!) {
               documentSigners(documentId: $documentId) {
                 userId
                 orderPosition
@@ -3151,7 +3151,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation ReorderSigners($documentId: Int!, $newOrder: [Int!]!) {
+            mutation ReorderSigners($documentId: ID!, $newOrder: [ID!]!) {
               reorderSigners(documentId: $documentId, newOrder: $newOrder)
             }
           `,
@@ -3245,7 +3245,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation AssignSigners($documentId: Int!, $signerAssignments: [SignerAssignmentInput!]!) {
+            mutation AssignSigners($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
               assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
             }
           `,
@@ -4800,7 +4800,7 @@ function Dashboard({ user, onLogout }) {
                                   API_URL,
                                   {
                                     query: `
-                                      query GetDocumentSigners($documentId: Int!) {
+                                      query GetDocumentSigners($documentId: ID!) {
                                         documentSigners(documentId: $documentId) {
                                           userId
                                           orderPosition

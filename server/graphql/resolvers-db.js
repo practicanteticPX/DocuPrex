@@ -670,7 +670,7 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.id - UUID of the document
+     * @param {number} args.id - ID of the document
      * @param {string} [args.title] - New title (optional)
      * @param {string} [args.description] - New description (optional)
      * @param {string} [args.status] - New status (optional)
@@ -720,12 +720,12 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.documentId - UUID of the document
+     * @param {number} args.documentId - ID of the document
      * @param {Array<Object>} args.signerAssignments - Array of signer assignments
-     * @param {string} args.signerAssignments[].userId - UUID of user to assign
-     * @param {Array<string>} [args.signerAssignments[].roleIds] - Array of role UUIDs (max 3)
+     * @param {number} args.signerAssignments[].userId - ID of user to assign
+     * @param {Array<number>} [args.signerAssignments[].roleIds] - Array of role IDs (max 3)
      * @param {Array<string>} [args.signerAssignments[].roleNames] - Array of role names (max 3)
-     * @param {string} [args.signerAssignments[].roleId] - Legacy: single role UUID
+     * @param {number} [args.signerAssignments[].roleId] - Legacy: single role ID
      * @param {string} [args.signerAssignments[].roleName] - Legacy: single role name
      * @param {Object} context - GraphQL context
      * @param {Object} context.user - Authenticated user
@@ -796,7 +796,7 @@ const resolvers = {
 
         await query(
           `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-           VALUES ($1, $2, 1, $3, $4, $5, $6::uuid[], $7::text[])
+           VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])
            ON CONFLICT (document_id, user_id) DO NOTHING`,
           [
             documentId,
@@ -828,7 +828,7 @@ const resolvers = {
 
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])
+             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
              ON CONFLICT (document_id, user_id) DO NOTHING`,
             [
               documentId,
@@ -858,7 +858,7 @@ const resolvers = {
 
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])
+             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
              ON CONFLICT (document_id, user_id) DO NOTHING`,
             [
               documentId,
@@ -889,7 +889,7 @@ const resolvers = {
 
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, 1, $3, $4, $5, $6::uuid[], $7::text[])`,
+             VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])`,
             [
               documentId,
               user.id,
@@ -919,7 +919,7 @@ const resolvers = {
 
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])`,
             [
               documentId,
               otherUserIds[i],
@@ -1164,8 +1164,8 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.documentId - UUID of the document
-     * @param {string} args.userId - UUID of signer to remove
+     * @param {number} args.documentId - ID of the document
+     * @param {number} args.userId - ID of signer to remove
      * @param {Object} context - GraphQL context
      * @param {Object} context.user - Authenticated user (must be owner or admin)
      * @returns {Promise<boolean>} True if removal succeeds
@@ -1432,8 +1432,8 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.documentId - UUID of the document
-     * @param {Array<string>} args.newOrder - Array of user IDs in desired order
+     * @param {number} args.documentId - ID of the document
+     * @param {Array<number>} args.newOrder - Array of user IDs in desired order
      * @param {Object} context - GraphQL context
      * @param {Object} context.user - Authenticated user (must be owner or admin)
      * @returns {Promise<boolean>} True if reordering succeeds
@@ -1697,7 +1697,7 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.id - UUID of the document to delete
+     * @param {number} args.id - ID of the document to delete
      * @param {Object} context - GraphQL context
      * @param {Object} context.user - Authenticated user
      * @returns {Promise<boolean>} True if deletion succeeds
@@ -1775,7 +1775,7 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.documentId - UUID of the document
+     * @param {number} args.documentId - ID of the document
      * @param {string} [args.reason] - Reason for rejection (optional)
      * @param {Object} context - GraphQL context
      * @param {Object} context.user - Authenticated user (must be assigned signer)
@@ -2008,7 +2008,7 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.documentId - UUID of the document
+     * @param {number} args.documentId - ID of the document
      * @param {string} args.signatureData - Base64 signature image data
      * @param {string} [args.consecutivo] - Optional consecutive/tracking number
      * @param {Object} context - GraphQL context
@@ -2344,7 +2344,7 @@ const resolvers = {
      *
      * @param {Object} _ - Parent (unused)
      * @param {Object} args - Arguments object
-     * @param {string} args.notificationId - UUID of the notification
+     * @param {number} args.notificationId - ID of the notification
      * @param {Object} context - GraphQL context
      * @param {Object} context.user - Authenticated user
      * @returns {Promise<Object>} Updated notification object

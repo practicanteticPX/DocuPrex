@@ -7,7 +7,7 @@
  * Marca una notificación como leída
  */
 export const MARK_NOTIFICATION_READ = `
-  mutation MarkNotificationRead($id: ID!) {
+  mutation MarkNotificationRead($id: Int!) {
     markNotificationRead(id: $id) {
       id
       is_read
@@ -28,7 +28,7 @@ export const MARK_ALL_NOTIFICATIONS_READ = `
  * Elimina una notificación
  */
 export const DELETE_NOTIFICATION = `
-  mutation DeleteNotification($id: ID!) {
+  mutation DeleteNotification($id: Int!) {
     deleteNotification(id: $id)
   }
 `;

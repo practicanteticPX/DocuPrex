@@ -4,7 +4,7 @@ const typeDefs = gql`
   scalar Upload
 
   type User {
-    id: ID!
+    id: Int!
     name: String!
     email: String!
     role: String!
@@ -21,7 +21,7 @@ const typeDefs = gql`
   }
 
   type Document {
-    id: ID!
+    id: Int!
     title: String!
     description: String
     fileName: String!
@@ -30,9 +30,9 @@ const typeDefs = gql`
     mimeType: String!
     status: String!
     uploadedBy: User!
-    uploadedById: ID!
+    uploadedById: Int!
     documentType: DocumentType
-    documentTypeId: ID
+    documentTypeId: Int
     createdAt: String!
     updatedAt: String!
     completedAt: String
@@ -47,11 +47,11 @@ const typeDefs = gql`
   }
 
   type Signature {
-    id: ID!
+    id: Int!
     document: Document
-    documentId: ID
+    documentId: Int
     signer: User
-    signerId: ID
+    signerId: Int
     signatureData: String
     signatureType: String
     ipAddress: String
@@ -69,20 +69,20 @@ const typeDefs = gql`
   }
 
   type DocumentSigner {
-    userId: ID!
+    userId: Int!
     orderPosition: Int!
     isRequired: Boolean!
     user: User!
     signature: Signature
-    assignedRoleId: ID
+    assignedRoleId: Int
     roleName: String
     # Nuevos campos para múltiples roles
-    assignedRoleIds: [ID!]
+    assignedRoleIds: [Int!]
     roleNames: [String!]
   }
 
   type DocumentType {
-    id: ID!
+    id: Int!
     name: String!
     code: String!
     description: String
@@ -94,8 +94,8 @@ const typeDefs = gql`
   }
 
   type DocumentTypeRole {
-    id: ID!
-    documentTypeId: ID!
+    id: Int!
+    documentTypeId: Int!
     roleName: String!
     roleCode: String!
     orderPosition: Int!
@@ -105,14 +105,14 @@ const typeDefs = gql`
   }
 
   type Notification {
-    id: ID!
+    id: Int!
     user: User!
-    userId: ID!
+    userId: Int!
     type: String!
     document: Document
-    documentId: ID!
+    documentId: Int!
     actor: User
-    actorId: ID
+    actorId: Int
     documentTitle: String!
     isRead: Boolean!
     createdAt: String!
@@ -126,17 +126,17 @@ const typeDefs = gql`
   }
 
   input SignerAssignmentInput {
-    userId: ID!
+    userId: Int!
     # Campos legacy (mantener compatibilidad)
-    roleId: ID
+    roleId: Int
     roleName: String
     # Nuevos campos para múltiples roles
-    roleIds: [ID!]
+    roleIds: [Int!]
     roleNames: [String!]
   }
 
   type NegotiationSigner {
-    id: ID!
+    id: Int!
     name: String!
     active: Boolean!
   }
@@ -150,12 +150,12 @@ const typeDefs = gql`
     # Usuarios
     me: User
     users: [User!]!
-    user(id: ID!): User
+    user(id: Int!): User
     availableSigners: [User!]!
 
     # Documentos
     documents: [Document!]!
-    document(id: ID!): Document
+    document(id: Int!): Document
     myDocuments: [Document!]!
     pendingDocuments: [Document!]!
     signedDocuments: [Document!]!
@@ -165,12 +165,12 @@ const typeDefs = gql`
 
     # Tipos de Documentos
     documentTypes: [DocumentType!]!
-    documentType(id: ID!): DocumentType
-    documentTypeRoles(documentTypeId: ID!): [DocumentTypeRole!]!
+    documentType(id: Int!): DocumentType
+    documentTypeRoles(documentTypeId: Int!): [DocumentTypeRole!]!
 
     # Firmas
-    signatures(documentId: ID!): [Signature!]!
-    documentSigners(documentId: ID!): [DocumentSigner!]!
+    signatures(documentId: Int!): [Signature!]!
+    documentSigners(documentId: Int!): [DocumentSigner!]!
     mySignatures: [Signature!]!
 
     # Notificaciones
@@ -188,24 +188,24 @@ const typeDefs = gql`
     register(name: String!, email: String!, password: String!): AuthPayload!
 
     # Usuarios
-    updateUser(id: ID!, name: String, email: String): User!
-    deleteUser(id: ID!): Boolean!
+    updateUser(id: Int!, name: String, email: String): User!
+    deleteUser(id: Int!): Boolean!
     updateEmailNotifications(enabled: Boolean!): User!
 
     # Documentos
-    uploadDocument(title: String!, description: String, documentTypeId: ID): UploadResponse!
-    updateDocument(id: ID!, title: String, description: String, status: String, documentTypeId: ID): Document!
-    deleteDocument(id: ID!): Boolean!
-    assignSigners(documentId: ID!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
-    removeSigner(documentId: ID!, userId: ID!): Boolean!
-    reorderSigners(documentId: ID!, newOrder: [ID!]!): Boolean!
+    uploadDocument(title: String!, description: String, documentTypeId: Int): UploadResponse!
+    updateDocument(id: Int!, title: String, description: String, status: String, documentTypeId: Int): Document!
+    deleteDocument(id: Int!): Boolean!
+    assignSigners(documentId: Int!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
+    removeSigner(documentId: Int!, userId: Int!): Boolean!
+    reorderSigners(documentId: Int!, newOrder: [Int!]!): Boolean!
 
     # Firmas
-    signDocument(documentId: ID!, signatureData: String!, consecutivo: String, realSignerName: String): Signature!
-    rejectDocument(documentId: ID!, reason: String, realSignerName: String): Boolean!
+    signDocument(documentId: Int!, signatureData: String!, consecutivo: String, realSignerName: String): Signature!
+    rejectDocument(documentId: Int!, reason: String, realSignerName: String): Boolean!
 
     # Notificaciones
-    markNotificationAsRead(notificationId: ID!): Notification!
+    markNotificationAsRead(notificationId: Int!): Notification!
     markAllNotificationsAsRead: Boolean!
   }
 `;

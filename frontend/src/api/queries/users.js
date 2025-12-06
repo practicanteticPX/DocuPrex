@@ -51,7 +51,7 @@ export const GET_USERS = `
  * Obtiene un usuario por ID
  */
 export const GET_USER_BY_ID = `
-  query GetUserById($id: ID!) {
+  query GetUserById($id: Int!) {
     user(id: $id) {
       id
       name

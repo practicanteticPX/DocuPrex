@@ -7,7 +7,7 @@
  * Sube un documento (Note: Esto se hace por REST API, pero incluimos por completitud)
  */
 export const UPLOAD_DOCUMENT = `
-  mutation UploadDocument($file: Upload!, $title: String!, $description: String, $documentTypeId: ID) {
+  mutation UploadDocument($file: Upload!, $title: String!, $description: String, $documentTypeId: Int) {
     uploadDocument(file: $file, title: $title, description: $description, documentTypeId: $documentTypeId) {
       id
       title
@@ -23,7 +23,7 @@ export const UPLOAD_DOCUMENT = `
  * Asigna firmantes a un documento
  */
 export const ASSIGN_SIGNERS = `
-  mutation AssignSigners($documentId: ID!, $signers: [SignerInput!]!) {
+  mutation AssignSigners($documentId: Int!, $signers: [SignerInput!]!) {
     assignSigners(documentId: $documentId, signers: $signers) {
       id
       status
@@ -43,7 +43,7 @@ export const ASSIGN_SIGNERS = `
  * Firma un documento
  */
 export const SIGN_DOCUMENT = `
-  mutation SignDocument($documentId: ID!, $consecutivo: String) {
+  mutation SignDocument($documentId: Int!, $consecutivo: String) {
     signDocument(documentId: $documentId, consecutivo: $consecutivo) {
       id
       status
@@ -61,7 +61,7 @@ export const SIGN_DOCUMENT = `
  * Rechaza un documento
  */
 export const REJECT_DOCUMENT = `
-  mutation RejectDocument($documentId: ID!, $reason: String!) {
+  mutation RejectDocument($documentId: Int!, $reason: String!) {
     rejectDocument(documentId: $documentId, reason: $reason) {
       id
       status
@@ -79,7 +79,7 @@ export const REJECT_DOCUMENT = `
  * Actualiza un documento
  */
 export const UPDATE_DOCUMENT = `
-  mutation UpdateDocument($id: ID!, $title: String, $description: String) {
+  mutation UpdateDocument($id: Int!, $title: String, $description: String) {
     updateDocument(id: $id, title: $title, description: $description) {
       id
       title
@@ -92,7 +92,7 @@ export const UPDATE_DOCUMENT = `
  * Elimina un documento
  */
 export const DELETE_DOCUMENT = `
-  mutation DeleteDocument($id: ID!) {
+  mutation DeleteDocument($id: Int!) {
     deleteDocument(id: $id)
   }
 `;
@@ -101,7 +101,7 @@ export const DELETE_DOCUMENT = `
  * Archiva un documento
  */
 export const ARCHIVE_DOCUMENT = `
-  mutation ArchiveDocument($id: ID!) {
+  mutation ArchiveDocument($id: Int!) {
     archiveDocument(id: $id) {
       id
       status
@@ -113,7 +113,7 @@ export const ARCHIVE_DOCUMENT = `
  * Actualiza el orden de los firmantes
  */
 export const UPDATE_SIGNERS_ORDER = `
-  mutation UpdateSignersOrder($documentId: ID!, $signers: [SignerOrderInput!]!) {
+  mutation UpdateSignersOrder($documentId: Int!, $signers: [SignerOrderInput!]!) {
     updateSignersOrder(documentId: $documentId, signers: $signers) {
       id
       signers {
@@ -128,7 +128,7 @@ export const UPDATE_SIGNERS_ORDER = `
  * Remueve un firmante de un documento
  */
 export const REMOVE_SIGNER = `
-  mutation RemoveSigner($documentId: ID!, $signerId: ID!) {
+  mutation RemoveSigner($documentId: Int!, $signerId: Int!) {
     removeSigner(documentId: $documentId, signerId: $signerId) {
       id
       signers {
@@ -157,7 +157,7 @@ export const CREATE_DOCUMENT_TYPE = `
  * Actualiza un tipo de documento
  */
 export const UPDATE_DOCUMENT_TYPE = `
-  mutation UpdateDocumentType($id: ID!, $name: String, $code: String, $prefix: String) {
+  mutation UpdateDocumentType($id: Int!, $name: String, $code: String, $prefix: String) {
     updateDocumentType(id: $id, name: $name, code: $code, prefix: $prefix) {
       id
       name
@@ -171,7 +171,7 @@ export const UPDATE_DOCUMENT_TYPE = `
  * Elimina un tipo de documento
  */
 export const DELETE_DOCUMENT_TYPE = `
-  mutation DeleteDocumentType($id: ID!) {
+  mutation DeleteDocumentType($id: Int!) {
     deleteDocumentType(id: $id)
   }
 `;
