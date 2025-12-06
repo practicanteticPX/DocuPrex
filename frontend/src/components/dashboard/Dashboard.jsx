@@ -6432,7 +6432,7 @@ function Dashboard({ user, onLogout }) {
                     color: '#ffffff',
                     letterSpacing: '0.5px',
                     textShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-                    fontFamily: 'system-ui, -apple-system, sans-serif'
+                    fontFamily: "'Google Sans', sans-serif"
                   }}
                 >
                   {developers[0].name}
@@ -6446,7 +6446,7 @@ function Dashboard({ user, onLogout }) {
                     color: 'rgba(255, 255, 255, 0.7)',
                     letterSpacing: '0.5px',
                     textShadow: '0 2px 10px rgba(0, 0, 0, 0.5)',
-                    fontFamily: 'system-ui, -apple-system, sans-serif'
+                    fontFamily: "'Google Sans', sans-serif"
                   }}
                 >
                   {developers[0].role}

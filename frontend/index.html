@@ -5,19 +5,29 @@
     <link rel="icon" type="image/x-icon" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="DocuPrex" />
+
+    <!-- Preconnect para optimizar carga de fuentes -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://fonts.cdnfonts.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Google Sans - Fuente principal de TODA la aplicación -->
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Aileron Black - SOLO para el logo DocuPrex -->
     <link rel="preload" as="style" href="https://fonts.cdnfonts.com/css/aileron">
     <link href="https://fonts.cdnfonts.com/css/aileron" rel="stylesheet">
+
     <script>
       // Detectar cuando las fuentes están cargadas
       if ('fonts' in document) {
         Promise.all([
-          document.fonts.load('400 1em Aileron'),
-          document.fonts.load('500 1em Aileron'),
-          document.fonts.load('600 1em Aileron'),
+          // Cargar Google Sans (fuente principal)
+          document.fonts.load('400 1em "Google Sans"'),
+          document.fonts.load('500 1em "Google Sans"'),
+          document.fonts.load('600 1em "Google Sans"'),
+          // Cargar Aileron (solo para logo)
+          document.fonts.load('900 1em Aileron'),
         ]).then(function() {
           document.documentElement.classList.add('fonts-loaded');
         }).catch(function() {

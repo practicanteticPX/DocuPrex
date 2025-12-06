@@ -1,5 +1,37 @@
+/* ========================================
+   OVERRIDE GLOBAL DE FUENTE - GOOGLE SANS
+   ======================================== */
+
+/* OVERRIDE UNIVERSAL: Aplicar Google Sans a TODO */
+* {
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent;
+}
+
+/* Override para todos los elementos comunes */
+html,
+body,
+div,
+span,
+p,
+a,
+button,
+input,
+textarea,
+select,
+label,
+h1, h2, h3, h4, h5, h6,
+ul, ol, li,
+table, th, td,
+form,
+fieldset,
+legend {
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
 :root {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
   line-height: 1.5;
   font-weight: 400;
 
@@ -24,18 +56,38 @@ html.fonts-loaded {
   visibility: visible;
 }
 
-/* Asegurar que el body use la fuente correcta desde el inicio */
+/* Asegurar que el body use Google Sans */
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
   font-weight: 400;
 }
 
-/* Scrollbar moderno y delgado para todo el navegador */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #D1D5DB transparent;
+/* Override para inputs y form elements - MUY IMPORTANTE */
+input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+textarea,
+select,
+button {
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
+/* Override para elementos de UI comunes */
+.MuiTypography-root,
+.MuiButton-root,
+.MuiInputBase-root,
+.MuiTextField-root,
+.MuiFormControl-root,
+.MuiFormLabel-root {
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* Scrollbar moderno y delgado para todo el navegador */
 *::-webkit-scrollbar {
   width: 6px;
   height: 6px;

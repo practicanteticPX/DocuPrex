@@ -13,7 +13,7 @@
   z-index: 10000;
   padding: 20px;
   animation: fadeIn 0.2s ease-out;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
 }
 
@@ -64,7 +64,7 @@
 .real-signer-modal-header h2 {
   margin: 0 0 8px 0;
   font-size: 22px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 600;
   color: #1F2937;
   letter-spacing: -0.02em;
@@ -100,7 +100,7 @@
 
 .real-signer-instruction {
   font-size: 14px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
   color: #6B7280;
   margin: 0;
@@ -193,7 +193,7 @@
 
 .real-signer-name {
   font-size: 15px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 500;
   color: #1F2937;
   letter-spacing: -0.01em;
@@ -211,7 +211,7 @@
   border-radius: 6px;
   color: #DC2626;
   font-size: 13px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
   animation: shake 0.3s ease;
 }
@@ -251,7 +251,7 @@
   border-radius: 10px;
   cursor: pointer;
   border: none;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   letter-spacing: -0.01em;
 }
 
@@ -297,7 +297,7 @@
   background-color: white;
   color: #6B7280;
   border: 2px solid #E5E7EB;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   letter-spacing: -0.01em;
   transition: all 0.15s ease;
 }
@@ -327,7 +327,7 @@
   height: 72px;
   font-size: 36px;
   font-weight: 600;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Google Sans', monospace;
   text-align: center;
   border: 3px solid #E5E7EB;
   border-radius: 12px;
@@ -351,7 +351,7 @@
   font-size: 13px;
   color: #9CA3AF;
   margin: 0;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 /* Responsive */

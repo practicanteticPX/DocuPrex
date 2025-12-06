@@ -7,7 +7,7 @@
   height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
 }
 
@@ -381,7 +381,7 @@
 }
 
 .form-group label {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-size: 14px;
   font-weight: 600;
   color: #1a1a1a;
@@ -397,7 +397,7 @@
   background: #ffffff;
   color: #1a1a1a;
   transition: all 0.3s ease;
-  font-family: inherit;
+  font-family: 'Google Sans', sans-serif;
 }
 
 #document-title {
@@ -1427,7 +1427,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   min-width: 160px;
   transform: none !important;
 }
@@ -1588,7 +1588,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
 }
 
 .modal-alert-button.success {
@@ -4808,7 +4808,7 @@
 }
 
 .form-group label {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-size: 14px;
   font-weight: 500;
   color: #374151;
@@ -4816,7 +4816,7 @@
 }
 
 .form-group label span {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   color: #9CA3AF;
   font-weight: 400;
 }
@@ -4830,7 +4830,7 @@
   color: #111827;
   background-color: transparent;
   transition: all 0.2s;
-  font-family: inherit;
+  font-family: 'Google Sans', sans-serif;
 }
 
 .form-input:focus {
@@ -5509,7 +5509,7 @@ html:has(.pdf-viewer-minimal-overlay) {
   font-size: 14px;
   font-weight: 500;
   line-height: 1.4;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   max-width: 100%;
   box-sizing: border-box;
   flex-shrink: 1;
@@ -5904,7 +5904,7 @@ html:has(.pdf-viewer-minimal-overlay) {
   border-radius: 9px;
   font-size: 14px;
   color: #111827;
-  font-family: inherit;
+  font-family: 'Google Sans', sans-serif;
   resize: vertical;
   transition: all 0.2s;
   line-height: 1.6;

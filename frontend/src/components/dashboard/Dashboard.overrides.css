@@ -1,7 +1,7 @@
 /* Pixel-perfect overrides for reference UI */
 :root {
   --ds-container-max: 768px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
 }
 
@@ -175,7 +175,7 @@ textarea.form-input:focus {
 }
 
 .form-group label {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+  font-family: 'Google Sans', sans-serif !important;
   font-size: 14px !important;
   font-weight: 500 !important;
   color: #374151 !important;
@@ -186,7 +186,7 @@ textarea.form-input:focus {
 }
 
 .form-group label span {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+  font-family: 'Google Sans', sans-serif !important;
   color: #9CA3AF !important;
   font-weight: 400 !important;
 }

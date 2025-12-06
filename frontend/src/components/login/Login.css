@@ -9,7 +9,7 @@
   justify-content: center;
   overflow: hidden;
   background: #f5f7fb;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
 }
 
@@ -135,7 +135,7 @@
 
 .form-group label {
   font-size: 13px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
   color: #374151;
   letter-spacing: 0px;
@@ -168,7 +168,7 @@
   background: #e8f0fe;
   color: #111827;
   transition: all 0.2s ease;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
   text-indent: 0px;
 }
@@ -219,7 +219,7 @@
   border-radius: 12px;
   color: #DC2626;
   font-size: 13px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
   line-height: 1.5;
   animation: slideDown 0.3s ease;
@@ -247,7 +247,7 @@
   width: 100%;
   padding: 14px 20px;
   font-size: 15px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 400;
   color: white;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
@@ -318,7 +318,7 @@
 
 .help-text {
   font-size: 13px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 600;
   background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
@@ -333,7 +333,7 @@
 
 .copyright-text {
   font-size: 12px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Google Sans', sans-serif;
   font-weight: 700;
   background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
