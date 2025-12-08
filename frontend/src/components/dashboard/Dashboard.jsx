@@ -9,6 +9,7 @@ import './WaitingTurn.css';
 import Notifications from './Notifications';
 import DocumentTypeSelector from './DocumentTypeSelector';
 import FacturaSearch from './FacturaSearch';
+import FacturaTemplate from './FacturaTemplate';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
@@ -90,6 +91,11 @@ function Dashboard({ user, onLogout }) {
   const [tempConsecutivo, setTempConsecutivo] = useState(''); // Campo temporal mientras edita
   const [showConsecutivoModal, setShowConsecutivoModal] = useState(false); // Modal para agregar consecutivo
   const [showDescription, setShowDescription] = useState(false);
+
+  // Estados para la plantilla de factura
+  const [showFacturaTemplate, setShowFacturaTemplate] = useState(false);
+  const [selectedFactura, setSelectedFactura] = useState(null);
+  const [facturaTemplateData, setFacturaTemplateData] = useState(null);
   const [showRejectSuccess, setShowRejectSuccess] = useState(false);
   const [showSignSuccess, setShowSignSuccess] = useState(false);
   const [showOrderError, setShowOrderError] = useState(false);
@@ -479,6 +485,22 @@ function Dashboard({ user, onLogout }) {
 
   const handleBack = () => {
     setError(''); // Limpiar error al retroceder
+
+    // Si estamos en paso 1 y es tipo FV con plantilla guardada, volver a mostrar la plantilla
+    if (activeStep === 1 && selectedDocumentType?.code === 'FV' && facturaTemplateData) {
+      // Reconstruir el objeto selectedFactura desde facturaTemplateData
+      setSelectedFactura({
+        numero_control: facturaTemplateData.consecutivo,
+        proveedor: facturaTemplateData.proveedor,
+        numero_factura: facturaTemplateData.numeroFactura,
+        fecha_factura: facturaTemplateData.fechaFactura,
+        fecha_entrega: facturaTemplateData.fechaRecepcion
+      });
+      setShowFacturaTemplate(true);
+      console.log('📍 Volviendo a la plantilla de factura con datos guardados...');
+      return;
+    }
+
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
@@ -1440,6 +1462,199 @@ function Dashboard({ user, onLogout }) {
    */
   const clearSelectedSigners = () => {
     setSelectedSigners([]);
+  };
+
+  /**
+   * Extraer firmantes únicos desde los datos de la plantilla de factura
+   * Retorna array de objetos con estructura: { name, cargo, roleIds, roleNames }
+   */
+  const extractUniqueSignersFromTemplate = (templateData) => {
+    if (!templateData || !availableSigners || availableSigners.length === 0) {
+      console.log('❌ No se pueden extraer firmantes: datos insuficientes');
+      return [];
+    }
+
+    const signerMap = new Map();
+    const roleMapping = {
+      negociador: { id: 8, name: 'Responsable negociaciones' },
+      responsableCuenta: { id: 7, name: 'Responsable cuenta contable' },
+      responsableCentro: { id: 6, name: 'Responsable centro de costos' },
+      causacion: { id: 10, name: 'Causación' }
+    };
+
+    // 1. Agregar negociador
+    if (templateData.nombreNegociador && templateData.cargoNegociador) {
+      const negociadorKey = `${templateData.nombreNegociador}|${templateData.cargoNegociador}`;
+      if (!signerMap.has(negociadorKey)) {
+        signerMap.set(negociadorKey, {
+          name: templateData.nombreNegociador,
+          cargo: templateData.cargoNegociador,
+          roleIds: [roleMapping.negociador.id],
+          roleNames: [roleMapping.negociador.name]
+        });
+      }
+    }
+
+    // 2. Agregar responsables de cuenta contable y centro de costos desde las filas
+    if (templateData.filasControl && Array.isArray(templateData.filasControl)) {
+      templateData.filasControl.forEach(fila => {
+        // Responsable de cuenta contable
+        if (fila.respCuentaContable && fila.cargoCuentaContable) {
+          const cuentaKey = `${fila.respCuentaContable}|${fila.cargoCuentaContable}`;
+          if (signerMap.has(cuentaKey)) {
+            const existing = signerMap.get(cuentaKey);
+            if (!existing.roleIds.includes(roleMapping.responsableCuenta.id)) {
+              existing.roleIds.push(roleMapping.responsableCuenta.id);
+              existing.roleNames.push(roleMapping.responsableCuenta.name);
+            }
+          } else {
+            signerMap.set(cuentaKey, {
+              name: fila.respCuentaContable,
+              cargo: fila.cargoCuentaContable,
+              roleIds: [roleMapping.responsableCuenta.id],
+              roleNames: [roleMapping.responsableCuenta.name]
+            });
+          }
+        }
+
+        // Responsable de centro de costos
+        if (fila.respCentroCostos && fila.cargoCentroCostos) {
+          const centroKey = `${fila.respCentroCostos}|${fila.cargoCentroCostos}`;
+          if (signerMap.has(centroKey)) {
+            const existing = signerMap.get(centroKey);
+            if (!existing.roleIds.includes(roleMapping.responsableCentro.id)) {
+              existing.roleIds.push(roleMapping.responsableCentro.id);
+              existing.roleNames.push(roleMapping.responsableCentro.name);
+            }
+          } else {
+            signerMap.set(centroKey, {
+              name: fila.respCentroCostos,
+              cargo: fila.cargoCentroCostos,
+              roleIds: [roleMapping.responsableCentro.id],
+              roleNames: [roleMapping.responsableCentro.name]
+            });
+          }
+        }
+      });
+    }
+
+    // 3. Agregar grupo de causación
+    // TODO: Implementar cuando se tenga la lista de integrantes del grupo de causación
+    // Por ahora, dejamos espacio para futuro desarrollo
+    if (templateData.grupoCausacion) {
+      console.log(`ℹ️ Grupo de causación seleccionado: ${templateData.grupoCausacion}`);
+      // Aquí se cargarían los integrantes del grupo desde la BD
+    }
+
+    return Array.from(signerMap.values());
+  };
+
+  /**
+   * Buscar usuario por coincidencia de nombre y apellido (flexible)
+   * Permite match parcial ignorando mayúsculas/minúsculas
+   */
+  const findUserByNameMatch = (fullName, usersList) => {
+    if (!fullName || !usersList || usersList.length === 0) return null;
+
+    // Normalizar el nombre completo: uppercase y separar por palabras
+    const searchWords = fullName.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+
+    if (searchWords.length === 0) return null;
+
+    // Buscar usuario que tenga coincidencia de al menos 2 palabras (nombre + apellido)
+    const matched = usersList.find(user => {
+      if (!user.name) return false;
+
+      const userWords = user.name.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+
+      if (userWords.length === 0) return false;
+
+      // Contar cuántas palabras del nombre de búsqueda están en el nombre del usuario
+      let matchCount = 0;
+      searchWords.forEach(searchWord => {
+        if (userWords.some(userWord =>
+          userWord === searchWord ||
+          userWord.startsWith(searchWord) ||
+          searchWord.startsWith(userWord)
+        )) {
+          matchCount++;
+        }
+      });
+
+      // Requerir al menos 2 coincidencias (nombre + apellido)
+      // O si el usuario tiene solo 1 palabra, que esa palabra coincida
+      return matchCount >= 2 || (userWords.length === 1 && matchCount >= 1);
+    });
+
+    if (matched) {
+      console.log(`🔍 Match encontrado: "${fullName}" → "${matched.name}"`);
+    }
+
+    return matched;
+  };
+
+  /**
+   * Manejar el guardado de la plantilla de factura
+   * Extrae firmantes y los añade automáticamente a la lista
+   */
+  const handleFacturaTemplateSave = (templateData) => {
+    console.log('📋 Datos de plantilla guardados:', templateData);
+
+    // Guardar los datos de la plantilla
+    setFacturaTemplateData(templateData);
+
+    // Extraer firmantes únicos de la plantilla
+    const uniqueSigners = extractUniqueSignersFromTemplate(templateData);
+    console.log('👥 Firmantes únicos extraídos:', uniqueSigners);
+
+    // Buscar y añadir firmantes automáticamente
+    const signersToAdd = [];
+
+    uniqueSigners.forEach(signerData => {
+      // Buscar el usuario usando matching flexible de nombre
+      const matchedUser = findUserByNameMatch(signerData.name, availableSigners);
+
+      if (matchedUser) {
+        signersToAdd.push({
+          userId: matchedUser.id,
+          roleIds: signerData.roleIds,
+          roleNames: signerData.roleNames,
+          fromTemplate: true
+        });
+        console.log(`✅ Firmante encontrado y añadido: "${signerData.name}" → "${matchedUser.name}" con roles: ${signerData.roleNames.join(', ')}`);
+      } else {
+        console.warn(`⚠️ Firmante no encontrado en availableSigners: ${signerData.name}`);
+      }
+    });
+
+    // Reemplazar firmantes de plantilla: borrar los anteriores y añadir los nuevos
+    setSelectedSigners(prev => {
+      // 1. Eliminar TODOS los firmantes que vienen de la plantilla anterior
+      const signersNotFromTemplate = prev.filter(s =>
+        !(typeof s === 'object' && s.fromTemplate === true)
+      );
+
+      console.log(`🗑️ Eliminados ${prev.length - signersNotFromTemplate.length} firmante(s) de plantilla anterior`);
+      console.log(`📋 Conservados ${signersNotFromTemplate.length} firmante(s) añadidos manualmente`);
+
+      // 2. Añadir los nuevos firmantes de la plantilla
+      const finalSigners = [...signersNotFromTemplate, ...signersToAdd];
+
+      console.log(`✅ Lista final: ${finalSigners.length} firmante(s) total (${signersNotFromTemplate.length} manuales + ${signersToAdd.length} de plantilla)`);
+
+      return finalSigners;
+    });
+
+    // Cerrar el modal de plantilla
+    setShowFacturaTemplate(false);
+    setSelectedFactura(null);
+
+    // Avanzar automáticamente al paso 1 (Añadir firmantes)
+    setActiveStep(1);
+
+    // Mensaje de confirmación
+    console.log(`✅ ${signersToAdd.length} firmante(s) añadido(s) automáticamente`);
+    console.log('📍 Navegando al paso 1 (Añadir firmantes)...');
   };
 
   /**
@@ -3953,6 +4168,8 @@ function Dashboard({ user, onLogout }) {
                         <FacturaSearch
                           onFacturaSelect={(factura) => {
                             setDocumentTitle(`${factura.proveedor} - ${factura.numero_factura}`);
+                            setSelectedFactura(factura);
+                            setShowFacturaTemplate(true);
                             console.log('Factura seleccionada:', factura);
                           }}
                         />
@@ -4139,12 +4356,13 @@ function Dashboard({ user, onLogout }) {
                             </div>
                           )}
 
-                          {/* Switch: Voy a firmar este documento */}
-                          <div
-                            onClick={() => !uploading && handleWillSignToggle(!willSignDocument)}
-                            style={{
-                              marginBottom: '1.5rem',
-                              padding: '1rem',
+                          {/* Switch: Voy a firmar este documento - Oculto para FV */}
+                          {selectedDocumentType?.code !== 'FV' && (
+                            <div
+                              onClick={() => !uploading && handleWillSignToggle(!willSignDocument)}
+                              style={{
+                                marginBottom: '1.5rem',
+                                padding: '1rem',
                               backgroundColor: '#fafafa',
                               borderRadius: '0.5rem',
                               border: '1px solid #e2e8f0',
@@ -4207,6 +4425,7 @@ function Dashboard({ user, onLogout }) {
                               </div>
                             </div>
                           </div>
+                          )}
 
                           {/* Sección de usuarios disponibles */}
                           <div className="available-signers-section">
@@ -4309,7 +4528,8 @@ function Dashboard({ user, onLogout }) {
                                   if (!signer) return null;
 
                                   const isCurrentUser = user && user.id === signerId;
-                                  const canDrag = !uploading && !isCurrentUser;
+                                  const isFromTemplate = typeof signerItem === 'object' && signerItem.fromTemplate === true;
+                                  const canDrag = !uploading && !isCurrentUser && !isFromTemplate;
 
                                   return (
                                     <div
@@ -4356,8 +4576,8 @@ function Dashboard({ user, onLogout }) {
                                         <p className="signer-email-modern">{signer.email}</p>
                                       </div>
 
-                                      {/* Selector de rol cuando hay tipo de documento - Botón dropdown */}
-                                      {selectedDocumentType && documentTypeRoles.length > 0 && (
+                                      {/* Selector de rol cuando hay tipo de documento - Botón dropdown - Oculto si viene de plantilla */}
+                                      {selectedDocumentType && documentTypeRoles.length > 0 && !isFromTemplate && (
                                         <button
                                           type="button"
                                           className="role-dropdown-btn"
@@ -4404,18 +4624,21 @@ function Dashboard({ user, onLogout }) {
                                           </button>
                                       )}
 
-                                      <button
-                                        type="button"
-                                        className="remove-btn-modern"
-                                        onClick={() => removeSignerFromSelected(signerId)}
-                                        disabled={uploading}
-                                        title="Quitar firmante"
-                                        aria-label={`Quitar a ${signer.name}`}
-                                      >
-                                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                        </svg>
-                                      </button>
+                                      {/* Botón eliminar - Oculto si viene de plantilla */}
+                                      {!isFromTemplate && (
+                                        <button
+                                          type="button"
+                                          className="remove-btn-modern"
+                                          onClick={() => removeSignerFromSelected(signerId)}
+                                          disabled={uploading}
+                                          title="Quitar firmante"
+                                          aria-label={`Quitar a ${signer.name}`}
+                                        >
+                                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                          </svg>
+                                        </button>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -7511,6 +7734,25 @@ function Dashboard({ user, onLogout }) {
         onConfirm={handleRealSignerConfirm}
         action={realSignerAction}
       />
+
+      {/* Modal de plantilla de factura */}
+      {showFacturaTemplate && selectedFactura && (
+        <FacturaTemplate
+          factura={selectedFactura}
+          savedData={facturaTemplateData}
+          onClose={() => {
+            setShowFacturaTemplate(false);
+            setSelectedFactura(null);
+          }}
+          onBack={() => {
+            setShowFacturaTemplate(false);
+            setSelectedFactura(null);
+            setActiveStep(0);
+            console.log('📍 Volviendo al paso 0 (Buscar factura)...');
+          }}
+          onSave={handleFacturaTemplateSave}
+        />
+      )}
 
     </div>
   );

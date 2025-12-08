@@ -1,9 +1,506 @@
 # Project Status - DocuPrex
 
 ## Current Objective
-Sistema de autocompletado tipo Excel completamente funcional para Cuentas Contables y Centros de Costos.
+Integración completa del flujo de Plantilla de Factura con extracción automática de firmantes.
 
 ## Recent Changes
+
+### Session: 2025-12-08 (Parte 3) - Mejora UX: Estilo Unificado para Grupo de Causación
+
+#### Problem:
+La sección de "Grupo de Causación" en la plantilla de factura usaba un diseño diferente al del checklist de revisión, creando inconsistencia visual en la interfaz.
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Líneas 1353-1379: Modificada sección de Grupo de Causación:
+     - Cambiado de diseño de radio buttons con cards grandes a checkboxes compactos
+     - Ahora usa `.factura-checklist-grid` (grid de 4 columnas responsive)
+     - Cambiado de `.factura-causacion-option` a `.factura-checklist-item`
+     - Reemplazado radio button por componente `Checkbox`
+     - Eliminada descripción ("Grupo de causación del área...")
+     - Solo muestra "Financiera" y "Logística" de forma simple
+     - Estado seleccionado con clase `.factura-checklist-item-selected`
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Líneas 638-704: Eliminados estilos obsoletos de causación:
+     - `.factura-causacion-group`
+     - `.factura-causacion-option`
+     - `.factura-causacion-option-selected`
+     - `.factura-causacion-radio`
+     - `.factura-causacion-content`
+     - `.factura-causacion-title`
+     - `.factura-causacion-description`
+
+#### Result:
+✅ **UX mejorada con diseño consistente:**
+- Grupo de Causación ahora tiene **exactamente** el mismo estilo que el Checklist de Revisión
+- Checkboxes en lugar de radio buttons (más consistente visualmente)
+- Diseño compacto: 2 items en grid de 4 columnas (ocupa solo la mitad del ancho)
+- **Sin efecto azul al seleccionar** - comportamiento idéntico a los checkbox del checklist
+- Selección visual solo mediante el checkbox marcado
+- Interfaz más limpia y profesional
+- Código CSS más simple (reutiliza estilos existentes completamente)
+
+### Session: 2025-12-08 (Parte 2) - Fix Error en Servicio de Recordatorios
+
+#### Problem:
+El servicio de recordatorios programados estaba fallando con el error:
+```
+error: column s.last_reminder_sent_at does not exist
+```
+Esto causaba que el servidor se cayera cada vez que intentaba enviar recordatorios automáticos.
+
+#### Root Cause:
+El código del servicio de recordatorios (`signatureReminders.js`) estaba usando el nombre de columna incorrecto:
+- **Código usaba:** `s.last_reminder_sent_at`
+- **Nombre real en BD:** `s.reminder_sent_at`
+
+La tabla `signatures` ya tiene la columna `reminder_sent_at` creada desde el esquema inicial, pero el servicio estaba usando un nombre diferente.
+
+#### Files Modified:
+1. **`server/services/signatureReminders.js`**
+   - Línea 20: Cambiado `s.last_reminder_sent_at` → `s.reminder_sent_at` en SELECT
+   - Línea 52: Cambiado `s.last_reminder_sent_at IS NULL` → `s.reminder_sent_at IS NULL`
+   - Línea 53: Cambiado `s.last_reminder_sent_at < NOW()` → `s.reminder_sent_at < NOW()`
+   - Línea 102: Cambiado `SET last_reminder_sent_at = NOW()` → `SET reminder_sent_at = NOW()` en UPDATE
+
+#### Result:
+✅ **Servicio de recordatorios funcionando correctamente:**
+- Servidor arranca sin errores
+- Query SQL usa el nombre correcto de columna
+- Recordatorios se pueden enviar sin fallos
+- Log: "📧 Servicio de recordatorios de firmas iniciado (cada 24h a las 9:00 AM)"
+
+### Session: 2025-12-08 (Parte 1) - Fix Navegación "Volver" desde Pantalla de Firmantes
+
+#### Problem:
+Al llenar la plantilla de factura y dar "Continuar", el sistema navegaba correctamente a la pantalla de firmantes (paso 1). Sin embargo, al dar clic en "Volver" desde la pantalla de firmantes, aunque los logs mostraban que se intentaba redirigir, el modal de plantilla no se abría y el usuario permanecía en la misma pantalla.
+
+#### Root Cause:
+El modal de `FacturaTemplate` requiere DOS condiciones para renderizarse:
+```javascript
+{showFacturaTemplate && selectedFactura && (
+  <FacturaTemplate .../>
+)}
+```
+
+Cuando se guardaba la plantilla por primera vez (línea 1655), el código hacía `setSelectedFactura(null)` para cerrar el modal. Luego, cuando el usuario intentaba volver desde el paso 1, la función `handleBack` solo establecía `setShowFacturaTemplate(true)` pero NO restauraba `selectedFactura`, causando que el modal no se renderizara porque `selectedFactura` era `null`.
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/Dashboard.jsx`**
+   - Líneas 492-498: Modificada función `handleBack`:
+     - Agregado bloque que reconstruye el objeto `selectedFactura` desde `facturaTemplateData`
+     - Campos reconstruidos:
+       - `numero_control` desde `consecutivo`
+       - `proveedor`
+       - `numero_factura` desde `numeroFactura`
+       - `fecha_factura` desde `fechaFactura`
+       - `fecha_entrega` desde `fechaRecepcion`
+     - Ahora establece AMBOS estados necesarios para renderizar el modal:
+       - `setSelectedFactura(...)` con datos reconstruidos
+       - `setShowFacturaTemplate(true)`
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Línea 756: Agregado `checklistRevision` al objeto que se pasa a `onSave`:
+     - **FIX CRÍTICO:** El checklist NO se estaba guardando, por lo que al volver los checks no estaban marcados
+     - Ahora se guardan los 7 campos del checklist de revisión:
+       - fechaEmision
+       - fechaVencimiento
+       - cantidades
+       - precioUnitario
+       - fletes
+       - valoresTotales
+       - descuentosTotales
+
+3. **`frontend/src/components/dashboard/Dashboard.jsx`**
+   - Líneas 1630-1646: Modificada función `handleFacturaTemplateSave` - Lógica de reemplazo de firmantes:
+     - **FIX CRÍTICO:** Ahora BORRA todos los firmantes anteriores de la plantilla antes de añadir los nuevos
+     - Flujo implementado:
+       1. Filtra y elimina TODOS los firmantes con `fromTemplate: true` (firmantes de plantilla anterior)
+       2. Conserva firmantes añadidos manualmente por el usuario (si los hay)
+       3. Añade los nuevos firmantes extraídos de la plantilla actual
+     - **Validación dinámica:** Cada vez que se guarda la plantilla, se validan los datos ACTUALES
+     - Logs detallados:
+       - Cantidad de firmantes eliminados de plantilla anterior
+       - Cantidad de firmantes conservados (manuales)
+       - Cantidad de firmantes nuevos añadidos
+       - Total final
+   - Líneas 7747-7752: Agregada función `onBack` al componente FacturaTemplate:
+     - Cierra el modal de plantilla
+     - Limpia estados (`showFacturaTemplate`, `selectedFactura`)
+     - Vuelve al paso 0 (buscar factura)
+     - Log de confirmación de navegación
+
+4. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Línea 56: Agregado parámetro `onBack` a las props del componente
+   - Línea 1403: Modificado botón "Cancelar" → "Atrás":
+     - Cambio de texto: "Cancelar" → "Atrás"
+     - Cambio de funcionalidad: Ejecuta `onBack` (vuelve al paso 0) en lugar de `onClose`
+     - Fallback: Si no existe `onBack`, ejecuta `onClose` (compatibilidad)
+
+#### Technical Implementation:
+
+**Flujo Completo:**
+
+**Paso 0 → Plantilla (Primera vez):**
+1. Usuario busca y selecciona factura → Se abre modal de plantilla
+2. Usuario llena plantilla y da "Guardar y Continuar"
+3. Sistema extrae firmantes desde la plantilla
+4. Sistema **BORRA** todos los firmantes anteriores con `fromTemplate: true`
+5. Sistema añade los nuevos firmantes extraídos
+6. Sistema guarda datos en `facturaTemplateData` (línea 1604)
+7. Sistema cierra modal y limpia `selectedFactura = null` (línea 1649)
+8. Sistema navega al paso 1 (pantalla de firmantes)
+9. Usuario ve firmantes añadidos automáticamente
+
+**Plantilla → Paso 1 (Navegación hacia adelante):**
+- Usuario da clic en "Volver" desde paso 1 (pantalla de firmantes)
+- `handleBack` detecta: `activeStep === 1 && tipo FV && facturaTemplateData existe`
+- **FIX:** `handleBack` reconstruye `selectedFactura` desde `facturaTemplateData`
+- `handleBack` establece `showFacturaTemplate = true`
+- **Modal se renderiza correctamente** con ambas condiciones cumplidas
+- Usuario ve la plantilla con todos los datos exactamente como los dejó
+
+**Plantilla → Paso 0 (Navegación hacia atrás):**
+- Usuario da clic en "Atrás" desde la plantilla
+- Sistema cierra modal y limpia estados
+- Sistema vuelve al paso 0 (buscar factura)
+- Usuario puede buscar y seleccionar otra factura si lo desea
+
+**Modificación de plantilla:**
+- Usuario vuelve a la plantilla, modifica datos y da "Guardar y Continuar"
+- Sistema BORRA firmantes anteriores de plantilla
+- Sistema valida y extrae nuevos firmantes según datos modificados
+- Sistema añade solo los nuevos firmantes
+- **No quedan firmantes "fantasma" de versiones anteriores**
+
+**Datos Preservados en el Ciclo:**
+- `facturaTemplateData` contiene TODOS los datos de la plantilla:
+  - Información general (consecutivo, proveedor, número factura, fechas)
+  - Checkbox "Legaliza Anticipo"
+  - **Checklist de revisión (7 campos boolean) - AHORA SÍ SE GUARDAN:**
+    - fechaEmision
+    - fechaVencimiento
+    - cantidades
+    - precioUnitario
+    - fletes
+    - valoresTotales
+    - descuentosTotales
+  - Información del negociador (nombre, cargo)
+  - Filas de control de firmas (array completo con todos los porcentajes)
+  - Grupo de causación seleccionado
+- El componente `FacturaTemplate` restaura estos datos vía prop `savedData` (useEffect líneas 160-174)
+- **No se pierde NINGÚN dato al navegar de vuelta - TODO queda exactamente como lo dejaste**
+
+#### Result:
+✅ **Navegación Completa y Validación Dinámica funcionando correctamente:**
+
+**1. Navegación Bidireccional Implementada:**
+- **Paso 0 ↔ Plantilla:**
+  - Botón "Atrás" en la plantilla vuelve al paso 0 (buscar factura)
+  - Permite cancelar y buscar otra factura si es necesario
+- **Plantilla ↔ Paso 1:**
+  - Botón "Volver" desde pantalla de firmantes reabre el modal de plantilla
+  - Modal se renderiza correctamente con ambas condiciones (`showFacturaTemplate && selectedFactura`)
+- **TODOS los datos de la plantilla se restauran EXACTAMENTE como fueron guardados:**
+  - ✅ Información general (consecutivo, proveedor, número factura, fechas)
+  - ✅ Checkbox "Legaliza Anticipo"
+  - ✅ **Checklist de revisión (los 7 checks marcados)**
+  - ✅ Nombre y cargo del negociador
+  - ✅ **Todas las filas de la tabla de control de firmas con sus porcentajes exactos**
+  - ✅ Grupo de causación seleccionado (Financiera o Logística)
+
+**2. Validación Dinámica de Firmantes:**
+- **Cada vez que guardas la plantilla, se revalida TODO:**
+  - ✅ Se BORRAN todos los firmantes anteriores de la plantilla (`fromTemplate: true`)
+  - ✅ Se CONSERVAN firmantes añadidos manualmente (si los hay)
+  - ✅ Se EXTRAEN y VALIDAN firmantes según los datos ACTUALES de la plantilla
+  - ✅ Se AÑADEN solo los nuevos firmantes validados
+- **No quedan firmantes "fantasma" de versiones anteriores**
+- **Ejemplo de flujo:**
+  - 1ra vez: Plantilla con A, B, C → Guardar → Firmantes: A, B, C
+  - Volver → Cambiar a D, E, F → Guardar → Firmantes: D, E, F (A, B, C eliminados)
+  - Volver → Cambiar a solo D → Guardar → Firmantes: D (E, F eliminados)
+
+**3. Logs Detallados:**
+- Consola muestra claramente:
+  - Navegación: "📍 Volviendo al paso 0 (Buscar factura)..." cuando se da "Atrás" en plantilla
+  - Navegación: "📍 Volviendo a la plantilla de factura con datos guardados..." cuando se da "Volver" en paso 1
+  - Cantidad de firmantes eliminados de plantilla anterior
+  - Cantidad de firmantes conservados (manuales)
+  - Cantidad de firmantes nuevos añadidos desde plantilla
+  - Total final de firmantes
+- **No se pierde NINGÚN dato de la plantilla - TODO queda tal como lo dejaste**
+
+**4. UX Mejorada:**
+- ✅ Botón "Atrás" en plantilla (antes era "Cancelar")
+- ✅ Navegación clara: Paso 0 → Plantilla → Paso 1 → Plantilla → Paso 0
+- ✅ Usuario puede volver atrás en cualquier momento sin perder datos
+- ✅ Usuario puede cambiar de factura si se equivocó al seleccionar
+
+### Session: 2025-12-07 - Integración de Plantilla de Factura con Firmantes Automáticos
+
+#### Problem:
+El flujo de legalización de facturas (FV) requería que después de llenar la plantilla de factura y dar "Guardar y Continuar", el sistema debía:
+1. Volver al paso 0 (modal de subir documento)
+2. En la pantalla de firmantes (paso 1), añadir automáticamente las personas ingresadas en la plantilla con sus roles correspondientes:
+   - Negociador
+   - Responsable de cuenta contable (múltiples, uno por cada fila)
+   - Responsable de centro de costos (múltiples, uno por cada fila)
+   - Grupo de causación (Financiera o Logística)
+
+#### Files Modified:
+1. **`frontend/src/components/dashboard/Dashboard.jsx`**
+   - Línea 12: Agregado import de `FacturaTemplate`
+   - Líneas 95-98: Nuevos estados para manejar la plantilla:
+     - `showFacturaTemplate`: Controla visibilidad del modal de plantilla
+     - `selectedFactura`: Almacena datos de la factura seleccionada
+     - `facturaTemplateData`: Guarda los datos completos de la plantilla
+   - Líneas 3961-3964: Modificado callback `onFacturaSelect` de `FacturaSearch`:
+     - Ahora abre el modal de plantilla al seleccionar una factura
+     - Guarda los datos de la factura en el estado
+   - Líneas 1455-1534: Nueva función `extractUniqueSignersFromTemplate`:
+     - Extrae firmantes únicos desde los datos de la plantilla
+     - Utiliza Map para evitar duplicados basándose en nombre+cargo
+     - Mapeo de roles:
+       - Negociador → Responsable negociaciones (ID: 8)
+       - Resp. Cuenta Contable → Responsable cuenta contable (ID: 7)
+       - Resp. Centro Costos → Responsable centro de costos (ID: 6)
+       - Causación → Causación (ID: 10)
+     - Procesa todas las filas de la tabla de control de firmas
+     - Combina roles cuando una persona aparece en múltiples filas
+   - Líneas 1540-1578: **Nueva función `findUserByNameMatch`**:
+     - Búsqueda flexible de usuarios por nombre y apellido
+     - Normaliza nombres a uppercase y separa por palabras
+     - Busca coincidencias parciales entre palabras
+     - Permite match con nombres abreviados o incompletos
+     - Requiere al menos 2 palabras coincidentes (nombre + apellido)
+     - Soporta casos donde usuario tiene solo nombre o apellido
+     - Ejemplos:
+       - "Acevedo Medina Angelly Juliet" encuentra "Angelly Acevedo"
+       - "Posada Giraldo Daniela" encuentra "Daniela Posada"
+       - "Ossa Jimenez Juan Pablo" encuentra "Juan Ossa"
+   - Líneas 1584-1653: Modificada función `handleFacturaTemplateSave`:
+     - Guarda datos de la plantilla en el estado
+     - Extrae firmantes únicos usando helper
+     - **USA `findUserByNameMatch` en lugar de comparación exacta**
+     - Añade firmantes a `selectedSigners` con sus roleIds y roleNames
+     - **Marca firmantes con flag `fromTemplate: true`** (inmutables)
+     - Combina roles si un firmante ya existía en la lista
+     - Cierra el modal de plantilla automáticamente
+     - **Avanza automáticamente al paso 1 (Añadir firmantes)**
+     - Logs detallados para debugging con match encontrado
+   - Línea 4357: **Oculto checkbox "Voy a firmar este documento"** para tipo FV
+   - Línea 4528: Agregada constante `isFromTemplate` para identificar firmantes de plantilla
+   - Línea 4529: Modificado `canDrag` para deshabilitar drag en firmantes de plantilla
+   - Línea 4577: **Oculto botón de cambiar rol** para firmantes con `fromTemplate: true`
+   - Línea 4625: **Oculto botón de eliminar** para firmantes con `fromTemplate: true`
+   - Líneas 486-497: **Modificada función `handleBack`**:
+     - Si estamos en paso 1 y es tipo FV con plantilla guardada
+     - Vuelve a abrir el modal de plantilla con datos guardados
+     - En lugar de retroceder al paso 0
+   - Líneas 7744-7754: Renderizado condicional del modal `FacturaTemplate`:
+     - Se muestra cuando `showFacturaTemplate && selectedFactura`
+     - **Pasa `savedData={facturaTemplateData}`** para edición
+     - Pasa los datos de la factura como prop
+     - Callback `onSave` conectado a `handleFacturaTemplateSave`
+     - Callback `onClose` limpia estados al cerrar
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Línea 55: Agregado parámetro `savedData` en props del componente
+   - Líneas 159-174: **Nuevo useEffect para restaurar datos guardados**:
+     - Carga `legalizaAnticipo`, `checklistRevision`, `nombreNegociador`, `cargoNegociador`
+     - Restaura `grupoCausacion` y `filasControl`
+     - Solo se ejecuta cuando `savedData` existe
+     - Logs de confirmación en consola
+
+#### Technical Implementation:
+
+**Flujo Completo del Usuario:**
+1. Usuario selecciona tipo de documento "Legalización de Facturas" (FV)
+2. Aparece el buscador de facturas (`FacturaSearch`)
+3. Usuario busca y selecciona una factura
+4. Se abre el modal de `FacturaTemplate` con datos precargados
+5. Usuario completa la plantilla:
+   - Revisa checklist de condiciones de negociación
+   - Ingresa nombre y cargo del negociador
+   - Completa tabla de control de firmas:
+     - No. Cuenta Contable (autocompletado)
+     - Resp. Cuenta Contable (autocompletado)
+     - Cargo Resp. Cuenta Contable (autocompletado)
+     - Centro de Costos (autocompletado)
+     - Resp. Centro Costos (autocompletado)
+     - Cargo Resp. Centro Costos (autocompletado)
+     - Porcentaje (manual)
+   - Selecciona grupo de causación (Financiera o Logística)
+6. Usuario hace clic en "Guardar y Continuar"
+7. Sistema ejecuta `handleFacturaTemplateSave`:
+   - Valida todos los campos obligatorios
+   - Extrae firmantes únicos (sin duplicados)
+   - Busca cada firmante en la lista de usuarios disponibles
+   - Añade firmantes con sus roles correctos a `selectedSigners`
+8. Modal de plantilla se cierra automáticamente
+9. **Sistema avanza automáticamente al paso 1 (Añadir firmantes)**
+10. Usuario ve la pantalla de firmantes con todos los firmantes ya pre-seleccionados y sus roles asignados
+11. **Firmantes de plantilla son inmutables**:
+    - No tienen botón de eliminar (X)
+    - No tienen botón de cambiar rol (dropdown)
+    - No se pueden reordenar con drag & drop
+    - Checkbox "Voy a firmar este documento" está oculto
+12. **Usuario puede volver a editar la plantilla**:
+    - Al dar clic en "Atrás" desde el paso 1
+    - Se vuelve a abrir el modal de plantilla
+    - **Todos los datos están exactamente como los dejó** (checklist, negociador, tabla, grupo causación)
+    - Al guardar nuevamente, vuelve al paso 1 con firmantes actualizados
+13. Usuario puede añadir firmantes adicionales opcionales (si es necesario)
+14. Usuario continúa al paso 2 (Enviar) cuando esté listo
+
+**Extracción Inteligente de Firmantes:**
+- **Deduplicación**: Usa Map con key `${nombre}|${cargo}` para evitar duplicados
+- **Combinación de roles**: Si una persona aparece en múltiples filas con diferentes roles, se combinan todos sus roles en un solo firmante
+- **Búsqueda flexible de nombres** (líneas 1540-1578):
+  - Matching parcial de nombre y apellido
+  - Case-insensitive (mayúsculas/minúsculas)
+  - Separa nombres en palabras y busca coincidencias
+  - Requiere al menos 2 palabras coincidentes (nombre + apellido)
+  - Soporta nombres parciales o abreviados
+  - Ejemplos de matches exitosos:
+    - "Acevedo Medina Angelly Juliet" → "Angelly Acevedo"
+    - "Posada Giraldo Daniela" → "Daniela Posada"
+    - "Ossa Jimenez Juan Pablo" → "Juan Ossa"
+- **Validación robusta**: Solo añade firmantes que existen en `availableSigners`
+- **Logs completos**: Console logs detallados para debugging y trazabilidad
+
+**Mapeo de Roles FV:**
+```javascript
+const roleMapping = {
+  negociador: { id: 8, name: 'Responsable negociaciones' },
+  responsableCuenta: { id: 7, name: 'Responsable cuenta contable' },
+  responsableCentro: { id: 6, name: 'Responsable centro de costos' },
+  causacion: { id: 10, name: 'Causación' }
+};
+```
+
+**Ejemplo de Datos Extraídos:**
+```javascript
+// Input: templateData
+{
+  nombreNegociador: "Juan Pérez",
+  cargoNegociador: "Jefe de Compras",
+  filasControl: [
+    {
+      respCuentaContable: "María García",
+      cargoCuentaContable: "Contador Senior",
+      respCentroCostos: "Carlos López",
+      cargoCentroCostos: "Gerente de Operaciones"
+    },
+    {
+      respCuentaContable: "María García", // Duplicado
+      cargoCuentaContable: "Contador Senior",
+      respCentroCostos: "Ana Martínez",
+      cargoCentroCostos: "Jefe de Logística"
+    }
+  ],
+  grupoCausacion: "financiera"
+}
+
+// Output: uniqueSigners (sin duplicados)
+[
+  {
+    name: "Juan Pérez",
+    cargo: "Jefe de Compras",
+    roleIds: [8],
+    roleNames: ["Responsable negociaciones"]
+  },
+  {
+    name: "María García", // Solo una vez, con rol combinado
+    cargo: "Contador Senior",
+    roleIds: [7],
+    roleNames: ["Responsable cuenta contable"]
+  },
+  {
+    name: "Carlos López",
+    cargo: "Gerente de Operaciones",
+    roleIds: [6],
+    roleNames: ["Responsable centro de costos"]
+  },
+  {
+    name: "Ana Martínez",
+    cargo: "Jefe de Logística",
+    roleIds: [6],
+    roleNames: ["Responsable centro de costos"]
+  }
+]
+```
+
+**Gestión de Estado:**
+- `showFacturaTemplate`: Boolean para controlar visibilidad del modal
+- `selectedFactura`: Objeto con datos de factura desde `T_Facturas`:
+  - `numero_control`, `proveedor`, `numero_factura`
+  - `fecha_factura`, `fecha_entrega`
+- `facturaTemplateData`: Objeto completo con todos los campos de la plantilla **(PERSISTENTE)**:
+  - Se guarda al hacer clic en "Guardar y Continuar"
+  - Se mantiene en memoria durante toda la sesión
+  - Se pasa al componente FacturaTemplate como prop `savedData`
+  - Permite edición sin pérdida de datos
+  - Contiene:
+    - Información general (consecutivo, proveedor, número factura, etc.)
+    - Checklist de revisión (7 campos boolean)
+    - Información del negociador (nombre, cargo)
+    - Filas de control de firmas (array de objetos)
+    - Grupo de causación seleccionado
+
+**Ventajas del Enfoque:**
+- **Automático**: No requiere que el usuario añada firmantes manualmente
+- **Inteligente**: Detecta y elimina duplicados automáticamente
+- **Flexible**: Soporta múltiples roles por firmante
+- **Robusto**: Validación completa antes de añadir firmantes
+- **Inmutable**: Firmantes de plantilla no se pueden modificar ni eliminar (flujo controlado)
+- **Editable**: Permite volver a la plantilla para corregir errores sin perder datos
+- **Persistente**: Todos los datos se guardan en estado y se restauran automáticamente
+- **Trazabilidad**: Flag `fromTemplate` permite auditoría de origen de firmantes
+- **User-friendly**: Logs claros para debugging y flujo intuitivo
+- **Extensible**: Fácil añadir nuevos roles o lógica de extracción
+
+#### Result:
+✅ **Flujo de plantilla de factura completamente integrado:**
+- Modal de plantilla se abre automáticamente al seleccionar factura
+- Datos de factura se cargan desde `T_Facturas` en SERV_QPREX
+- Validación completa de todos los campos obligatorios
+- Extracción automática de firmantes únicos sin duplicados
+- **Búsqueda flexible de firmantes** (FIX CRÍTICO):
+  - Implementado matching inteligente de nombres
+  - Soporta nombres parciales o abreviados en la BD
+  - No requiere coincidencia exacta del nombre completo
+  - Ignora mayúsculas/minúsculas
+  - Ejemplos de matches exitosos:
+    - BD: "Angelly Acevedo" ← Plantilla: "Acevedo Medina Angelly Juliet" ✅
+    - BD: "Daniela Posada" ← Plantilla: "Posada Giraldo Daniela" ✅
+    - BD: "Juan Ossa" ← Plantilla: "Ossa Jimenez Juan Pablo" ✅
+- Firmantes se añaden con roles correctos según su función en la plantilla
+- **Firmantes de plantilla son INMUTABLES**:
+  - Marcados con flag `fromTemplate: true`
+  - No se pueden eliminar
+  - No se pueden cambiar sus roles
+  - No se pueden reordenar (drag disabled)
+  - Garantiza seguimiento estricto del flujo de plantilla
+- Modal se cierra automáticamente después de guardar
+- **Sistema navega automáticamente al paso 1** (Añadir firmantes)
+- Usuario ve firmantes pre-seleccionados con sus roles sin tener que hacer nada
+- **Checkbox "Voy a firmar este documento" oculto para FV** (flujo obligatorio de plantilla)
+- **Edición de plantilla implementada**:
+  - Botón "Atrás" desde paso 1 vuelve a abrir la plantilla
+  - Todos los datos se restauran automáticamente (checklist, negociador, tabla, grupo)
+  - Permite corregir errores o actualizar información
+  - Al guardar nuevamente, actualiza firmantes y vuelve al paso 1
+- Logs detallados en consola para debugging (muestra match encontrado, navegación y restauración)
+- Código limpio siguiendo principios DRY y SOLID
+- Sin deuda técnica introducida
+
+#### Pending Items:
+- [ ] Implementar carga de integrantes del grupo de causación desde la BD
+- [ ] Añadir endpoint backend para obtener integrantes de grupos de causación
+- [ ] Integrar grupo de causación con firmantes automáticos
 
 ### Session: 2025-12-05 (Parte 4) - Ajuste de Layout del Checklist (Grid 4 Columnas)
 

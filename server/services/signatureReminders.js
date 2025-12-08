@@ -17,7 +17,7 @@ async function sendPendingSignatureReminders() {
         s.document_id,
         s.signer_id,
         s.created_at,
-        s.last_reminder_sent_at,
+        s.reminder_sent_at,
         u.name as signer_name,
         u.email as signer_email,
         u.email_notifications,
@@ -49,8 +49,8 @@ async function sendPendingSignatureReminders() {
         AND u.is_active = true
         -- Solo enviar recordatorio si no se ha enviado nunca O si el último fue hace más de 2 días
         AND (
-          s.last_reminder_sent_at IS NULL
-          OR s.last_reminder_sent_at < NOW() - INTERVAL '2 days'
+          s.reminder_sent_at IS NULL
+          OR s.reminder_sent_at < NOW() - INTERVAL '2 days'
         )
       ORDER BY s.created_at ASC`,
       []
@@ -99,7 +99,7 @@ async function sendPendingSignatureReminders() {
           // Actualizar el timestamp del último recordatorio enviado
           await query(
             `UPDATE signatures
-             SET last_reminder_sent_at = NOW()
+             SET reminder_sent_at = NOW()
              WHERE id = $1`,
             [signature.signature_id]
           );

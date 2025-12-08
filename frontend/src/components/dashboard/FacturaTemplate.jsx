@@ -46,8 +46,14 @@ const CHECKLIST_TOOLTIPS = {
  *
  * Formulario completo para diligenciar información de factura
  * con campos automáticos desde T_Facturas y campos manuales
+ *
+ * @param {Object} factura - Datos de la factura desde T_Facturas
+ * @param {Object} savedData - Datos previamente guardados de la plantilla (para edición)
+ * @param {Function} onClose - Callback al cerrar el modal
+ * @param {Function} onBack - Callback al volver al paso anterior (buscar factura)
+ * @param {Function} onSave - Callback al guardar los datos
  */
-const FacturaTemplate = ({ factura, onClose, onSave }) => {
+const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
   const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
   const { negociadores, loading: loadingNegociadores } = useNegociadores();
@@ -150,6 +156,23 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
       setFechaRecepcion(fechaRecepcionFormateada);
     }
   }, [factura]);
+
+  // Cargar datos previamente guardados si existen (para edición)
+  useEffect(() => {
+    if (savedData) {
+      console.log('🔄 Cargando datos guardados de la plantilla:', savedData);
+
+      // Restaurar campos manuales
+      if (savedData.legalizaAnticipo !== undefined) setLegalizaAnticipo(savedData.legalizaAnticipo);
+      if (savedData.checklistRevision) setChecklistRevision(savedData.checklistRevision);
+      if (savedData.nombreNegociador) setNombreNegociador(savedData.nombreNegociador);
+      if (savedData.cargoNegociador) setCargoNegociador(savedData.cargoNegociador);
+      if (savedData.grupoCausacion) setGrupoCausacion(savedData.grupoCausacion);
+      if (savedData.filasControl) setFilasControl(savedData.filasControl);
+
+      console.log('✅ Datos de plantilla restaurados correctamente');
+    }
+  }, [savedData]);
 
   const handleAddFila = () => {
     const newId = Math.max(...filasControl.map(f => f.id), 0) + 1;
@@ -731,6 +754,7 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
         fechaFactura,
         fechaRecepcion,
         legalizaAnticipo,
+        checklistRevision,
         nombreNegociador,
         cargoNegociador,
         grupoCausacion,
@@ -1326,46 +1350,30 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
               Seleccione el grupo que realizará el proceso de causación. Todas las personas del grupo seleccionado recibirán una notificación para firmar.
             </p>
 
-            <div className="factura-causacion-group">
+            <div className="factura-checklist-grid">
               <div
-                className={`factura-causacion-option ${grupoCausacion === 'financiera' ? 'factura-causacion-option-selected' : ''}`}
+                className="factura-checklist-item"
                 onClick={() => setGrupoCausacion('financiera')}
               >
-                <div className="factura-causacion-radio">
-                  <input
-                    type="radio"
-                    name="grupoCausacion"
-                    value="financiera"
+                <div className="factura-checklist-label">
+                  <Checkbox
                     checked={grupoCausacion === 'financiera'}
-                    onChange={() => setGrupoCausacion('financiera')}
+                    onCheckedChange={() => {}}
                   />
-                </div>
-                <div className="factura-causacion-content">
-                  <div className="factura-causacion-title">Financiera</div>
-                  <div className="factura-causacion-description">
-                    Grupo de causación del área financiera
-                  </div>
+                  <span className="factura-checklist-text">Financiera</span>
                 </div>
               </div>
 
               <div
-                className={`factura-causacion-option ${grupoCausacion === 'logistica' ? 'factura-causacion-option-selected' : ''}`}
+                className="factura-checklist-item"
                 onClick={() => setGrupoCausacion('logistica')}
               >
-                <div className="factura-causacion-radio">
-                  <input
-                    type="radio"
-                    name="grupoCausacion"
-                    value="logistica"
+                <div className="factura-checklist-label">
+                  <Checkbox
                     checked={grupoCausacion === 'logistica'}
-                    onChange={() => setGrupoCausacion('logistica')}
+                    onCheckedChange={() => {}}
                   />
-                </div>
-                <div className="factura-causacion-content">
-                  <div className="factura-causacion-title">Logística</div>
-                  <div className="factura-causacion-description">
-                    Grupo de causación del área de logística
-                  </div>
+                  <span className="factura-checklist-text">Logística</span>
                 </div>
               </div>
             </div>
@@ -1376,9 +1384,9 @@ const FacturaTemplate = ({ factura, onClose, onSave }) => {
         <div className="factura-template-footer">
           <button
             className="factura-btn factura-btn-secondary"
-            onClick={onClose}
+            onClick={onBack || onClose}
           >
-            Cancelar
+            Atrás
           </button>
           <button
             className="factura-btn factura-btn-primary"
