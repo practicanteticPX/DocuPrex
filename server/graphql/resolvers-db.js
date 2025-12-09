@@ -611,7 +611,7 @@ const resolvers = {
       const token = jwt.sign(
         { id: user.id, email: user.email, role: user.role },
         JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES || '24h' }
+        { expiresIn: process.env.JWT_EXPIRES || '8h' }
       );
 
       return { token, user };
@@ -1000,42 +1000,50 @@ const resolvers = {
             [documentId]
           );
 
-          // NOTIFICACIÓN INTERNA: Solo crear para el PRIMER firmante PENDIENTE (en orden de posición)
+          // NOTIFICACIÓN INTERNA Y EMAIL: Solo crear para el PRIMER firmante PENDIENTE
           if (firstSignerResult.rows.length > 0) {
             const firstSignerId = firstSignerResult.rows[0].user_id;
-            await query(
-              `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-               VALUES ($1, $2, $3, $4, $5)`,
-              [firstSignerId, 'signature_request', documentId, user.id, docTitle]
-            );
-            console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
-          }
 
-          // EMAILS: Enviar SOLO al PRIMER firmante PENDIENTE (respetar orden secuencial)
-          if (firstSignerResult.rows.length > 0) {
-            const firstSignerId = firstSignerResult.rows[0].user_id;
-            if (firstSignerId !== user.id) {
-              try {
-                const signerResult = await query('SELECT name, email, email_notifications FROM users WHERE id = $1', [firstSignerId]);
-                if (signerResult.rows.length > 0) {
-                  const signer = signerResult.rows[0];
-                  if (signer.email_notifications) {
-                    await notificarAsignacionFirmante({
-                      email: signer.email,
-                      nombreFirmante: signer.name,
-                      nombreDocumento: docTitle,
-                      documentoId: documentId,
-                      creadorDocumento: creatorName
-                    });
-                    console.log(`📧 Correo enviado al primer firmante: ${signer.email}`);
-                  } else {
-                    console.log(`⏭️ Notificaciones desactivadas para: ${signer.email}`);
+            // Verificar si ya existe la notificación para evitar duplicados
+            const existingNotif = await query(
+              `SELECT id FROM notifications WHERE user_id = $1 AND type = $2 AND document_id = $3`,
+              [firstSignerId, 'signature_request', documentId]
+            );
+
+            if (existingNotif.rows.length === 0) {
+              // No existe, crear notificación
+              await query(
+                `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [firstSignerId, 'signature_request', documentId, user.id, docTitle]
+              );
+              console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
+
+              // Solo enviar email si no existía la notificación (evita emails duplicados)
+              if (firstSignerId !== user.id) {
+                try {
+                  const signerResult = await query('SELECT name, email, email_notifications FROM users WHERE id = $1', [firstSignerId]);
+                  if (signerResult.rows.length > 0) {
+                    const signer = signerResult.rows[0];
+                    if (signer.email_notifications) {
+                      await notificarAsignacionFirmante({
+                        email: signer.email,
+                        nombreFirmante: signer.name,
+                        nombreDocumento: docTitle,
+                        documentoId: documentId,
+                        creadorDocumento: creatorName
+                      });
+                      console.log(`📧 Correo enviado al primer firmante: ${signer.email}`);
+                    } else {
+                      console.log(`⏭️ Notificaciones desactivadas para: ${signer.email}`);
+                    }
                   }
+                } catch (emailError) {
+                  console.error(`Error al enviar correo al primer firmante:`, emailError);
                 }
-              } catch (emailError) {
-                console.error(`Error al enviar correo al primer firmante:`, emailError);
-                // No lanzamos el error para que no falle la asignación
               }
+            } else {
+              console.log(`⏭️ Notificación ya existe para user_id ${firstSignerId}, saltando email`);
             }
           }
         }

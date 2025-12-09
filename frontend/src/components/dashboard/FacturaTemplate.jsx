@@ -763,23 +763,33 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
     }
   };
 
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   return (
-    <div className="factura-template-overlay">
-      <div className="factura-template-container">
-        {/* Header */}
-        <div className="factura-template-header">
-          <div>
-            <h1 className="factura-template-title">Plantilla Control Factura</h1>
-            <p className="factura-template-subtitle">Legalización de Facturas - {consecutivo}</p>
+    <>
+      <div className="factura-template-overlay">
+        <div className="factura-template-container">
+          {/* Header */}
+          <div className="factura-template-header">
+            <div>
+              <h1 className="factura-template-title">Plantilla Control Factura</h1>
+              <p className="factura-template-subtitle">Legalización de Facturas - {consecutivo}</p>
+            </div>
+            <button
+              className="factura-template-close-btn"
+              type="button"
+              onClick={onClose}
+              title="Cerrar"
+            >
+              <X size={24} />
+            </button>
           </div>
-          <button
-            className="factura-template-close-btn"
-            onClick={onClose}
-            title="Cerrar"
-          >
-            <X size={24} />
-          </button>
-        </div>
 
         {/* Content */}
         <div className="factura-template-content">
@@ -1384,6 +1394,7 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
         <div className="factura-template-footer">
           <button
             className="factura-btn factura-btn-secondary"
+            type="button"
             onClick={onBack || onClose}
           >
             Atrás
@@ -1395,19 +1406,22 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
             Guardar y Continuar
           </button>
         </div>
+        </div>
       </div>
 
-      {/* Modal de validación */}
-      <Modal
-        isOpen={modalAbierto}
-        onClose={() => setModalAbierto(false)}
-        title="Error de Validación"
-      >
-        <div style={{ whiteSpace: 'pre-line' }}>
-          {mensajeError}
-        </div>
-      </Modal>
-    </div>
+      {/* Modal de validación fuera del overlay */}
+      {modalAbierto && (
+        <Modal
+          isOpen={modalAbierto}
+          onClose={() => setModalAbierto(false)}
+          title="Error de Validación"
+        >
+          <div style={{ whiteSpace: 'pre-line' }}>
+            {mensajeError}
+          </div>
+        </Modal>
+      )}
+    </>
   );
 };
 

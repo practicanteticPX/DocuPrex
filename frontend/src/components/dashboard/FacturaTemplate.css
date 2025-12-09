@@ -10,6 +10,8 @@
   z-index: 9999;
   font-family: 'Google Sans', sans-serif;
   overflow: hidden;
+  pointer-events: none;
+  overscroll-behavior: contain;
 }
 
 .factura-template-container {
@@ -19,6 +21,8 @@
   display: flex;
   flex-direction: column;
   font-family: 'Google Sans', sans-serif;
+  pointer-events: auto;
+  overflow: hidden;
 }
 
 .factura-template-header {

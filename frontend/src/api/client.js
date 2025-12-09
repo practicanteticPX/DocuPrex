@@ -28,6 +28,21 @@ class GraphQLClient {
   }
 
   /**
+   * Verifica si es error de autenticación
+   */
+  isAuthError(error) {
+    const message = error.message?.toLowerCase() || '';
+    return (
+      message.includes('autenticado') ||
+      message.includes('authenticated') ||
+      message.includes('no autenticado') ||
+      message.includes('unauthorized') ||
+      message.includes('jwt expired') ||
+      error.extensions?.code === 'UNAUTHENTICATED'
+    );
+  }
+
+  /**
    * Realiza una query o mutation GraphQL
    */
   async request(query, variables = {}, options = {}) {
@@ -59,6 +74,11 @@ class GraphQLClient {
       // Manejar errores GraphQL
       if (result.errors && result.errors.length > 0) {
         const error = result.errors[0];
+        if (this.isAuthError(error)) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }
         throw new GraphQLError(error.message, error.extensions);
       }
 
