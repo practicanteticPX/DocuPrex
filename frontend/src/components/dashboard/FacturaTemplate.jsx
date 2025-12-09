@@ -778,8 +778,8 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
           {/* Header */}
           <div className="factura-template-header">
             <div>
-              <h1 className="factura-template-title">Plantilla Control Factura</h1>
-              <p className="factura-template-subtitle">Legalización de Facturas - {consecutivo}</p>
+              <h1 className="factura-template-title">Planilla Control Factura</h1>
+              <p className="factura-template-subtitle">Factura - {consecutivo}</p>
             </div>
             <button
               className="factura-template-close-btn"

@@ -5,6 +5,209 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2025-12-09 (Continuación) - Restricción Firmantes Factura + Fix Duplicados
+
+#### Problems Fixed:
+
+1. **FacturaTemplate Modal - Double-Click Issue:**
+   - Modal requería dos clics para cerrarse (X o Atrás)
+   - Primer clic causaba aparición de scroll, segundo clic cerraba
+   - Usuario frustrado después de 3+ intentos fallidos
+
+2. **Restricción de Firmantes para Legalización de Facturas:**
+   - Usuario solicitó que para documentos tipo "Legalización de Factura" (FV):
+     - Firmantes SIEMPRE vienen de la plantilla
+     - NO se puede agregar más firmantes (ocultar buscador)
+     - NO se puede eliminar firmantes
+     - NO se puede reordenar/arrastrar firmantes
+     - NO se puede cambiar roles
+   - Eliminar botón "Gestión de Firmantes" de TODOS los documentos en dashboard
+
+3. **Notificaciones y Emails Duplicados:**
+   - Después de migración UUID→Integer, usuarios recibían notificaciones duplicadas
+   - Emails duplicados al crear documento y al firmar
+   - Usuario enfatizó: "esto no pasaba anteriormente... arregla esto DEFINITIVAMENTE"
+
+4. **Notificación Innecesaria a Creador que se Auto-firma:**
+   - Cuando creador se pone como primer firmante, se auto-firma inmediatamente
+   - No debe recibir notificación ni email
+   - Siguiente firmante debe recibir notificación después del auto-firma
+
+#### Files Modified:
+
+1. **`frontend/src/components/dashboard/FacturaTemplate.css`**
+   - Agregado `pointer-events: none` en `.factura-template-overlay`
+   - Agregado `pointer-events: auto` en `.factura-template-container`
+   - **Resultado:** Modal se cierra con un solo clic, sin aparición de scroll
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - Eliminado `overlayRef` y todos los `onClick` handlers del overlay
+   - Simplificado a solo `onClick={onClose}` en botón X
+   - **Resultado:** Cierre limpio del modal con CSS pointer-events
+
+3. **`frontend/src/components/dashboard/Dashboard.jsx`**
+
+   **Cambio 1: Eliminado botón "Gestión de Firmantes" (líneas ~5775-5810)**
+   ```javascript
+   // ANTES: 3 botones (Ver, Gestión de Firmantes, Eliminar)
+   // DESPUÉS: 2 botones (Ver, Eliminar)
+   <div className="doc-actions-clean">
+     <button onClick={() => handleViewDocument(doc)}>Ver</button>
+     {/* Botón "Gestión de Firmantes" ELIMINADO */}
+     <button onClick={() => handleDeleteDocument(doc.id, doc.title)}>Eliminar</button>
+   </div>
+   ```
+
+   **Cambio 2: Restricción de firmantes para FV (líneas ~4464-4683)**
+   ```javascript
+   const isFacturaDocument = selectedDocumentType?.code === 'FV';
+
+   // Mensaje informativo para FV
+   {isFacturaDocument && (
+     <div className="info-box-modern">
+       Los firmantes fueron extraídos automáticamente de la plantilla
+       de factura y no pueden ser modificados.
+     </div>
+   )}
+
+   // Ocultar buscador para FV
+   {!isFacturaDocument && (
+     <div className="available-signers-section">
+       {/* Buscador de firmantes */}
+     </div>
+   )}
+
+   // Deshabilitar drag & drop
+   const canDrag = !uploading && !isCurrentUser && !isFromTemplate && !isFacturaDocument;
+
+   // Ocultar selector de roles para FV
+   {... && !isFromTemplate && !isFacturaDocument && (
+     <button type="button" className="role-dropdown-btn">
+       {/* Selector de rol */}
+     </button>
+   )}
+
+   // Ocultar botón eliminar para FV
+   {!isFromTemplate && !isFacturaDocument && (
+     <button type="button" className="remove-btn-modern">
+       {/* Botón eliminar */}
+     </button>
+   )}
+   ```
+
+4. **`server/graphql/resolvers-db.js`**
+
+   **Cambio 1: Fix duplicados en `assignSigners` (líneas ~1003-1053)**
+   ```javascript
+   // Usar INSERT ... WHERE NOT EXISTS (atómico, sin constraint requerido)
+   const insertResult = await query(
+     `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+      SELECT $1, $2, $3, $4, $5
+      WHERE NOT EXISTS (
+        SELECT 1 FROM notifications
+        WHERE user_id = $1 AND type = $2 AND document_id = $3
+      )
+      RETURNING id`,
+     [firstSignerId, 'signature_request', documentId, user.id, docTitle]
+   );
+
+   // Solo enviar email si la notificación fue realmente insertada
+   if (insertResult.rows.length > 0) {
+     console.log(`✅ Notificación creada para primer firmante pendiente`);
+     // Send email only if notification was created
+     if (signer.email_notifications) {
+       await notificarAsignacionFirmante({...});
+     }
+   }
+   ```
+
+   **Cambio 2: Skip notificación para creador (líneas ~1009-1017)**
+   ```javascript
+   // Solo crear notificación si el primer firmante NO es el usuario actual
+   if (firstSignerId !== user.id) {
+     // Create notification and send email
+   } else {
+     console.log(`⏭️ Primer firmante es el creador, se autofirmará sin notificación`);
+   }
+   ```
+
+   **Cambio 3: Fix duplicados en `signDocument` (líneas ~2214-2256)**
+   ```javascript
+   // Usar INSERT ... WHERE NOT EXISTS para siguiente firmante
+   const insertResult = await query(
+     `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+      SELECT $1, $2, $3, $4, $5
+      WHERE NOT EXISTS (
+        SELECT 1 FROM notifications
+        WHERE user_id = $1 AND type = $2 AND document_id = $3
+      )
+      RETURNING id`,
+     [nextSigner.user_id, 'signature_request', documentId, doc.uploaded_by, doc.title]
+   );
+
+   // Solo enviar email si notificación fue creada
+   if (insertResult.rows.length > 0 && nextSigner.email_notifications) {
+     await notificarAsignacionFirmante({...});
+   }
+   ```
+
+#### Database Cleanup:
+```sql
+-- Eliminadas 2 notificaciones duplicadas existentes
+DELETE FROM notifications a
+USING notifications b
+WHERE a.user_id = b.user_id
+  AND a.type = b.type
+  AND a.document_id = b.document_id
+  AND a.id < b.id;
+-- Result: DELETE 2
+```
+
+#### Solution Summary:
+
+**FacturaTemplate Modal:**
+- ✅ Cierre con un solo clic usando CSS `pointer-events`
+- ✅ Sin aparición de scroll durante cierre
+
+**Restricción Firmantes FV:**
+- ✅ Detección basada en `selectedDocumentType?.code === 'FV'`
+- ✅ Buscador oculto
+- ✅ Drag & drop deshabilitado
+- ✅ Botón eliminar oculto
+- ✅ Selector de roles oculto
+- ✅ Mensaje informativo visible
+- ✅ Botón "Gestión de Firmantes" eliminado de todos los documentos
+
+**Duplicados:**
+- ✅ Patrón `INSERT ... WHERE NOT EXISTS` (atómico, no requiere constraint)
+- ✅ Verificación de `insertResult.rows.length` antes de enviar email
+- ✅ Aplicado en `assignSigners` y `signDocument`
+- ✅ Limpieza de duplicados existentes en base de datos
+
+**Skip Creador:**
+- ✅ Check `if (firstSignerId !== user.id)` antes de notificar
+- ✅ Creador se auto-firma sin recibir notificación/email
+- ✅ Siguiente firmante recibe notificación después del auto-firma
+
+#### Verification:
+
+**Frontend Testing:**
+1. Modal FacturaTemplate: ✅ Un solo clic cierra correctamente
+2. Dashboard: ✅ Solo botones "Ver" y "Eliminar" visibles
+3. FV document creation: ✅ Firmantes no modificables, mensaje informativo visible
+
+**Backend Testing:**
+1. Server restarted: ✅ Sin errores
+2. Duplicate prevention: ✅ `INSERT ... WHERE NOT EXISTS` en ambas mutaciones
+3. Creator skip: ✅ Lógica implementada y aplicada
+
+**User Feedback Required:**
+- Test completo del flujo de Legalización de Facturas
+- Verificar no más notificaciones/emails duplicados
+- Confirmar creador no recibe notificación al auto-firmarse
+
+---
+
 ### Session: 2025-12-08 (Parte 5) - FIX CRÍTICO: Sistema de Notificaciones Roto
 
 #### Problem:

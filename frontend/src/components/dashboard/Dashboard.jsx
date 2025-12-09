@@ -4461,8 +4461,24 @@ function Dashboard({ user, onLogout }) {
                           </div>
                           )}
 
-                          {/* Sección de usuarios disponibles */}
-                          <div className="available-signers-section">
+                          {/* Para Legalización de Facturas, los firmantes SIEMPRE vienen de plantilla */}
+                          {(() => {
+                            const isFacturaDocument = selectedDocumentType?.code === 'FV';
+
+                            return (
+                              <>
+                                {isFacturaDocument && (
+                                  <div className="info-box-modern" style={{ marginBottom: '1.5rem' }}>
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                    <p>Los firmantes fueron extraídos automáticamente de la plantilla de factura y no pueden ser modificados.</p>
+                                  </div>
+                                )}
+
+                                {/* Sección de usuarios disponibles - oculta para Legalización de Facturas */}
+                                {!isFacturaDocument && (
+                                  <div className="available-signers-section">
                             <h3 className="section-label">Usuarios disponibles</h3>
 
                             {/* Buscador con autocomplete */}
@@ -4543,7 +4559,11 @@ function Dashboard({ user, onLogout }) {
                                 </div>
                               )}
                             </div>
-                          </div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
 
                           {/* Sección de firmantes seleccionados */}
                           {selectedSigners.length > 0 && (
@@ -4563,7 +4583,8 @@ function Dashboard({ user, onLogout }) {
 
                                   const isCurrentUser = user && user.id === signerId;
                                   const isFromTemplate = typeof signerItem === 'object' && signerItem.fromTemplate === true;
-                                  const canDrag = !uploading && !isCurrentUser && !isFromTemplate;
+                                  const isFacturaDocument = selectedDocumentType?.code === 'FV';
+                                  const canDrag = !uploading && !isCurrentUser && !isFromTemplate && !isFacturaDocument;
 
                                   return (
                                     <div
@@ -4610,8 +4631,8 @@ function Dashboard({ user, onLogout }) {
                                         <p className="signer-email-modern">{signer.email}</p>
                                       </div>
 
-                                      {/* Selector de rol cuando hay tipo de documento - Botón dropdown - Oculto si viene de plantilla */}
-                                      {selectedDocumentType && documentTypeRoles.length > 0 && !isFromTemplate && (
+                                      {/* Selector de rol cuando hay tipo de documento - Oculto si viene de plantilla o es Factura */}
+                                      {selectedDocumentType && documentTypeRoles.length > 0 && !isFromTemplate && !isFacturaDocument && (
                                         <button
                                           type="button"
                                           className="role-dropdown-btn"
@@ -4658,8 +4679,8 @@ function Dashboard({ user, onLogout }) {
                                           </button>
                                       )}
 
-                                      {/* Botón eliminar - Oculto si viene de plantilla */}
-                                      {!isFromTemplate && (
+                                      {/* Botón eliminar - Oculto si viene de plantilla o es Factura */}
+                                      {!isFromTemplate && !isFacturaDocument && (
                                         <button
                                           type="button"
                                           className="remove-btn-modern"
@@ -5770,28 +5791,6 @@ function Dashboard({ user, onLogout }) {
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                 <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </button>
-                            <button
-                              className={`btn-action-clean ${(doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 'disabled' : ''}`}
-                              onClick={() => !(doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') && handleManageSigners(doc)}
-                              title={
-                                doc.status === 'completed'
-                                  ? 'El documento está completado, no se pueden agregar firmantes'
-                                  : doc.status === 'rejected'
-                                    ? 'El documento está rechazado, no se pueden modificar los firmantes'
-                                    : doc.documentType?.code === 'SA'
-                                      ? 'No se pueden modificar los firmantes de Solicitudes de Anticipo'
-                                      : 'Gestionar firmantes'
-                              }
-                              style={{
-                                marginTop: '-1.5vw',
-                                opacity: (doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 0.5 : 1,
-                                cursor: (doc.status === 'completed' || doc.status === 'rejected' || doc.documentType?.code === 'SA') ? 'not-allowed' : 'pointer'
-                              }}
-                            >
-                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89317 18.7122 8.75608 18.1676 9.45768C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                             </button>
                             <button

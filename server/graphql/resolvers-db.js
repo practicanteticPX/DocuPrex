@@ -1001,26 +1001,29 @@ const resolvers = {
           );
 
           // NOTIFICACIÓN INTERNA Y EMAIL: Solo crear para el PRIMER firmante PENDIENTE
+          // IMPORTANTE: NO notificar si el primer firmante es quien está creando el documento (se autofirmará)
           if (firstSignerResult.rows.length > 0) {
             const firstSignerId = firstSignerResult.rows[0].user_id;
 
-            // Verificar si ya existe la notificación para evitar duplicados
-            const existingNotif = await query(
-              `SELECT id FROM notifications WHERE user_id = $1 AND type = $2 AND document_id = $3`,
-              [firstSignerId, 'signature_request', documentId]
-            );
-
-            if (existingNotif.rows.length === 0) {
-              // No existe, crear notificación
-              await query(
+            // Solo crear notificación si el primer firmante NO es el usuario actual (quien crea el documento)
+            // Si es el mismo usuario, se autofirmará y el siguiente recibirá la notificación
+            if (firstSignerId !== user.id) {
+              // Usar INSERT ... WHERE NOT EXISTS para evitar duplicados (no requiere constraint)
+              const insertResult = await query(
                 `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-                 VALUES ($1, $2, $3, $4, $5)`,
+                 SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM notifications
+                   WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+                 )
+                 RETURNING id`,
                 [firstSignerId, 'signature_request', documentId, user.id, docTitle]
               );
-              console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
 
-              // Solo enviar email si no existía la notificación (evita emails duplicados)
-              if (firstSignerId !== user.id) {
+              // Solo enviar email si la notificación fue realmente insertada (no existía antes)
+              if (insertResult.rows.length > 0) {
+                console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
+
                 try {
                   const signerResult = await query('SELECT name, email, email_notifications FROM users WHERE id = $1', [firstSignerId]);
                   if (signerResult.rows.length > 0) {
@@ -1041,9 +1044,11 @@ const resolvers = {
                 } catch (emailError) {
                   console.error(`Error al enviar correo al primer firmante:`, emailError);
                 }
+              } else if (insertResult.rows.length === 0) {
+                console.log(`⏭️ Notificación ya existía para user_id ${firstSignerId}, no se envía email duplicado`);
               }
             } else {
-              console.log(`⏭️ Notificación ya existe para user_id ${firstSignerId}, saltando email`);
+              console.log(`⏭️ Primer firmante es el creador del documento (user_id: ${firstSignerId}), se autofirmará sin notificación`);
             }
           }
         }
@@ -2216,13 +2221,27 @@ const resolvers = {
             if (nextSignerResult.rows.length > 0) {
               const nextSigner = nextSignerResult.rows[0];
 
-              await query(
+              // Usar INSERT ... WHERE NOT EXISTS para evitar duplicados (no requiere constraint)
+              const insertResult = await query(
                 `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-                 VALUES ($1, $2, $3, $4, $5)`,
+                 SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM notifications
+                   WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+                 )
+                 RETURNING id`,
                 [nextSigner.user_id, 'signature_request', documentId, doc.uploaded_by, doc.title]
               );
 
-              if (nextSigner.email_notifications) {
+              // Solo enviar email si la notificación fue realmente insertada (no existía antes)
+              if (insertResult.rows.length > 0) {
+                console.log(`✅ Notificación creada para siguiente firmante (user_id: ${nextSigner.user_id})`);
+              } else {
+                console.log(`⏭️ Notificación ya existía para user_id ${nextSigner.user_id}, no se envía email duplicado`);
+              }
+
+              // Solo enviar email si no existía la notificación (evita emails duplicados)
+              if (insertResult.rows.length > 0 && nextSigner.email_notifications) {
                 try {
                   const creatorResult = await query('SELECT name FROM users WHERE id = $1', [doc.uploaded_by]);
                   const creatorName = creatorResult.rows.length > 0 ? creatorResult.rows[0].name : 'Administrador';
@@ -2239,7 +2258,7 @@ const resolvers = {
                   console.error(`Error al enviar correo al siguiente firmante:`, emailError);
                 }
               } else {
-                console.log(`⏭️ Notificaciones desactivadas para: ${nextSigner.email}`);
+                console.log(`⏭️ Email no enviado porque notificaciones están desactivadas para: ${nextSigner.email}`);
               }
             }
           }

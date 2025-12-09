@@ -37,7 +37,8 @@
       "Bash(node:*)",
       "Bash(npx eslint:*)",
       "Bash(find:*)",
-      "Bash(del \"d:\\docuprex_docker\\temp_status_update.md\")"
+      "Bash(del \"d:\\docuprex_docker\\temp_status_update.md\")",
+      "Bash(del \"d:\\docuprex_docker\\server\\scripts\\add_unique_notification_constraint.sql\")"
     ],
     "deny": [],
     "ask": []
