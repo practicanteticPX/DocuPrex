@@ -33,6 +33,7 @@ const typeDefs = gql`
     uploadedById: Int!
     documentType: DocumentType
     documentTypeId: Int
+    consecutivo: String
     createdAt: String!
     updatedAt: String!
     completedAt: String

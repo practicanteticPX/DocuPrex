@@ -953,6 +953,7 @@ function Dashboard({ user, onLogout }) {
                 title
                 description
                 filePath
+                consecutivo
                 uploadedBy {
                   name
                   email
@@ -1023,6 +1024,7 @@ function Dashboard({ user, onLogout }) {
                 filePath
                 fileName
                 fileSize
+                consecutivo
                 documentType {
                   id
                   code
@@ -1096,6 +1098,7 @@ function Dashboard({ user, onLogout }) {
                 filePath
                 fileSize
                 status
+                consecutivo
                 createdAt
                 totalSigners
                 signedCount
@@ -1296,6 +1299,7 @@ function Dashboard({ user, onLogout }) {
                 filePath
                 fileSize
                 status
+                consecutivo
                 createdAt
                 documentType {
                   id
@@ -1330,6 +1334,7 @@ function Dashboard({ user, onLogout }) {
                 filePath
                 fileSize
                 status
+                consecutivo
                 createdAt
                 documentType {
                   id
@@ -2182,6 +2187,10 @@ function Dashboard({ user, onLogout }) {
       if (selectedDocumentType) {
         formData.append('documentTypeId', selectedDocumentType.id);
       }
+      // Si es un documento FV, enviar el consecutivo
+      if (selectedDocumentType && selectedDocumentType.code === 'FV' && facturaTemplateData && facturaTemplateData.consecutivo) {
+        formData.append('consecutivo', facturaTemplateData.consecutivo);
+      }
 
       // Determinar endpoint según número de archivos y opción de unificar
       let endpoint;
@@ -2283,6 +2292,27 @@ function Dashboard({ user, onLogout }) {
           }
         }
 
+        // Si es un documento FV y tenemos datos de la plantilla, marcar la factura como en proceso
+        if (selectedDocumentType && selectedDocumentType.code === 'FV' && facturaTemplateData && facturaTemplateData.consecutivo) {
+          try {
+            const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
+            const marcarResponse = await axios.post(
+              `${backendHost}/api/facturas/marcar-en-proceso/${facturaTemplateData.consecutivo}`,
+              {},
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (marcarResponse.data.success) {
+              console.log(`✅ Factura ${facturaTemplateData.consecutivo} marcada como en_proceso`);
+            } else {
+              console.warn('⚠️ No se pudo marcar la factura como en_proceso:', marcarResponse.data.message);
+            }
+          } catch (marcarError) {
+            console.error('❌ Error al marcar factura como en_proceso:', marcarError);
+            // No lanzamos el error para no interrumpir el flujo
+          }
+        }
+
         // Mostrar animación de carga
         setShowCreationLoader(true);
 
@@ -2297,6 +2327,12 @@ function Dashboard({ user, onLogout }) {
           setSelectedSigners([]);
           setActiveStep(0); // Volver al primer paso del stepper
           setActiveTab('upload'); // Volver al tab de subir documento
+
+          // Limpiar datos de plantilla de factura
+          if (selectedDocumentType && selectedDocumentType.code === 'FV') {
+            setFacturaTemplateData(null);
+            setTemplateCompleted(false);
+          }
 
           // Limpiar el input file
           const fileInput = document.getElementById('file-input');
@@ -2402,6 +2438,60 @@ function Dashboard({ user, onLogout }) {
         throw new Error(response.data.errors[0].message);
       }
 
+      // Si el documento tiene consecutivo y es tipo FV, gestionar estados de factura
+      const documentToSign = pendingDocuments.find(doc => doc.id === docId) || viewingDocument;
+      if (documentToSign && documentToSign.consecutivo && documentToSign.documentType && documentToSign.documentType.code === 'FV') {
+        const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
+        const token = localStorage.getItem('token');
+
+        // Verificar si el firmante que acaba de firmar es del grupo de causación
+        const signerSignature = documentToSign.signatures.find(sig => sig.signer.id === user.id);
+        const isCausacion = signerSignature && signerSignature.roleName && (
+          signerSignature.roleName.toLowerCase().includes('causación') ||
+          signerSignature.roleName.toLowerCase().includes('causacion')
+        );
+
+        if (isCausacion) {
+          try {
+            const causadoResponse = await axios.post(
+              `${backendHost}/api/facturas/marcar-causado/${documentToSign.consecutivo}`,
+              {},
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (causadoResponse.data.success) {
+              console.log(`✅ Factura ${documentToSign.consecutivo} marcada como causada`);
+            } else {
+              console.warn('⚠️ No se pudo marcar la factura como causada:', causadoResponse.data.message);
+            }
+          } catch (causadoError) {
+            console.error('❌ Error al marcar factura como causada:', causadoError);
+            // No lanzamos el error para no interrumpir el flujo
+          }
+        }
+
+        // Verificar si todos los firmantes han firmado
+        const allSigned = documentToSign.signatures.every(sig => sig.status === 'signed');
+        if (allSigned) {
+          try {
+            const finalizadoResponse = await axios.post(
+              `${backendHost}/api/facturas/marcar-finalizado/${documentToSign.consecutivo}`,
+              {},
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (finalizadoResponse.data.success) {
+              console.log(`✅ Factura ${documentToSign.consecutivo} marcada como finalizada`);
+            } else {
+              console.warn('⚠️ No se pudo marcar la factura como finalizada:', finalizadoResponse.data.message);
+            }
+          } catch (finalizadoError) {
+            console.error('❌ Error al marcar factura como finalizada:', finalizadoError);
+            // No lanzamos el error para no interrumpir el flujo
+          }
+        }
+      }
+
       // Mostrar popup de éxito
       setShowSignSuccess(true);
 
@@ -2499,6 +2589,28 @@ function Dashboard({ user, onLogout }) {
 
       if (response.data.errors) {
         throw new Error(response.data.errors[0].message);
+      }
+
+      // Si el documento tiene consecutivo, desmarcar en_proceso en T_Facturas
+      const documentToReject = pendingDocuments.find(doc => doc.id === docId) || viewingDocument;
+      if (documentToReject && documentToReject.consecutivo) {
+        try {
+          const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
+          const desmarcarResponse = await axios.post(
+            `${backendHost}/api/facturas/desmarcar-en-proceso/${documentToReject.consecutivo}`,
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (desmarcarResponse.data.success) {
+            console.log(`✅ Factura ${documentToReject.consecutivo} desmarcada de en_proceso (rechazo)`);
+          } else {
+            console.warn('⚠️ No se pudo desmarcar la factura de en_proceso:', desmarcarResponse.data.message);
+          }
+        } catch (desmarcarError) {
+          console.error('❌ Error al desmarcar factura de en_proceso:', desmarcarError);
+          // No lanzamos el error para no interrumpir el flujo
+        }
       }
 
       // Mostrar popup de éxito
@@ -2858,6 +2970,11 @@ function Dashboard({ user, onLogout }) {
     setDeleting(true);
     try {
       const token = localStorage.getItem('token');
+
+      // Obtener el documento antes de eliminarlo para extraer el consecutivo
+      const documentToDelete = myDocuments.find(doc => doc.id === deleteDocId);
+      const hasConsecutivo = documentToDelete && documentToDelete.consecutivo;
+
       const response = await axios.post(
         API_URL,
         {
@@ -2873,6 +2990,28 @@ function Dashboard({ user, onLogout }) {
       if (response.data.errors) {
         throw new Error(response.data.errors[0].message);
       }
+
+      // Si el documento tiene consecutivo, desmarcar en_proceso en T_Facturas
+      if (hasConsecutivo) {
+        try {
+          const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
+          const desmarcarResponse = await axios.post(
+            `${backendHost}/api/facturas/desmarcar-en-proceso/${documentToDelete.consecutivo}`,
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (desmarcarResponse.data.success) {
+            console.log(`✅ Factura ${documentToDelete.consecutivo} desmarcada de en_proceso (eliminación)`);
+          } else {
+            console.warn('⚠️ No se pudo desmarcar la factura de en_proceso:', desmarcarResponse.data.message);
+          }
+        } catch (desmarcarError) {
+          console.error('❌ Error al desmarcar factura de en_proceso:', desmarcarError);
+          // No lanzamos el error para no interrumpir el flujo
+        }
+      }
+
       setConfirmDeleteOpen(false);
       // Si el visor muestra este doc, cerrarlo
       if (viewingDocument && viewingDocument.id === deleteDocId) {

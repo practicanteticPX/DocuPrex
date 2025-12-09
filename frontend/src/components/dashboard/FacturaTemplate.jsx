@@ -129,9 +129,39 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
   // Bloquear scroll del body cuando el componente está montado
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    const html = document.documentElement;
+    const body = document.body;
+
+    const scrollY = window.scrollY;
+
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.style.position = 'fixed';
+    body.style.position = 'fixed';
+    html.style.top = `-${scrollY}px`;
+    body.style.top = `-${scrollY}px`;
+    html.style.width = '100%';
+    body.style.width = '100%';
+    html.style.left = '0';
+    body.style.left = '0';
+    html.style.right = '0';
+    body.style.right = '0';
+
     return () => {
-      document.body.style.overflow = 'unset';
+      html.style.overflow = '';
+      body.style.overflow = '';
+      html.style.position = '';
+      body.style.position = '';
+      html.style.top = '';
+      body.style.top = '';
+      html.style.width = '';
+      body.style.width = '';
+      html.style.left = '';
+      body.style.left = '';
+      html.style.right = '';
+      body.style.right = '';
+
+      window.scrollTo(0, scrollY);
     };
   }, []);
 
@@ -737,7 +767,7 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
     return errores;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const errores = validarFormulario();
 
     if (errores.length > 0) {
@@ -746,20 +776,80 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
       return;
     }
 
-    if (onSave) {
-      onSave({
-        consecutivo,
-        proveedor,
-        numeroFactura,
-        fechaFactura,
-        fechaRecepcion,
-        legalizaAnticipo,
-        checklistRevision,
-        nombreNegociador,
-        cargoNegociador,
-        grupoCausacion,
-        filasControl
+    try {
+      const firmantes = [];
+      const firmantesUnicos = new Set();
+
+      const agregarFirmante = (nombre, rol, cargo, email) => {
+        const key = `${nombre}-${rol}`;
+        if (!firmantesUnicos.has(key) && nombre && nombre.trim()) {
+          firmantesUnicos.add(key);
+          firmantes.push({
+            name: nombre.trim(),
+            role: rol,
+            cargo: cargo || '',
+            email: email || null
+          });
+        }
+      };
+
+      agregarFirmante(nombreNegociador, 'Negociador', cargoNegociador);
+
+      filasControl.forEach((fila) => {
+        agregarFirmante(fila.respCuentaContable, 'Resp Cta Cont', fila.cargoCuentaContable);
+        agregarFirmante(fila.respCentroCostos, 'Resp Ctro Cost', fila.cargoCentroCostos);
       });
+
+      const negociacionesResponse = await fetch(`${process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000'}/api/facturas/usuario-negociaciones`);
+      if (negociacionesResponse.ok) {
+        const negociacionesData = await negociacionesResponse.json();
+        if (negociacionesData.success && negociacionesData.data) {
+          agregarFirmante(
+            negociacionesData.data.nombre,
+            'Negociaciones',
+            negociacionesData.data.cargo,
+            negociacionesData.data.email
+          );
+        }
+      }
+
+      const causacionResponse = await fetch(`${process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000'}/api/facturas/grupos-causacion/${grupoCausacion}`);
+      if (causacionResponse.ok) {
+        const causacionData = await causacionResponse.json();
+        if (causacionData.success && causacionData.data && causacionData.data.length > 0) {
+          const nombreGrupo = grupoCausacion === 'financiera' ? 'Causación Financiera' : 'Causación Logística';
+
+          causacionData.data.forEach((miembro) => {
+            agregarFirmante(
+              miembro.nombre,
+              nombreGrupo,
+              miembro.cargo,
+              miembro.email
+            );
+          });
+        }
+      }
+
+      if (onSave) {
+        onSave({
+          consecutivo,
+          proveedor,
+          numeroFactura,
+          fechaFactura,
+          fechaRecepcion,
+          legalizaAnticipo,
+          checklistRevision,
+          nombreNegociador,
+          cargoNegociador,
+          grupoCausacion,
+          filasControl,
+          firmantes
+        });
+      }
+    } catch (error) {
+      console.error('Error generando firmantes:', error);
+      setMensajeError('Error al generar la lista de firmantes. Por favor intente nuevamente.');
+      setModalAbierto(true);
     }
   };
 
@@ -771,9 +861,18 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      e.stopPropagation();
+    }
+  };
+
   return (
     <>
-      <div className="factura-template-overlay">
+      <div
+        className="factura-template-overlay"
+        onClick={handleOverlayClick}
+      >
         <div className="factura-template-container">
           {/* Header */}
           <div className="factura-template-header">
@@ -784,7 +883,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
             <button
               className="factura-template-close-btn"
               type="button"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
               title="Cerrar"
             >
               <X size={24} />
@@ -1395,13 +1497,24 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
           <button
             className="factura-btn factura-btn-secondary"
             type="button"
-            onClick={onBack || onClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onBack) {
+                onBack();
+              } else {
+                onClose();
+              }
+            }}
           >
             Atrás
           </button>
           <button
             className="factura-btn factura-btn-primary"
-            onClick={handleSave}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSave();
+            }}
           >
             Guardar y Continuar
           </button>

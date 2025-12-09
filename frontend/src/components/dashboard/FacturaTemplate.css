@@ -7,11 +7,12 @@
   right: 0;
   bottom: 0;
   background: white;
-  z-index: 9999;
+  z-index: 999999999999;
   font-family: 'Google Sans', sans-serif;
   overflow: hidden;
-  pointer-events: none;
+  pointer-events: auto;
   overscroll-behavior: contain;
+  isolation: isolate;
 }
 
 .factura-template-container {

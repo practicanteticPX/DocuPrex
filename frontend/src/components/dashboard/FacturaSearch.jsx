@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Edit } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Item, ItemContent, ItemTitle, ItemActions } from '../ui/item';
@@ -86,12 +87,13 @@ const FacturaSearch = ({ onFacturaSelect }) => {
 
   return (
     <>
-      {showTemplate && factura && (
+      {showTemplate && factura && createPortal(
         <FacturaTemplate
           factura={factura}
           onClose={handleCloseTemplate}
           onSave={handleSaveTemplate}
-        />
+        />,
+        document.body
       )}
     <div className="factura-search-container">
       <div className="factura-search-header">

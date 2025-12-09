@@ -56,7 +56,7 @@ router.post('/upload', authenticate, (req, res) => {
       });
     }
 
-    const { title, description, documentTypeId } = req.body;
+    const { title, description, documentTypeId, consecutivo } = req.body;
 
     try {
       // Construir ruta: usuario/archivo.pdf
@@ -77,8 +77,9 @@ router.post('/upload', authenticate, (req, res) => {
           mime_type,
           status,
           uploaded_by,
-          document_type_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          document_type_id,
+          consecutivo
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *`,
         [
           docTitle,
@@ -89,7 +90,8 @@ router.post('/upload', authenticate, (req, res) => {
           req.file.mimetype,
           'pending',
           req.user.id,
-          documentTypeId || null
+          documentTypeId || null,
+          consecutivo?.trim() || null
         ]
       );
 
@@ -153,7 +155,7 @@ router.post('/upload-multiple', authenticate, (req, res) => {
       });
     }
 
-    const { title, description, documentTypeId } = req.body;
+    const { title, description, documentTypeId, consecutivo } = req.body;
 
     const created = [];
     try {
@@ -173,8 +175,9 @@ router.post('/upload-multiple', authenticate, (req, res) => {
             mime_type,
             status,
             uploaded_by,
-            document_type_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            document_type_id,
+            consecutivo
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *`,
           [
             docTitle,
@@ -185,7 +188,8 @@ router.post('/upload-multiple', authenticate, (req, res) => {
             f.mimetype,
             'pending',
             req.user.id,
-            documentTypeId || null
+            documentTypeId || null,
+            consecutivo?.trim() || null
           ]
         );
         const document = result.rows[0];
@@ -242,7 +246,7 @@ router.post('/upload-unified', authenticate, (req, res) => {
       });
     }
 
-    const { title, description, documentTypeId } = req.body;
+    const { title, description, documentTypeId, consecutivo } = req.body;
 
     // Validar que hay más de un archivo para unificar
     if (req.files.length === 1) {
@@ -304,8 +308,9 @@ router.post('/upload-unified', authenticate, (req, res) => {
           mime_type,
           status,
           uploaded_by,
-          document_type_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          document_type_id,
+          consecutivo
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *`,
         [
           docTitle,
@@ -316,7 +321,8 @@ router.post('/upload-unified', authenticate, (req, res) => {
           'application/pdf',
           'pending',
           req.user.id,
-          documentTypeId || null
+          documentTypeId || null,
+          consecutivo?.trim() || null
         ]
       );
 
