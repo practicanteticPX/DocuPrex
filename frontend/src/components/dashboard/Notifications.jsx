@@ -317,6 +317,8 @@ const Notifications = ({ onNotificationClick }) => {
                   key={notification.id}
                   className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
                   onClick={() => {
+                    console.log('🔔 Notification clicked:', notification);
+                    console.log('🔔 Document ID type:', typeof notification.documentId, notification.documentId);
                     if (!notification.isRead) {
                       markAsRead(notification.id);
                     }
@@ -324,7 +326,10 @@ const Notifications = ({ onNotificationClick }) => {
                     setIsOpen(false);
                     // Navegar al documento
                     if (onNotificationClick) {
+                      console.log('🔔 Calling onNotificationClick with:', notification);
                       onNotificationClick(notification);
+                    } else {
+                      console.error('❌ onNotificationClick callback is not defined');
                     }
                   }}
                 >

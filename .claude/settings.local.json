@@ -36,7 +36,8 @@
       "Bash(node scripts/check_duplicates.js:*)",
       "Bash(node:*)",
       "Bash(npx eslint:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(del \"d:\\docuprex_docker\\temp_status_update.md\")"
     ],
     "deny": [],
     "ask": []

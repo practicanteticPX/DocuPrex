@@ -96,6 +96,7 @@ function Dashboard({ user, onLogout }) {
   const [showFacturaTemplate, setShowFacturaTemplate] = useState(false);
   const [selectedFactura, setSelectedFactura] = useState(null);
   const [facturaTemplateData, setFacturaTemplateData] = useState(null);
+  const [templateCompleted, setTemplateCompleted] = useState(false); // Flag para mostrar form de metadatos después de plantilla
   const [showRejectSuccess, setShowRejectSuccess] = useState(false);
   const [showSignSuccess, setShowSignSuccess] = useState(false);
   const [showOrderError, setShowOrderError] = useState(false);
@@ -486,21 +487,8 @@ function Dashboard({ user, onLogout }) {
   const handleBack = () => {
     setError(''); // Limpiar error al retroceder
 
-    // Si estamos en paso 1 y es tipo FV con plantilla guardada, volver a mostrar la plantilla
-    if (activeStep === 1 && selectedDocumentType?.code === 'FV' && facturaTemplateData) {
-      // Reconstruir el objeto selectedFactura desde facturaTemplateData
-      setSelectedFactura({
-        numero_control: facturaTemplateData.consecutivo,
-        proveedor: facturaTemplateData.proveedor,
-        numero_factura: facturaTemplateData.numeroFactura,
-        fecha_factura: facturaTemplateData.fechaFactura,
-        fecha_entrega: facturaTemplateData.fechaRecepcion
-      });
-      setShowFacturaTemplate(true);
-      console.log('📍 Volviendo a la plantilla de factura con datos guardados...');
-      return;
-    }
-
+    // Si estamos en paso 1, simplemente volver al paso anterior
+    // (Ya NO abrimos automáticamente la plantilla)
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
@@ -531,6 +519,9 @@ function Dashboard({ user, onLogout }) {
     setDocumentDescription('');
     setUploadSuccess(false);
     setError('');
+    setTemplateCompleted(false);
+    setFacturaTemplateData(null);
+    setSelectedFactura(null);
   };
 
   // Validar si el paso actual está completo para poder avanzar
@@ -1649,12 +1640,12 @@ function Dashboard({ user, onLogout }) {
     setShowFacturaTemplate(false);
     setSelectedFactura(null);
 
-    // Avanzar automáticamente al paso 1 (Añadir firmantes)
-    setActiveStep(1);
+    // Activar flag para mostrar formulario de metadatos (título, descripción, archivos)
+    setTemplateCompleted(true);
 
     // Mensaje de confirmación
     console.log(`✅ ${signersToAdd.length} firmante(s) añadido(s) automáticamente`);
-    console.log('📍 Navegando al paso 1 (Añadir firmantes)...');
+    console.log('📍 Mostrando formulario de metadatos (título, descripción, archivos)...');
   };
 
   /**
@@ -2553,6 +2544,9 @@ function Dashboard({ user, onLogout }) {
    * - May reload pending documents if navigating to pending tab
    */
   const handleNotificationClick = async (notification) => {
+    console.log('📍 handleNotificationClick called with:', notification);
+    console.log('📍 Document ID:', notification.documentId, '(type:', typeof notification.documentId, ')');
+
     try {
       // Si la notificación es de documento eliminado, mostrar mensaje informativo
       if (notification.type === 'document_deleted') {
@@ -2561,6 +2555,8 @@ function Dashboard({ user, onLogout }) {
       }
 
       const token = localStorage.getItem('token');
+
+      console.log('📍 Querying document with ID:', notification.documentId);
 
       // Query the document directly by ID
       const response = await axios.post(
@@ -2629,16 +2625,21 @@ function Dashboard({ user, onLogout }) {
         }
       );
 
+      console.log('📍 GraphQL Response:', response.data);
+
       if (response.data.errors) {
-        console.error('GraphQL errors:', response.data.errors);
+        console.error('❌ GraphQL errors:', response.data.errors);
         throw new Error(response.data.errors[0].message);
       }
 
       const doc = response.data.data.document;
       const signers = response.data.data.documentSigners || [];
 
+      console.log('📍 Document fetched:', doc);
+      console.log('📍 Signers:', signers);
+
       if (!doc) {
-        console.error('Documento no encontrado');
+        console.error('❌ Documento no encontrado');
         showNotif('Documento no disponible', `El documento "${notification.documentTitle}" ya no está disponible. Es posible que haya sido eliminado.`, 'error');
         return;
       }
@@ -2729,11 +2730,14 @@ function Dashboard({ user, onLogout }) {
       }
 
     } catch (error) {
-      console.error('Error al abrir documento desde notificación:', error);
+      console.error('❌ Error al abrir documento desde notificación:', error);
+      console.error('❌ Error stack:', error.stack);
       if (error.response) {
-        console.error('Error response data:', error.response.data);
-        console.error('Error response status:', error.response.status);
+        console.error('❌ Error response data:', error.response.data);
+        console.error('❌ Error response status:', error.response.status);
       }
+      // Mostrar mensaje al usuario
+      showNotif('Error', `No se pudo abrir el documento: ${error.message}`, 'error');
     }
   };
 
@@ -4158,16 +4162,46 @@ function Dashboard({ user, onLogout }) {
                             setSelectedDocumentType(type);
                             setDocumentTypeRoles(type?.roles || []);
                             setSelectedSigners([]);
+                            setTemplateCompleted(false);
+                            setFacturaTemplateData(null);
+                            setSelectedFactura(null);
                           }}
                           disabled={uploading || loadingDocumentTypes}
                         />
                       </div>
 
-                      {/* Cuando es Legalización de Facturas, mostrar solo el buscador */}
-                      {selectedDocumentType?.code === 'FV' ? (
+                      {/* Botón para volver a editar la planilla (solo cuando ya fue completada) */}
+                      {selectedDocumentType?.code === 'FV' && templateCompleted && facturaTemplateData && (
+                        <div className="add-more-files-container">
+                          <button
+                            type="button"
+                            className="add-more-files-btn"
+                            onClick={() => {
+                              setSelectedFactura({
+                                numero_control: facturaTemplateData.consecutivo,
+                                proveedor: facturaTemplateData.proveedor,
+                                numero_factura: facturaTemplateData.numeroFactura,
+                                fecha_factura: facturaTemplateData.fechaFactura,
+                                fecha_entrega: facturaTemplateData.fechaRecepcion
+                              });
+                              setShowFacturaTemplate(true);
+                              console.log('📍 Reabriendo planilla para edición...');
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            Editar planilla de factura
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Cuando es Legalización de Facturas, mostrar el buscador O el formulario de metadatos */}
+                      {selectedDocumentType?.code === 'FV' && !templateCompleted ? (
                         <FacturaSearch
                           onFacturaSelect={(factura) => {
-                            setDocumentTitle(`${factura.proveedor} - ${factura.numero_factura}`);
+                            setDocumentTitle('');
                             setSelectedFactura(factura);
                             setShowFacturaTemplate(true);
                             console.log('Factura seleccionada:', factura);

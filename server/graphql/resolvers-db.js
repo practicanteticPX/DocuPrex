@@ -989,19 +989,31 @@ const resolvers = {
           const docTitle = docResult.rows[0].title;
           const creatorName = docResult.rows[0].creator_name;
 
-          // NOTIFICACIÓN INTERNA: Solo crear para el PRIMER firmante
-          if (userIds.length > 0) {
-            const firstSignerId = userIds[0];
+          // Determinar el PRIMER firmante en ORDEN de firma (no en array de IDs)
+          const firstSignerResult = await query(
+            `SELECT ds.user_id
+             FROM document_signers ds
+             LEFT JOIN signatures s ON ds.document_id = s.document_id AND ds.user_id = s.signer_id
+             WHERE ds.document_id = $1 AND COALESCE(s.status, 'pending') = 'pending'
+             ORDER BY ds.order_position ASC
+             LIMIT 1`,
+            [documentId]
+          );
+
+          // NOTIFICACIÓN INTERNA: Solo crear para el PRIMER firmante PENDIENTE (en orden de posición)
+          if (firstSignerResult.rows.length > 0) {
+            const firstSignerId = firstSignerResult.rows[0].user_id;
             await query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
                VALUES ($1, $2, $3, $4, $5)`,
               [firstSignerId, 'signature_request', documentId, user.id, docTitle]
             );
+            console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
           }
 
-          // EMAILS: Enviar SOLO al PRIMER firmante (respetar orden secuencial)
-          if (userIds.length > 0) {
-            const firstSignerId = userIds[0];
+          // EMAILS: Enviar SOLO al PRIMER firmante PENDIENTE (respetar orden secuencial)
+          if (firstSignerResult.rows.length > 0) {
+            const firstSignerId = firstSignerResult.rows[0].user_id;
             if (firstSignerId !== user.id) {
               try {
                 const signerResult = await query('SELECT name, email, email_notifications FROM users WHERE id = $1', [firstSignerId]);
