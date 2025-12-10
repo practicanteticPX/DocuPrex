@@ -871,9 +871,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       // Agregar UN SOLO firmante genérico para el grupo (sin nombre específico)
       // La lista de miembros permitidos se guarda en metadata del documento
+      const roleCausacion = grupoCausacion === 'financiera' ? 'Causación Financiera' : 'Causación Logística';
       firmantes.push({
         name: `[${grupoData.nombre}]`,  // Nombre genérico del grupo
-        role: grupoData.nombre,
+        role: roleCausacion,
         cargo: 'Grupo de Causación',
         email: null,
         grupoMiembros: miembrosFormateados  // Lista de miembros permitidos para firmar

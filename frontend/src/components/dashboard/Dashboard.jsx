@@ -4728,9 +4728,6 @@ function Dashboard({ user, onLogout }) {
                                   // Si es un grupo de Causación, manejar igual que firmante normal
                                   if (typeof signerItem === 'object' && signerItem.esGrupoCausacion) {
                                     const groupName = signerItem.nombreGrupo.replace(/[\[\]]/g, '');
-                                    const groupEmail = signerItem.grupoMiembros && signerItem.grupoMiembros.length > 0
-                                      ? signerItem.grupoMiembros[0].email
-                                      : 'grupo@prexxa.com.co';
 
                                     return (
                                       <div
@@ -4742,7 +4739,7 @@ function Dashboard({ user, onLogout }) {
                                         </div>
 
                                         <div className="signer-avatar-circle">
-                                          {getInitials(groupName, groupEmail)}
+                                          {getInitials(groupName, null)}
                                         </div>
 
                                         <div className="signer-info-modern flex-grow">
@@ -4752,7 +4749,6 @@ function Dashboard({ user, onLogout }) {
                                               <span style={{ fontWeight: '400', color: '#374151' }}> - {signerItem.roleNames.join(' / ')}</span>
                                             )}
                                           </p>
-                                          <p className="signer-email-modern">{groupEmail}</p>
                                         </div>
                                       </div>
                                     );
