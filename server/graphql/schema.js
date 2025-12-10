@@ -134,6 +134,9 @@ const typeDefs = gql`
     # Nuevos campos para múltiples roles
     roleIds: [Int!]
     roleNames: [String!]
+    # Campos para grupos de causación
+    isCausacionGroup: Boolean
+    grupoCodigo: String
   }
 
   type NegotiationSigner {

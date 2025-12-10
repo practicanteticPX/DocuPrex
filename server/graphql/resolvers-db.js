@@ -766,9 +766,10 @@ const resolvers = {
      * @throws {Error} When unauthorized, document not found, completed, or role limit exceeded
      */
     assignSigners: async (_, { documentId, signerAssignments }, { user }) => {
-      // Filtrar assignments con userId válido (excluir grupos con userId null)
-      const validAssignments = signerAssignments.filter(sa => sa.userId !== null && sa.userId !== undefined);
-      const userIds = validAssignments.map(sa => sa.userId);
+      // Separar assignments en usuarios normales y grupos de causación
+      const userAssignments = signerAssignments.filter(sa => !sa.isCausacionGroup && sa.userId !== null && sa.userId !== undefined);
+      const grupoCausacionAssignments = signerAssignments.filter(sa => sa.isCausacionGroup && sa.grupoCodigo);
+      const userIds = userAssignments.map(sa => sa.userId);
 
       if (!user) throw new Error('No autenticado');
 
@@ -805,7 +806,7 @@ const resolvers = {
         return { roleIds, roleNames };
       };
 
-      for (const assignment of validAssignments) {
+      for (const assignment of userAssignments) {
         const { roleIds, roleNames } = normalizeRoles(assignment);
 
         if (roleIds.length > 3 || roleNames.length > 3) {
@@ -827,7 +828,7 @@ const resolvers = {
           [documentId]
         );
 
-        const ownerAssignment = validAssignments.find(sa => sa.userId === user.id);
+        const ownerAssignment = userAssignments.find(sa => sa.userId === user.id);
         const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
 
         await query(
@@ -859,7 +860,7 @@ const resolvers = {
         const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
 
         for (let i = 0; i < otherUserIds.length; i++) {
-          const assignment = validAssignments.find(sa => sa.userId === otherUserIds[i]);
+          const assignment = userAssignments.find(sa => sa.userId === otherUserIds[i]);
           const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -889,7 +890,7 @@ const resolvers = {
         const maxPosition = Math.max(...existingSignersResult.rows.map(r => r.order_position));
 
         for (let i = 0; i < userIds.length; i++) {
-          const assignment = validAssignments.find(sa => sa.userId === userIds[i]);
+          const assignment = userAssignments.find(sa => sa.userId === userIds[i]);
           const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -920,7 +921,7 @@ const resolvers = {
         let startPosition = 1;
 
         if (isOwner && ownerInNewSigners) {
-          const ownerAssignment = validAssignments.find(sa => sa.userId === user.id);
+          const ownerAssignment = userAssignments.find(sa => sa.userId === user.id);
           const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -950,7 +951,7 @@ const resolvers = {
 
         const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
         for (let i = 0; i < otherUserIds.length; i++) {
-          const assignment = validAssignments.find(sa => sa.userId === otherUserIds[i]);
+          const assignment = userAssignments.find(sa => sa.userId === otherUserIds[i]);
           const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -973,6 +974,43 @@ const resolvers = {
              VALUES ($1, $2, 'pending', 'digital')`,
             [documentId, otherUserIds[i]]
           );
+        }
+      }
+
+      // ========== AGREGAR GRUPOS DE CAUSACIÓN (si existen) ==========
+      if (grupoCausacionAssignments.length > 0) {
+        // Obtener la máxima posición actual de firmantes
+        const maxPosResult = await query(
+          'SELECT COALESCE(MAX(order_position), 0) as max_pos FROM document_signers WHERE document_id = $1',
+          [documentId]
+        );
+        let currentMaxPos = parseInt(maxPosResult.rows[0].max_pos) || 0;
+
+        for (const grupoAssignment of grupoCausacionAssignments) {
+          const { roleIds, roleNames } = normalizeRoles(grupoAssignment);
+          currentMaxPos++;
+
+          console.log(`📋 Agregando grupo de causación: ${grupoAssignment.grupoCodigo} en posición ${currentMaxPos}`);
+
+          await query(
+            `INSERT INTO document_signers (
+              document_id, user_id, order_position, is_required,
+              assigned_role_id, role_name, assigned_role_ids, role_names,
+              is_causacion_group, grupo_codigo
+            )
+            VALUES ($1, NULL, $2, TRUE, $3, $4, $5::integer[], $6::text[], TRUE, $7)`,
+            [
+              documentId,
+              currentMaxPos,
+              roleIds[0] || null,
+              roleNames[0] || null,
+              roleIds,
+              roleNames,
+              grupoAssignment.grupoCodigo
+            ]
+          );
+
+          console.log(`✅ Grupo ${grupoAssignment.grupoCodigo} agregado en posición ${currentMaxPos}`);
         }
       }
 
@@ -1157,15 +1195,23 @@ const resolvers = {
         const docInfo = docInfoResult.rows[0];
 
         const signersResult = await query(
-          `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
-                  COALESCE(s.status, 'pending') as status,
-                  s.signed_at,
-                  s.rejected_at,
-                  s.rejection_reason,
-                  s.consecutivo,
-                  s.real_signer_name
+          `SELECT
+            u.id,
+            COALESCE(u.name, ds.grupo_codigo) as name,
+            u.email,
+            ds.order_position,
+            ds.role_name,
+            ds.role_names,
+            ds.is_causacion_group,
+            ds.grupo_codigo,
+            COALESCE(s.status, 'pending') as status,
+            s.signed_at,
+            s.rejected_at,
+            s.rejection_reason,
+            s.consecutivo,
+            s.real_signer_name
           FROM document_signers ds
-          JOIN users u ON ds.user_id = u.id
+          LEFT JOIN users u ON ds.user_id = u.id
           LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
           WHERE ds.document_id = $1
           ORDER BY ds.order_position ASC`,
@@ -1754,9 +1800,23 @@ const resolvers = {
 
         if (docInfo.rows.length > 0) {
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names, s.status, s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo, s.real_signer_name
+            `SELECT
+              u.id,
+              COALESCE(u.name, ds.grupo_codigo) as name,
+              u.email,
+              ds.order_position,
+              ds.role_name,
+              ds.role_names,
+              ds.is_causacion_group,
+              ds.grupo_codigo,
+              s.status,
+              s.signed_at,
+              s.rejected_at,
+              s.rejection_reason,
+              s.consecutivo,
+              s.real_signer_name
              FROM document_signers ds
-             JOIN users u ON ds.user_id = u.id
+             LEFT JOIN users u ON ds.user_id = u.id
              LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
              WHERE ds.document_id = $1
              ORDER BY ds.order_position ASC`,

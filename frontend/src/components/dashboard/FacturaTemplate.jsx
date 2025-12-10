@@ -877,6 +877,7 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
         role: roleCausacion,
         cargo: 'Grupo de Causación',
         email: null,
+        grupoCodigo: grupoCausacion,  // Código del grupo: 'financiera' o 'logistica'
         grupoMiembros: miembrosFormateados  // Lista de miembros permitidos para firmar
       });
 

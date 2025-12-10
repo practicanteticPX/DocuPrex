@@ -1487,7 +1487,7 @@ function Dashboard({ user, onLogout }) {
     const signerMap = new Map();
 
     templateData.firmantes.forEach((firmante, index) => {
-      const { name, role, cargo, email, grupoMiembros } = firmante;
+      const { name, role, cargo, email, grupoMiembros, grupoCodigo } = firmante;
 
       if (!name || !role) {
         console.warn(`⚠️ Firmante ${index + 1} sin nombre o rol:`, firmante);
@@ -1522,8 +1522,9 @@ function Dashboard({ user, onLogout }) {
         // Si es un grupo de Causación, guardar lista de miembros permitidos
         if (grupoMiembros && Array.isArray(grupoMiembros)) {
           signerData.grupoMiembros = grupoMiembros;
+          signerData.grupoCodigo = grupoCodigo;  // Guardar el código del grupo
           signerData.esGrupoCausacion = true;
-          console.log(`✅ Grupo ${role}: ${grupoMiembros.length} miembros permitidos`);
+          console.log(`✅ Grupo ${role} (${grupoCodigo}): ${grupoMiembros.length} miembros permitidos`);
         }
 
         signerMap.set(key, signerData);
@@ -1606,10 +1607,11 @@ function Dashboard({ user, onLogout }) {
           roleNames: signerData.roleNames,
           fromTemplate: true,
           esGrupoCausacion: true,
+          grupoCodigo: signerData.grupoCodigo,  // Código del grupo: 'financiera' o 'logistica'
           grupoMiembros: signerData.grupoMiembros,  // Lista de miembros permitidos
           nombreGrupo: signerData.name  // Nombre genérico del grupo
         });
-        console.log(`✅ Grupo de Causación añadido: "${signerData.name}" con ${signerData.grupoMiembros.length} miembros permitidos`);
+        console.log(`✅ Grupo de Causación añadido: "${signerData.name}" (${signerData.grupoCodigo}) con ${signerData.grupoMiembros.length} miembros permitidos`);
         return;
       }
 
@@ -2224,7 +2226,7 @@ function Dashboard({ user, onLogout }) {
           // Preparar signerAssignments según si son objetos o IDs simples
           const signerAssignments = selectedSigners.map(s => {
             if (typeof s === 'object') {
-              return {
+              const assignment = {
                 userId: s.userId,
                 // Campos singulares (legacy - para SA)
                 roleId: s.roleId || null,
@@ -2233,6 +2235,14 @@ function Dashboard({ user, onLogout }) {
                 roleIds: s.roleIds || null,
                 roleNames: s.roleNames || null
               };
+
+              // Si es un grupo de causación, agregar campos adicionales
+              if (s.esGrupoCausacion) {
+                assignment.isCausacionGroup = true;
+                assignment.grupoCodigo = s.grupoCodigo;
+              }
+
+              return assignment;
             } else {
               return {
                 userId: s,
@@ -2304,9 +2314,8 @@ function Dashboard({ user, onLogout }) {
         // Si es un documento FV y tenemos datos de la plantilla, marcar la factura como en proceso
         if (selectedDocumentType && selectedDocumentType.code === 'FV' && facturaTemplateData && facturaTemplateData.consecutivo) {
           try {
-            const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
             const marcarResponse = await axios.post(
-              `${backendHost}/api/facturas/marcar-en-proceso/${facturaTemplateData.consecutivo}`,
+              `${BACKEND_HOST}/api/facturas/marcar-en-proceso/${facturaTemplateData.consecutivo}`,
               {},
               { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -2450,7 +2459,6 @@ function Dashboard({ user, onLogout }) {
       // Si el documento tiene consecutivo y es tipo FV, gestionar estados de factura
       const documentToSign = pendingDocuments.find(doc => doc.id === docId) || viewingDocument;
       if (documentToSign && documentToSign.consecutivo && documentToSign.documentType && documentToSign.documentType.code === 'FV') {
-        const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
         const token = localStorage.getItem('token');
 
         // Verificar si el firmante que acaba de firmar es del grupo de causación
@@ -2463,7 +2471,7 @@ function Dashboard({ user, onLogout }) {
         if (isCausacion) {
           try {
             const causadoResponse = await axios.post(
-              `${backendHost}/api/facturas/marcar-causado/${documentToSign.consecutivo}`,
+              `${BACKEND_HOST}/api/facturas/marcar-causado/${documentToSign.consecutivo}`,
               {},
               { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -2484,7 +2492,7 @@ function Dashboard({ user, onLogout }) {
         if (allSigned) {
           try {
             const finalizadoResponse = await axios.post(
-              `${backendHost}/api/facturas/marcar-finalizado/${documentToSign.consecutivo}`,
+              `${BACKEND_HOST}/api/facturas/marcar-finalizado/${documentToSign.consecutivo}`,
               {},
               { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -2604,9 +2612,8 @@ function Dashboard({ user, onLogout }) {
       const documentToReject = pendingDocuments.find(doc => doc.id === docId) || viewingDocument;
       if (documentToReject && documentToReject.consecutivo) {
         try {
-          const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
           const desmarcarResponse = await axios.post(
-            `${backendHost}/api/facturas/desmarcar-en-proceso/${documentToReject.consecutivo}`,
+            `${BACKEND_HOST}/api/facturas/desmarcar-en-proceso/${documentToReject.consecutivo}`,
             {},
             { headers: { Authorization: `Bearer ${token}` } }
           );
@@ -3003,9 +3010,8 @@ function Dashboard({ user, onLogout }) {
       // Si el documento tiene consecutivo, desmarcar en_proceso en T_Facturas
       if (hasConsecutivo) {
         try {
-          const backendHost = process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000';
           const desmarcarResponse = await axios.post(
-            `${backendHost}/api/facturas/desmarcar-en-proceso/${documentToDelete.consecutivo}`,
+            `${BACKEND_HOST}/api/facturas/desmarcar-en-proceso/${documentToDelete.consecutivo}`,
             {},
             { headers: { Authorization: `Bearer ${token}` } }
           );
