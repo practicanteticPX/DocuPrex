@@ -2755,3 +2755,147 @@ All fixes follow CLAUDE.md standards:
 **Bugs Fixed:** 2 critical bugs
 **Bugs In Progress:** 1 under investigation
 **System Status:** ✅ Stable, ready for testing
+
+---
+
+# Session 2025-12-10: Migration to Internal Causación Groups
+
+## Objective
+Migrate causación group management from external SERV_QPREX database (T_Personas) to internal Docker container tables (causacion_grupos and causacion_integrantes), ensuring full functionality across backend, frontend, and database with proper relationships to the users table.
+
+## Changes Implemented
+
+### 1. Database Configuration
+**Tables Used:**
+- `causacion_grupos` - Stores group definitions (financiera, logistica)
+- `causacion_integrantes` - Stores group members with FK to users table
+
+**Data Populated:**
+```sql
+-- Financiera Group (grupo_id: 1)
+- Luis Riaño (user_id: 54)
+
+-- Logística Group (grupo_id: 2)
+- Mariana Gonzalez (user_id: 75)
+- Jheison Montealegre (user_id: 69)
+- Angel Gonzalez (user_id: 67)
+```
+
+### 2. Backend Changes
+
+**File: server/graphql/schema.js**
+- Added `CausacionGrupo` type (lines 150-158)
+- Added `CausacionIntegrante` type (lines 160-166)
+- Added queries: `causacionGrupos` and `causacionGrupo(codigo: String!)` (lines 203-205)
+
+**File: server/graphql/resolvers-db.js**
+- Added query resolvers for causacionGrupos and causacionGrupo (lines 433-460)
+- Added type resolvers for CausacionGrupo.miembros (lines 2801-2807)
+- Added type resolvers for CausacionIntegrante (lines 2809-2821)
+- Proper camelCase mapping for PostgreSQL snake_case columns
+
+**File: server/routes/facturas.js**
+- **REMOVED** deprecated REST endpoint `/api/facturas/grupos-causacion/:grupo` (was lines 474-550)
+- This endpoint was using SERV_QPREX T_Personas and is now obsolete
+
+### 3. Frontend Changes
+
+**File: frontend/src/components/dashboard/FacturaTemplate.jsx**
+- Added imports: `API_URL` and `axios` (lines 8-9)
+- Replaced REST API call to SERV_QPREX with GraphQL query (lines 827-884)
+- GraphQL query fetches causación group by code with all members and user details
+- Data transformation maintains backward compatibility with existing code structure
+- Proper error handling for missing groups or members
+
+### 4. Testing & Verification
+- Created and executed test script to verify database queries
+- Confirmed all causación groups and members are correctly retrieved
+- Verified GraphQL resolvers return proper data structure
+- Backend server restarted successfully with new schema
+- Frontend restarted and ready with updated code
+
+## Technical Details
+
+### GraphQL Schema
+```graphql
+type CausacionGrupo {
+  id: Int!
+  codigo: String!
+  nombre: String!
+  descripcion: String
+  activo: Boolean!
+  miembros: [CausacionIntegrante!]!
+}
+
+type CausacionIntegrante {
+  id: Int!
+  grupoId: Int!
+  userId: Int!
+  user: User!
+  cargo: String
+  activo: Boolean!
+}
+```
+
+### Query Example
+```graphql
+query CausacionGrupo($codigo: String!) {
+  causacionGrupo(codigo: $codigo) {
+    id
+    codigo
+    nombre
+    miembros {
+      id
+      userId
+      user {
+        id
+        name
+        email
+      }
+      cargo
+    }
+  }
+}
+```
+
+## Files Modified
+1. server/graphql/schema.js - Added new types and queries
+2. server/graphql/resolvers-db.js - Implemented resolvers
+3. server/routes/facturas.js - Removed deprecated endpoint
+4. frontend/src/components/dashboard/FacturaTemplate.jsx - Migrated to GraphQL
+
+## Testing Status
+- ✅ Database queries verified working
+- ✅ GraphQL resolvers tested and functional
+- ✅ Backend server restarted successfully
+- ✅ Frontend restarted successfully
+- ⏳ End-to-end workflow testing pending (requires user to create FV document)
+
+## Known Issues
+None identified. All components are functioning correctly.
+
+## Next Steps
+1. **User Testing Required:** Create a new FV document with causación groups to verify complete integration
+2. Monitor logs during document creation to ensure no errors
+3. Verify that causación group members can sign documents correctly
+4. Test both Financiera and Logística groups in real workflow
+
+## Technical Debt
+None added. Successfully removed legacy code and consolidated to internal tables.
+
+---
+
+## Server Status
+- **Server:** Running and operational
+- **Frontend:** Running and operational
+- **Database:** Running with causación groups properly configured
+- **SMTP:** Connected (EAI_AGAIN warnings are network-related, not functional issues)
+
+---
+
+**Session End:** 2025-12-10
+**Duration:** Complete causación groups migration
+**Files Modified:** 4 (1 frontend, 3 backend)
+**Features Implemented:** 1 complete migration (database → GraphQL → frontend)
+**Deprecated Code Removed:** 1 REST endpoint
+**System Status:** ✅ Fully operational, ready for user testing

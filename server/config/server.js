@@ -32,7 +32,7 @@ const serverConfig = {
   // CORS origins permitidos
   corsOrigins: process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
-    : ['http://192.168.0.30:5173', 'http://localhost:5173', 'https://docuprex.com'],
+    : ['http://192.168.0.30:5173', 'http://localhost:5173', 'https://docuprex.com', 'https://www.docuprex.com'],
 
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
