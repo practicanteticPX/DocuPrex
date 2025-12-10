@@ -206,17 +206,15 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     yPosition -= 16;
 
     const docTitle = documentInfo.title || 'Sin nombre';
-    const maxTitleLength = 60;
-    const displayTitle = docTitle.length > maxTitleLength
-      ? docTitle.substring(0, maxTitleLength) + '...'
-      : docTitle;
 
-    coverPage.drawText(displayTitle, {
+    // Mostrar el título completo sin truncar
+    coverPage.drawText(docTitle, {
       x: margin,
       y: yPosition,
       size: 10,
       font: fontRegular,
       color: rgb(0.15, 0.15, 0.15),
+      maxWidth: pageWidth - 2 * margin,
     });
 
     yPosition -= 25;

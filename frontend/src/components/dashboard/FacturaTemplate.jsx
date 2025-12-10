@@ -60,6 +60,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
   const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
   const { negociadores, loading: loadingNegociadores } = useNegociadores();
 
+  // Estados para roles dinámicos desde la BD
+  const [fvRoles, setFvRoles] = useState(null);
+  const [loadingRoles, setLoadingRoles] = useState(true);
+
   // Estados para campos automáticos desde T_Facturas
   const [consecutivo, setConsecutivo] = useState('');
   const [proveedor, setProveedor] = useState('');
@@ -157,6 +161,74 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
       // Restaurar posición de scroll
       window.scrollTo(0, scrollY);
     };
+  }, []);
+
+  // Cargar roles dinámicamente desde la BD para tipo de documento FV
+  useEffect(() => {
+    const cargarRolesFV = async () => {
+      try {
+        const token = localStorage.getItem('token');
+
+        // Primero obtener el tipo de documento FV
+        const tiposResponse = await axios.post(
+          API_URL,
+          {
+            query: `
+              query {
+                documentTypes {
+                  id
+                  code
+                  name
+                }
+              }
+            `
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        const fvType = tiposResponse.data?.data?.documentTypes?.find(dt => dt.code === 'FV');
+
+        if (!fvType) {
+          throw new Error('No se encontró el tipo de documento FV');
+        }
+
+        // Luego obtener los roles para FV
+        const rolesResponse = await axios.post(
+          API_URL,
+          {
+            query: `
+              query DocumentTypeRoles($documentTypeId: Int!) {
+                documentTypeRoles(documentTypeId: $documentTypeId) {
+                  id
+                  roleName
+                  roleCode
+                  orderPosition
+                }
+              }
+            `,
+            variables: { documentTypeId: fvType.id }
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        const roles = rolesResponse.data?.data?.documentTypeRoles || [];
+
+        // Crear un mapa de roles por código para fácil acceso
+        const rolesMap = {};
+        roles.forEach(role => {
+          rolesMap[role.roleCode] = role;
+        });
+
+        console.log('✅ Roles FV cargados desde BD:', rolesMap);
+        setFvRoles(rolesMap);
+        setLoadingRoles(false);
+      } catch (error) {
+        console.error('❌ Error cargando roles FV:', error);
+        setLoadingRoles(false);
+      }
+    };
+
+    cargarRolesFV();
   }, []);
 
   // Cargar datos automáticos de la factura (solo una vez al montar)
@@ -774,6 +846,12 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
       return;
     }
 
+    if (!fvRoles || loadingRoles) {
+      setMensajeError('Cargando roles... Por favor espere.');
+      setModalAbierto(true);
+      return;
+    }
+
     try {
       const firmantes = [];
       const firmantesUnicos = new Set();
@@ -794,14 +872,18 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       // 1. Agregar Negociador
       console.log('📋 Agregando Negociador...');
-      agregarFirmante(nombreNegociador, 'Negociador', cargoNegociador);
+      const roleNegociador = fvRoles['NEGOCIADOR']?.roleName || 'Negociador';
+      agregarFirmante(nombreNegociador, roleNegociador, cargoNegociador);
 
       // 2. Agregar Responsables de Cuentas Contables y Centros de Costos
       console.log('📋 Agregando Responsables de filas de control...');
+      const roleRespCuentaCont = fvRoles['RESPONSABLE_CUENTA_CONTABLE']?.roleName || 'Resp Cta Cont';
+      const roleRespCentroCost = fvRoles['RESPONSABLE_CENTRO_COSTOS']?.roleName || 'Resp Ctro Cost';
+
       filasControl.forEach((fila, index) => {
         console.log(`   Fila ${index + 1}:`);
-        agregarFirmante(fila.respCuentaContable, 'Resp Cta Cont', fila.cargoCuentaContable);
-        agregarFirmante(fila.respCentroCostos, 'Resp Ctro Cost', fila.cargoCentroCostos);
+        agregarFirmante(fila.respCuentaContable, roleRespCuentaCont, fila.cargoCuentaContable);
+        agregarFirmante(fila.respCentroCostos, roleRespCentroCost, fila.cargoCentroCostos);
       });
 
       // 3. Agregar NEGOCIACIONES (OBLIGATORIO)
@@ -814,9 +896,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
       }
 
       console.log('✅ Usuario NEGOCIACIONES encontrado:', negociacionesData.data.nombre);
+      const roleNegociaciones = fvRoles['RESPONSABLE_NEGOCIACIONES']?.roleName || 'Negociaciones';
       agregarFirmante(
         negociacionesData.data.nombre,
-        'Negociaciones',
+        roleNegociaciones,
         negociacionesData.data.cargo,
         negociacionesData.data.email
       );
@@ -871,7 +954,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       // Agregar UN SOLO firmante genérico para el grupo (sin nombre específico)
       // La lista de miembros permitidos se guarda en metadata del documento
-      const roleCausacion = grupoCausacion === 'financiera' ? 'Causación Financiera' : 'Causación Logística';
+      const roleCausacion = grupoCausacion === 'financiera'
+        ? (fvRoles['CAUSACION_FINANCIERA']?.roleName || 'Causación Financiera')
+        : (fvRoles['CAUSACION_LOGISTICA']?.roleName || 'Causación Logística');
+
       firmantes.push({
         name: `[${grupoData.nombre}]`,  // Nombre genérico del grupo
         role: roleCausacion,

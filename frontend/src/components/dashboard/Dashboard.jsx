@@ -528,6 +528,10 @@ function Dashboard({ user, onLogout }) {
   const canProceedToNextStep = () => {
     switch (activeStep) {
       case 0: // Cargar documentos
+        // Para FV con plantilla completada, no se requiere título (se genera automáticamente)
+        if (selectedDocumentType?.code === 'FV' && templateCompleted && facturaTemplateData) {
+          return selectedFiles && selectedFiles.length > 0;
+        }
         return selectedFiles && selectedFiles.length > 0 && documentTitle.trim().length > 0;
       case 1: // Añadir firmantes
         return selectedSigners && selectedSigners.length > 0;
@@ -1473,17 +1477,8 @@ function Dashboard({ user, onLogout }) {
 
     console.log(`📋 Procesando ${templateData.firmantes.length} firmantes de la plantilla...`);
 
-    // Mapeo de roles desde la plantilla a los IDs del sistema
-    const roleMapping = {
-      'Negociador': { id: 8, name: 'Negociador' },
-      'Resp Cta Cont': { id: 7, name: 'Resp Cta Cont' },
-      'Resp Ctro Cost': { id: 6, name: 'Resp Ctro Cost' },
-      'Negociaciones': { id: 9, name: 'Negociaciones' },
-      'Causación Financiera': { id: 10, name: 'Causación Financiera' },
-      'Causación Logística': { id: 11, name: 'Causación Logística' }
-    };
-
-    // Agrupar firmantes por nombre (un firmante puede tener múltiples roles)
+    // Para FV, los roles vienen dinámicamente de la BD a través de FacturaTemplate
+    // No hacemos ningún mapeo hardcodeado aquí
     const signerMap = new Map();
 
     templateData.firmantes.forEach((firmante, index) => {
@@ -1495,28 +1490,20 @@ function Dashboard({ user, onLogout }) {
       }
 
       const key = name.trim();
-      const roleInfo = roleMapping[role];
-
-      if (!roleInfo) {
-        console.warn(`⚠️ Rol no reconocido: "${role}" para firmante "${name}"`);
-        return;
-      }
 
       if (signerMap.has(key)) {
         // Firmante ya existe, agregar rol adicional
         const existing = signerMap.get(key);
-        if (!existing.roleIds.includes(roleInfo.id)) {
-          existing.roleIds.push(roleInfo.id);
-          existing.roleNames.push(roleInfo.name);
+        if (!existing.roleNames.includes(role)) {
+          existing.roleNames.push(role);
         }
       } else {
-        // Nuevo firmante
+        // Nuevo firmante - los nombres de roles vienen directamente de la BD
         const signerData = {
           name: name.trim(),
           cargo: cargo || '',
           email: email || null,
-          roleIds: [roleInfo.id],
-          roleNames: [roleInfo.name]
+          roleNames: [role]
         };
 
         // Si es un grupo de Causación, guardar lista de miembros permitidos
@@ -1603,7 +1590,6 @@ function Dashboard({ user, onLogout }) {
       if (signerData.esGrupoCausacion) {
         signersToAdd.push({
           userId: null,  // Sin usuario asignado hasta que alguien firme
-          roleIds: signerData.roleIds,
           roleNames: signerData.roleNames,
           fromTemplate: true,
           esGrupoCausacion: true,
@@ -1621,7 +1607,6 @@ function Dashboard({ user, onLogout }) {
       if (matchedUser) {
         signersToAdd.push({
           userId: matchedUser.id,
-          roleIds: signerData.roleIds,
           roleNames: signerData.roleNames,
           fromTemplate: true
         });
@@ -2185,9 +2170,15 @@ function Dashboard({ user, onLogout }) {
       }
       // Ya no usamos 'title' como nombre del documento cuando hay múltiples,
       // el backend usará el nombre real del archivo como título y 'groupTitle' para agrupar.
-      const finalTitle = selectedDocumentType
-        ? `${selectedDocumentType.prefix} ${documentTitle.trim()}`
-        : documentTitle.trim();
+      let finalTitle;
+      if (selectedDocumentType?.code === 'FV' && facturaTemplateData) {
+        // Para FV, generar título automático: FV - {proveedor} - {numero_factura}
+        finalTitle = `FV - ${facturaTemplateData.proveedor} - ${facturaTemplateData.numeroFactura}`;
+      } else if (selectedDocumentType) {
+        finalTitle = `${selectedDocumentType.prefix} ${documentTitle.trim()}`;
+      } else {
+        finalTitle = documentTitle.trim();
+      }
       formData.append('title', finalTitle);
       if (documentDescription.trim()) {
         formData.append('description', documentDescription.trim());
@@ -2223,35 +2214,32 @@ function Dashboard({ user, onLogout }) {
 
         // Asignar firmantes a cada documento creado
         for (const doc of documents) {
-          // Preparar signerAssignments según si son objetos o IDs simples
+          // Preparar signerAssignments según el tipo de documento
           const signerAssignments = selectedSigners.map(s => {
             if (typeof s === 'object') {
-              const assignment = {
-                userId: s.userId,
-                // Campos singulares (legacy - para SA)
-                roleId: s.roleId || null,
-                roleName: s.roleName || null,
-                // Campos arrays (nuevo - para FV)
-                roleIds: s.roleIds || null,
-                roleNames: s.roleNames || null
-              };
+              const assignment = { userId: s.userId };
 
-              // Si es un grupo de causación, agregar campos adicionales
+              // Para documentos con roles manuales (SA, etc)
+              if (s.roleId) {
+                assignment.roleId = s.roleId;
+                assignment.roleName = s.roleName;
+              }
+
+              // Para documentos con plantilla (FV): solo roleNames
+              if (s.roleNames && s.roleNames.length > 0) {
+                assignment.roleNames = s.roleNames;
+              }
+
+              // Para grupos de causación (FV)
               if (s.esGrupoCausacion) {
                 assignment.isCausacionGroup = true;
                 assignment.grupoCodigo = s.grupoCodigo;
               }
 
               return assignment;
-            } else {
-              return {
-                userId: s,
-                roleId: null,
-                roleName: null,
-                roleIds: null,
-                roleNames: null
-              };
             }
+            // Firmante simple (solo ID)
+            return { userId: s };
           });
 
           const assignResponse = await axios.post(
@@ -2274,9 +2262,20 @@ function Dashboard({ user, onLogout }) {
           }
 
           // Autofirma: Si el usuario actual está en la lista de firmantes, firmar automáticamente
-          const userInSigners = selectedSigners.some(s =>
-            typeof s === 'object' ? s.userId === user.id : s === user.id
-          );
+          // Compara por userId O por nombre (para firmantes de FV que vienen por nombre)
+          const userInSigners = selectedSigners.some(s => {
+            if (typeof s === 'object') {
+              // Comparar por userId si existe
+              if (s.userId === user.id) return true;
+              // Comparar por nombre si no hay userId (caso FV)
+              if (!s.userId && s.name && user.name) {
+                return s.name.trim().toUpperCase() === user.name.trim().toUpperCase();
+              }
+            } else {
+              return s === user.id;
+            }
+            return false;
+          });
           if (user && user.id && userInSigners) {
             try {
               const signResponse = await axios.post(
@@ -4305,53 +4304,7 @@ function Dashboard({ user, onLogout }) {
                   {/* Paso 0: Cargar documentos */}
                   {activeStep === 0 && (
                     <>
-                      <div className="form-group">
-                        <label htmlFor="document-type">
-                          Tipo de documento <span>(opcional)</span>
-                        </label>
-                        <DocumentTypeSelector
-                          documentTypes={documentTypes}
-                          selectedDocumentType={selectedDocumentType}
-                          onDocumentTypeChange={(type) => {
-                            setSelectedDocumentType(type);
-                            setDocumentTypeRoles(type?.roles || []);
-                            setSelectedSigners([]);
-                            setTemplateCompleted(false);
-                            setFacturaTemplateData(null);
-                            setSelectedFactura(null);
-                          }}
-                          disabled={uploading || loadingDocumentTypes}
-                        />
-                      </div>
-
-                      {/* Botón para volver a editar la planilla (solo cuando ya fue completada) */}
-                      {selectedDocumentType?.code === 'FV' && templateCompleted && facturaTemplateData && (
-                        <div className="add-more-files-container">
-                          <button
-                            type="button"
-                            className="add-more-files-btn"
-                            onClick={() => {
-                              setSelectedFactura({
-                                numero_control: facturaTemplateData.consecutivo,
-                                proveedor: facturaTemplateData.proveedor,
-                                numero_factura: facturaTemplateData.numeroFactura,
-                                fecha_factura: facturaTemplateData.fechaFactura,
-                                fecha_entrega: facturaTemplateData.fechaRecepcion
-                              });
-                              setShowFacturaTemplate(true);
-                              console.log('📍 Reabriendo planilla para edición...');
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            Editar planilla de factura
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Cuando es Legalización de Facturas, mostrar el buscador O el formulario de metadatos */}
+                      {/* Para FV: Solo mostrar buscador cuando NO está completada la plantilla */}
                       {selectedDocumentType?.code === 'FV' && !templateCompleted ? (
                         <FacturaSearch
                           onFacturaSelect={(factura) => {
@@ -4361,157 +4314,221 @@ function Dashboard({ user, onLogout }) {
                             console.log('Factura seleccionada:', factura);
                           }}
                         />
+                      ) : selectedDocumentType?.code === 'FV' && templateCompleted ? (
+                        <>
+                          {/* Botón para editar la planilla de factura */}
+                          <div className="add-more-files-container">
+                            <button
+                              type="button"
+                              className="add-more-files-btn"
+                              onClick={() => {
+                                setSelectedFactura({
+                                  numero_control: facturaTemplateData.consecutivo,
+                                  proveedor: facturaTemplateData.proveedor,
+                                  numero_factura: facturaTemplateData.numeroFactura,
+                                  fecha_factura: facturaTemplateData.fechaFactura,
+                                  fecha_entrega: facturaTemplateData.fechaRecepcion
+                                });
+                                setShowFacturaTemplate(true);
+                                console.log('📍 Reabriendo planilla para edición...');
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              Editar planilla de factura
+                            </button>
+                          </div>
+
+                          {/* Solo descripción para FV */}
+                          <div className="form-group">
+                            <label htmlFor="document-description">
+                              Descripción <span>(opcional)</span>
+                            </label>
+                            <textarea
+                              id="document-description"
+                              value={documentDescription}
+                              onChange={(e) => setDocumentDescription(e.target.value)}
+                              placeholder="Describe brevemente la factura..."
+                              className="form-input form-textarea"
+                              rows="3"
+                              disabled={uploading}
+                            />
+                          </div>
+                        </>
                       ) : (
                         <>
+                          {/* Selector de tipo de documento para documentos no-FV */}
                           <div className="form-group">
-                        <label htmlFor="document-title">
-                          Título del documento
-                        </label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          {selectedDocumentType && (
-                            <span style={{
-                              padding: '0.5rem 1rem',
-                              backgroundColor: '#f3f4f6',
-                              border: '1px solid #d1d5db',
-                              borderRadius: '0.375rem',
-                              fontWeight: '600',
-                              color: '#374151',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {selectedDocumentType.prefix}
-                            </span>
-                          )}
-                          <input
-                            type="text"
-                            id="document-title"
-                            value={documentTitle}
-                            onChange={(e) => setDocumentTitle(e.target.value)}
-                            placeholder={selectedDocumentType?.code === 'FV' ? "Concepto de la factura..." : selectedDocumentType ? "Concepto del anticipo..." : "Concepto del documento..."}
-                            className="form-input"
-                            style={{ flex: 1 }}
-                            disabled={uploading}
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div className="form-group">
-                        <label htmlFor="document-description">
-                          Descripción <span>(opcional)</span>
-                        </label>
-                        <textarea
-                          id="document-description"
-                          value={documentDescription}
-                          onChange={(e) => setDocumentDescription(e.target.value)}
-                          placeholder={
-                            !selectedDocumentType
-                              ? "Describe brevemente el documento..."
-                              : selectedDocumentType?.code === 'FV'
-                                ? "Describe brevemente la factura..."
-                                : selectedDocumentType?.code === 'SA'
-                                  ? "Describe brevemente la solicitud de anticipo..."
-                                  : "Describe brevemente el documento..."
-                          }
-                          className="form-input form-textarea"
-                          rows="3"
-                          disabled={uploading}
-                        />
-                      </div>
-
-                      {/* Sección: ¿Qué documento se firmará? */}
-                      <div className="zapsign-section">
-                    <h3 className="section-question">¿Qué documento se firmará?</h3>
-
-                    <div
-                      className={`zapsign-upload-area ${isDragging ? 'dragging' : ''} ${(selectedFiles && selectedFiles.length > 0) ? 'has-files' : ''}`}
-                      onDragEnter={handleDragEnter}
-                      onDragLeave={handleDragLeave}
-                      onDragOver={handleDragOver}
-                      onDrop={handleDrop}
-                    >
-                      <input
-                        type="file"
-                        id="file-input-zapsign"
-                        onChange={(e) => handleFileChange(e)}
-                        multiple
-                        accept=".pdf,application/pdf"
-                        className="file-input-hidden"
-                        disabled={uploading}
-                      />
-
-                      {!selectedFiles || selectedFiles.length === 0 ? (
-                        <label htmlFor="file-input-zapsign" className="zapsign-upload-label">
-                          <div className="upload-icon-minimal">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M17 8L12 3M12 3L7 8M12 3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
+                            <label htmlFor="document-type">
+                              Tipo de documento <span>(opcional)</span>
+                            </label>
+                            <DocumentTypeSelector
+                              documentTypes={documentTypes}
+                              selectedDocumentType={selectedDocumentType}
+                              onDocumentTypeChange={(type) => {
+                                setSelectedDocumentType(type);
+                                setDocumentTypeRoles(type?.roles || []);
+                                setSelectedSigners([]);
+                                setTemplateCompleted(false);
+                                setFacturaTemplateData(null);
+                                setSelectedFactura(null);
+                              }}
+                              disabled={uploading || loadingDocumentTypes}
+                            />
                           </div>
-                          <div className="upload-text-container">
-                            <p className="upload-text-main">
-                              <span className="upload-link">Haz clic para subir</span>
-                              <span className="upload-text-normal"> o arrastra y suelta</span>
-                            </p>
-                            <p className="upload-text-hint">Solo PDF hasta 10MB</p>
-                          </div>
-                        </label>
-                      ) : (
-                        <div className="file-list-minimal">
-                          {selectedFiles.map((file, index) => (
-                            <div
-                              key={`${file.name}-${index}`}
-                              className="file-item-minimal"
-                              draggable={!uploading}
-                              onDragStart={(e) => handleFileDragStart(e, index)}
-                              onDragOver={(e) => handleFileDragOver(e, index)}
-                              onDragEnd={handleFileDragEnd}
-                            >
-                              <div className="file-item-left">
-                                <div className="file-icon-minimal">
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M14 2V8H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </div>
-                                <div className="file-info-minimal">
-                                  <p className="file-name-minimal">{file.name}</p>
-                                  <p className="file-size-minimal">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                className="file-delete-minimal"
-                                onClick={() => removeFile(index)}
+
+                          {/* Título y descripción para documentos no-FV */}
+                          <div className="form-group">
+                            <label htmlFor="document-title">
+                              Título del documento
+                            </label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              {selectedDocumentType && (
+                                <span style={{
+                                  padding: '0.5rem 1rem',
+                                  backgroundColor: '#f3f4f6',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontWeight: '600',
+                                  color: '#374151',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {selectedDocumentType.prefix}
+                                </span>
+                              )}
+                              <input
+                                type="text"
+                                id="document-title"
+                                value={documentTitle}
+                                onChange={(e) => setDocumentTitle(e.target.value)}
+                                placeholder={selectedDocumentType ? "Concepto del anticipo..." : "Concepto del documento..."}
+                                className="form-input"
+                                style={{ flex: 1 }}
                                 disabled={uploading}
-                                title="Eliminar archivo"
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              </button>
+                                required
+                              />
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                          </div>
 
-                    {/* Botón para agregar más archivos - minimalista */}
-                    {(selectedFiles.length > 0 || selectedFile) && selectedFiles.length < 20 && (
-                      <div className="add-more-files-container">
-                        <button
-                          type="button"
-                          className="add-more-files-btn"
-                          onClick={() => { const el = document.getElementById('file-input-zapsign'); if (el) el.click(); }}
-                          disabled={uploading}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 4v16m8-8H4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                          Agregar más archivos
-                        </button>
-                      </div>
-                    )}
-                      </div>
+                          <div className="form-group">
+                            <label htmlFor="document-description">
+                              Descripción <span>(opcional)</span>
+                            </label>
+                            <textarea
+                              id="document-description"
+                              value={documentDescription}
+                              onChange={(e) => setDocumentDescription(e.target.value)}
+                              placeholder={
+                                !selectedDocumentType
+                                  ? "Describe brevemente el documento..."
+                                  : selectedDocumentType?.code === 'SA'
+                                    ? "Describe brevemente la solicitud de anticipo..."
+                                    : "Describe brevemente el documento..."
+                              }
+                              className="form-input form-textarea"
+                              rows="3"
+                              disabled={uploading}
+                            />
+                          </div>
                         </>
+                      )}
+
+                      {/* Sección: ¿Qué documento se firmará? - Solo mostrar si NO es FV sin plantilla */}
+                      {!(selectedDocumentType?.code === 'FV' && !templateCompleted) && (
+                        <div className="zapsign-section">
+                        <h3 className="section-question">¿Qué documento se firmará?</h3>
+
+                        <div
+                          className={`zapsign-upload-area ${isDragging ? 'dragging' : ''} ${(selectedFiles && selectedFiles.length > 0) ? 'has-files' : ''}`}
+                          onDragEnter={handleDragEnter}
+                          onDragLeave={handleDragLeave}
+                          onDragOver={handleDragOver}
+                          onDrop={handleDrop}
+                        >
+                          <input
+                            type="file"
+                            id="file-input-zapsign"
+                            onChange={(e) => handleFileChange(e)}
+                            multiple
+                            accept=".pdf,application/pdf"
+                            className="file-input-hidden"
+                            disabled={uploading}
+                          />
+
+                          {!selectedFiles || selectedFiles.length === 0 ? (
+                            <label htmlFor="file-input-zapsign" className="zapsign-upload-label">
+                              <div className="upload-icon-minimal">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M17 8L12 3M12 3L7 8M12 3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </div>
+                              <div className="upload-text-container">
+                                <p className="upload-text-main">
+                                  <span className="upload-link">Haz clic para subir</span>
+                                  <span className="upload-text-normal"> o arrastra y suelta</span>
+                                </p>
+                                <p className="upload-text-hint">Solo PDF hasta 10MB</p>
+                              </div>
+                            </label>
+                          ) : (
+                            <div className="file-list-minimal">
+                              {selectedFiles.map((file, index) => (
+                                <div
+                                  key={`${file.name}-${index}`}
+                                  className="file-item-minimal"
+                                  draggable={!uploading}
+                                  onDragStart={(e) => handleFileDragStart(e, index)}
+                                  onDragOver={(e) => handleFileDragOver(e, index)}
+                                  onDragEnd={handleFileDragEnd}
+                                >
+                                  <div className="file-item-left">
+                                    <div className="file-icon-minimal">
+                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <path d="M14 2V8H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    </div>
+                                    <div className="file-info-minimal">
+                                      <p className="file-name-minimal">{file.name}</p>
+                                      <p className="file-size-minimal">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="file-delete-minimal"
+                                    onClick={() => removeFile(index)}
+                                    disabled={uploading}
+                                    title="Eliminar archivo"
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Botón para agregar más archivos - minimalista */}
+                        {(selectedFiles.length > 0 || selectedFile) && selectedFiles.length < 20 && (
+                          <div className="add-more-files-container">
+                            <button
+                              type="button"
+                              className="add-more-files-btn"
+                              onClick={() => { const el = document.getElementById('file-input-zapsign'); if (el) el.click(); }}
+                              disabled={uploading}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 4v16m8-8H4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              Agregar más archivos
+                            </button>
+                          </div>
+                        )}
+                        </div>
                       )}
                     </>
                   )}
