@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const serverConfig = require('../config/server');
 require('dotenv').config();
 
 // Configuración del transporter de nodemailer
@@ -67,7 +68,7 @@ async function notificarAsignacionFirmante({
   documentoId,
   creadorDocumento
 }) {
-  const frontendUrl = 'http://192.168.0.30:5173';
+  const frontendUrl = serverConfig.frontendUrl;
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
   const subject = 'Solicitud de Firma';
@@ -229,7 +230,7 @@ async function notificarDocumentoFirmadoCompleto({
   documentoId,
   urlDescarga
 }) {
-  const frontendUrl = 'http://192.168.0.30:5173';
+  const frontendUrl = serverConfig.frontendUrl;
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
   const subject = 'Documento Completado';
@@ -397,7 +398,7 @@ async function notificarDocumentoRechazado({
   rechazadoPor,
   motivoRechazo
 }) {
-  const frontendUrl = 'http://192.168.0.30:5173';
+  const frontendUrl = serverConfig.frontendUrl;
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
   const subject = 'Documento rechazado';

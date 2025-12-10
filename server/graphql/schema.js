@@ -127,7 +127,7 @@ const typeDefs = gql`
   }
 
   input SignerAssignmentInput {
-    userId: Int!
+    userId: Int
     # Campos legacy (mantener compatibilidad)
     roleId: Int
     roleName: String
@@ -145,6 +145,24 @@ const typeDefs = gql`
   type VerifyCedulaResponse {
     valid: Boolean!
     message: String
+  }
+
+  type CausacionGrupo {
+    id: Int!
+    codigo: String!
+    nombre: String!
+    descripcion: String
+    activo: Boolean!
+    miembros: [CausacionIntegrante!]!
+  }
+
+  type CausacionIntegrante {
+    id: Int!
+    grupoId: Int!
+    userId: Int!
+    user: User!
+    cargo: String
+    activo: Boolean!
   }
 
   type Query {
@@ -181,6 +199,10 @@ const typeDefs = gql`
     # Firmantes de Negociaciones
     negotiationSigners: [NegotiationSigner!]!
     verifyNegotiationSignerCedula(name: String!, lastFourDigits: String!): VerifyCedulaResponse!
+
+    # Grupos de Causación
+    causacionGrupos: [CausacionGrupo!]!
+    causacionGrupo(codigo: String!): CausacionGrupo
   }
 
   type Mutation {

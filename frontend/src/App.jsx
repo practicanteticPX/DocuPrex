@@ -83,6 +83,7 @@ function App() {
     // Guardar el token en localStorage
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(userData))
+    localStorage.setItem('loginTime', Date.now().toString())
 
     setIsAuthenticated(true)
     setUser(userData)
@@ -91,6 +92,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    localStorage.removeItem('loginTime')
     setIsAuthenticated(false)
     setUser(null)
   }
@@ -102,6 +104,77 @@ function App() {
       handleLogout();
     }
   }, 30000); // Verificar cada 30 segundos
+
+  // Programar logout automático exactamente a las 8 horas
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const eightHours = 8 * 60 * 60 * 1000; // 8 horas en milisegundos
+
+    const checkAndLogout = () => {
+      const loginTime = localStorage.getItem('loginTime');
+      if (!loginTime) return false;
+
+      const elapsed = Date.now() - parseInt(loginTime);
+      if (elapsed >= eightHours) {
+        console.log('⏰ Sesión expirada después de 8 horas. Cerrando sesión silenciosamente...');
+        handleLogout();
+        return true;
+      }
+      return false;
+    };
+
+    // Verificar inmediatamente
+    if (checkAndLogout()) return;
+
+    const loginTime = localStorage.getItem('loginTime');
+    if (!loginTime) return;
+
+    const elapsed = Date.now() - parseInt(loginTime);
+    const remaining = eightHours - elapsed;
+
+    // Programar logout exactamente cuando expire (hook único)
+    console.log(`⏰ Sesión expirará en ${Math.floor(remaining / 1000 / 60)} minutos`);
+    const timeoutId = setTimeout(checkAndLogout, remaining);
+
+    // Verificar solo cuando el usuario vuelve a la pestaña (event-driven)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndLogout();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAuthenticated]);
+
+  // Interceptor de Axios para detectar tokens expirados (401/403)
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        const isAuthError =
+          error.response?.status === 401 ||
+          error.response?.status === 403 ||
+          error.response?.data?.errors?.[0]?.message?.toLowerCase().includes('no autenticado');
+
+        if (isAuthError && isAuthenticated) {
+          console.log('🔒 Token expirado detectado por el servidor. Cerrando sesión silenciosamente...');
+          handleLogout();
+        }
+
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, [isAuthenticated]);
 
   return (
     <>

@@ -36,7 +36,7 @@ const serverConfig = {
 
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
 
   // Body parser limits
   bodyLimit: process.env.BODY_LIMIT || '50mb',

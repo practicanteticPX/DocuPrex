@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const fs = require('fs').promises;
 const { query } = require('../database/db');
 const { authenticateUser } = require('../services/ldap');
 const { addCoverPageWithSigners, updateSignersPage } = require('../utils/pdfCoverPage');
@@ -10,6 +11,9 @@ const {
   notificarDocumentoRechazado
 } = require('../services/emailService');
 const pdfLogger = require('../utils/pdfLogger');
+const { generateFacturaTemplatePDF } = require('../utils/pdfFacturaTemplate');
+const { mergePDFs, cleanupTempFiles } = require('../utils/pdfMerger');
+const serverConfig = require('../config/server');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 
@@ -426,6 +430,35 @@ const resolvers = {
       }
     },
 
+    causacionGrupos: async (_, __, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT id, codigo, nombre, descripcion, activo
+        FROM causacion_grupos
+        WHERE activo = true
+        ORDER BY nombre ASC
+      `);
+
+      return result.rows;
+    },
+
+    causacionGrupo: async (_, { codigo }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT id, codigo, nombre, descripcion, activo
+        FROM causacion_grupos
+        WHERE codigo = $1 AND activo = true
+      `, [codigo]);
+
+      if (result.rows.length === 0) {
+        throw new Error('Grupo de causación no encontrado');
+      }
+
+      return result.rows[0];
+    },
+
     availableSigners: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -733,7 +766,10 @@ const resolvers = {
      * @throws {Error} When unauthorized, document not found, completed, or role limit exceeded
      */
     assignSigners: async (_, { documentId, signerAssignments }, { user }) => {
-      const userIds = signerAssignments.map(sa => sa.userId);
+      // Filtrar assignments con userId válido (excluir grupos con userId null)
+      const validAssignments = signerAssignments.filter(sa => sa.userId !== null && sa.userId !== undefined);
+      const userIds = validAssignments.map(sa => sa.userId);
+
       if (!user) throw new Error('No autenticado');
 
       const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
@@ -769,7 +805,7 @@ const resolvers = {
         return { roleIds, roleNames };
       };
 
-      for (const assignment of signerAssignments) {
+      for (const assignment of validAssignments) {
         const { roleIds, roleNames } = normalizeRoles(assignment);
 
         if (roleIds.length > 3 || roleNames.length > 3) {
@@ -791,7 +827,7 @@ const resolvers = {
           [documentId]
         );
 
-        const ownerAssignment = signerAssignments.find(sa => sa.userId === user.id);
+        const ownerAssignment = validAssignments.find(sa => sa.userId === user.id);
         const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
 
         await query(
@@ -823,7 +859,7 @@ const resolvers = {
         const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
 
         for (let i = 0; i < otherUserIds.length; i++) {
-          const assignment = signerAssignments.find(sa => sa.userId === otherUserIds[i]);
+          const assignment = validAssignments.find(sa => sa.userId === otherUserIds[i]);
           const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -853,7 +889,7 @@ const resolvers = {
         const maxPosition = Math.max(...existingSignersResult.rows.map(r => r.order_position));
 
         for (let i = 0; i < userIds.length; i++) {
-          const assignment = signerAssignments.find(sa => sa.userId === userIds[i]);
+          const assignment = validAssignments.find(sa => sa.userId === userIds[i]);
           const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -884,7 +920,7 @@ const resolvers = {
         let startPosition = 1;
 
         if (isOwner && ownerInNewSigners) {
-          const ownerAssignment = signerAssignments.find(sa => sa.userId === user.id);
+          const ownerAssignment = validAssignments.find(sa => sa.userId === user.id);
           const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -914,7 +950,7 @@ const resolvers = {
 
         const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
         for (let i = 0; i < otherUserIds.length; i++) {
-          const assignment = signerAssignments.find(sa => sa.userId === otherUserIds[i]);
+          const assignment = validAssignments.find(sa => sa.userId === otherUserIds[i]);
           const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
 
           await query(
@@ -1070,8 +1106,8 @@ const resolvers = {
         if (docTitleResult.rows.length > 0) {
           const documentTitle = docTitleResult.rows[0].title;
 
-          // Registrar cada asignación
-          for (const assignment of signerAssignments) {
+          // Registrar cada asignación (solo usuarios válidos, no grupos)
+          for (const assignment of validAssignments) {
             const signerResult = await query('SELECT name FROM users WHERE id = $1', [assignment.userId]);
             if (signerResult.rows.length > 0) {
               const signerName = signerResult.rows[0].name;
@@ -1106,7 +1142,7 @@ const resolvers = {
         }
 
         const docInfoResult = await query(
-          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name, dt.code as document_type_code
           FROM documents d
           LEFT JOIN users u ON d.uploaded_by = u.id
           LEFT JOIN document_types dt ON d.document_type_id = dt.id
@@ -1145,9 +1181,47 @@ const resolvers = {
 
         // Construir la ruta completa al archivo PDF
         // file_path ya incluye "uploads/" en su valor
-        const pdfPath = path.join(__dirname, '..', docInfo.file_path);
+        let pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
         console.log(`📂 Ruta del PDF: ${pdfPath}`);
+
+        // ========== GENERAR PDF DEL TEMPLATE DE FACTURA SI APLICA ==========
+        const isFVDocument = docInfo.document_type_code === 'FV';
+        const hasMetadata = docInfo.metadata && typeof docInfo.metadata === 'object' && Object.keys(docInfo.metadata).length > 0;
+
+        if (isFVDocument && hasMetadata && !hasExistingSigners) {
+          try {
+            console.log('📋 Documento FV con metadata detectado, generando PDF de plantilla...');
+
+            const templateData = typeof docInfo.metadata === 'string'
+              ? JSON.parse(docInfo.metadata)
+              : docInfo.metadata;
+
+            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData);
+
+            const templatePdfPath = pdfPath.replace('.pdf', '_template.pdf');
+            await fs.writeFile(templatePdfPath, templatePdfBuffer);
+
+            console.log(`✅ PDF de plantilla generado: ${templatePdfPath}`);
+
+            const originalPdfPath = pdfPath;
+            const mergedPdfPath = pdfPath.replace('.pdf', '_merged.pdf');
+
+            await mergePDFs([templatePdfPath, originalPdfPath], mergedPdfPath);
+
+            console.log(`✅ PDFs fusionados: ${mergedPdfPath}`);
+
+            await fs.unlink(originalPdfPath);
+            await fs.rename(mergedPdfPath, originalPdfPath);
+            await cleanupTempFiles([templatePdfPath]);
+
+            console.log(`✅ PDF original reemplazado con PDF fusionado`);
+
+            pdfPath = originalPdfPath;
+          } catch (templateError) {
+            console.error('❌ Error al generar/fusionar PDF de plantilla:', templateError);
+          }
+        }
 
         // Preparar información del documento para la portada
         const documentInfo = {
@@ -1795,7 +1869,7 @@ const resolvers = {
           // Solo procesar si es un documento de tipo FV y tiene consecutivo
           if (docType.code === 'FV' && doc.consecutivo) {
             const axios = require('axios');
-            const backendHost = process.env.BACKEND_HOST || 'http://localhost:4000';
+            const backendHost = serverConfig.backendUrl;
 
             try {
               await axios.post(
@@ -2058,7 +2132,7 @@ const resolvers = {
           // Solo procesar si es un documento de tipo FV y tiene consecutivo
           if (docData.code === 'FV' && docData.consecutivo) {
             const axios = require('axios');
-            const backendHost = process.env.BACKEND_HOST || 'http://localhost:4000';
+            const backendHost = serverConfig.backendUrl;
 
             try {
               await axios.post(
@@ -2365,7 +2439,7 @@ const resolvers = {
                   console.log('📧 Documento completamente firmado, enviando correo al creador...');
 
                   // Construir URL de descarga usando la ruta de la API
-                  const urlDescarga = `http://192.168.0.30:5001/api/download/${documentId}`;
+                  const urlDescarga = `${serverConfig.backendUrl}/api/download/${documentId}`;
 
                   await notificarDocumentoFirmadoCompleto({
                     emails: [creator.email],
@@ -2458,7 +2532,7 @@ const resolvers = {
           // Solo procesar si es un documento de tipo FV y tiene consecutivo
           if (docData.code === 'FV' && docData.consecutivo) {
             const axios = require('axios');
-            const backendHost = process.env.BACKEND_HOST || 'http://localhost:4000';
+            const backendHost = serverConfig.backendUrl;
 
             // 1. Verificar si el firmante actual pertenece al grupo de Causación
             const signerRoleResult = await query(
@@ -2722,6 +2796,28 @@ const resolvers = {
     orderPosition: (parent) => parent.order_position,
     isRequired: (parent) => parent.is_required,
     createdAt: (parent) => parent.created_at,
+  },
+
+  CausacionGrupo: {
+    miembros: async (parent) => {
+      const result = await query(`
+        SELECT id, grupo_id, user_id, cargo, activo
+        FROM causacion_integrantes
+        WHERE grupo_id = $1 AND activo = true
+        ORDER BY id ASC
+      `, [parent.id]);
+      return result.rows;
+    },
+  },
+
+  CausacionIntegrante: {
+    grupoId: (parent) => parent.grupo_id,
+    userId: (parent) => parent.user_id,
+
+    user: async (parent) => {
+      const result = await query('SELECT * FROM users WHERE id = $1', [parent.user_id]);
+      return result.rows[0];
+    },
   },
 };
 

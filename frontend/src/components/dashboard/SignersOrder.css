@@ -425,15 +425,23 @@
 }
 
 .selected-signer-card.locked {
-  cursor: default;
+  cursor: not-allowed !important;
   border-color: #D1D5DB;
   background: #F3F4F6;
+  user-select: none;
+  opacity: 0.85;
+}
+
+.selected-signer-card.locked * {
+  pointer-events: none !important;
 }
 
 .selected-signer-card.locked:hover {
   border-color: #D1D5DB;
   background: #F3F4F6;
   box-shadow: none;
+  cursor: not-allowed !important;
+  transform: none;
 }
 
 /* Handle de arrastre moderno */

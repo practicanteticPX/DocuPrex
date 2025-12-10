@@ -7,7 +7,7 @@
   right: 0;
   bottom: 0;
   background: white;
-  z-index: 999999999999;
+  z-index: 1000;
   font-family: 'Google Sans', sans-serif;
   overflow: hidden;
   pointer-events: auto;
@@ -332,7 +332,7 @@
   border: 1px solid #D1D5DB;
   border-radius: 0.5rem;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  z-index: 10000;
+  z-index: 1010;
   margin-top: 4px;
   box-sizing: border-box;
   max-height: 160px;
@@ -594,7 +594,7 @@
   border-radius: 8px;
   padding: 12px 16px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  z-index: 10001;
+  z-index: 1020;
   font-size: 0.8125rem;
   line-height: 1.5;
   color: #374151;
@@ -657,5 +657,103 @@
   .factura-table-wrapper {
     margin: 0 -16px;
     border-radius: 0;
+  }
+}
+
+/* Modal de validación */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.modal-content-validation {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: slideUp 0.3s ease-out;
+  text-align: center;
+  position: relative;
+  z-index: 1101;
+}
+
+.modal-icon-container-warning {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #FEE2E2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.modal-validation-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 12px 0;
+}
+
+.modal-validation-message {
+  font-size: 15px;
+  color: #6B7280;
+  line-height: 1.6;
+  margin: 0 0 24px 0;
+  white-space: pre-line;
+}
+
+.modal-actions-single {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.btn-modal-validation-ok {
+  background: #DC2626;
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-modal-validation-ok:hover {
+  background: #B91C1C;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

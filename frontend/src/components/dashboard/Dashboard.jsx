@@ -1523,7 +1523,7 @@ function Dashboard({ user, onLogout }) {
         if (grupoMiembros && Array.isArray(grupoMiembros)) {
           signerData.grupoMiembros = grupoMiembros;
           signerData.esGrupoCausacion = true;
-          console.log(`👥 Grupo ${role}: ${grupoMiembros.length} miembros permitidos`);
+          console.log(`✅ Grupo ${role}: ${grupoMiembros.length} miembros permitidos`);
         }
 
         signerMap.set(key, signerData);
@@ -2193,9 +2193,12 @@ function Dashboard({ user, onLogout }) {
       if (selectedDocumentType) {
         formData.append('documentTypeId', selectedDocumentType.id);
       }
-      // Si es un documento FV, enviar el consecutivo
-      if (selectedDocumentType && selectedDocumentType.code === 'FV' && facturaTemplateData && facturaTemplateData.consecutivo) {
-        formData.append('consecutivo', facturaTemplateData.consecutivo);
+      // Si es un documento FV, enviar el consecutivo y los datos del template
+      if (selectedDocumentType && selectedDocumentType.code === 'FV' && facturaTemplateData) {
+        if (facturaTemplateData.consecutivo) {
+          formData.append('consecutivo', facturaTemplateData.consecutivo);
+        }
+        formData.append('templateData', JSON.stringify(facturaTemplateData));
       }
 
       // Determinar endpoint según número de archivos y opción de unificar
@@ -4722,8 +4725,13 @@ function Dashboard({ user, onLogout }) {
 
                               <div className="selected-signers-container">
                                 {selectedSigners.map((signerItem, index) => {
-                                  // Si es un grupo de Causación, manejar especialmente
+                                  // Si es un grupo de Causación, manejar igual que firmante normal
                                   if (typeof signerItem === 'object' && signerItem.esGrupoCausacion) {
+                                    const groupName = signerItem.nombreGrupo.replace(/[\[\]]/g, '');
+                                    const groupEmail = signerItem.grupoMiembros && signerItem.grupoMiembros.length > 0
+                                      ? signerItem.grupoMiembros[0].email
+                                      : 'grupo@prexxa.com.co';
+
                                     return (
                                       <div
                                         key={`grupo-causacion-${index}`}
@@ -4733,23 +4741,19 @@ function Dashboard({ user, onLogout }) {
                                           {index + 1}
                                         </div>
 
-                                        <div className="signer-avatar-circle" style={{ backgroundColor: '#6366f1' }}>
-                                          <span style={{ fontSize: '1.2rem' }}>👥</span>
+                                        <div className="signer-avatar-circle">
+                                          {getInitials(groupName, groupEmail)}
                                         </div>
 
                                         <div className="signer-info-modern flex-grow">
                                           <p className="signer-name-modern">
-                                            {signerItem.nombreGrupo.replace(/[\[\]]/g, '')}
+                                            {groupName}
                                             {signerItem.roleNames && signerItem.roleNames.length > 0 && (
                                               <span style={{ fontWeight: '400', color: '#374151' }}> - {signerItem.roleNames.join(' / ')}</span>
                                             )}
                                           </p>
-                                          <p className="signer-email-modern">
-                                            {signerItem.grupoMiembros.length} miembros permitidos - Firmará el primero que complete
-                                          </p>
+                                          <p className="signer-email-modern">{groupEmail}</p>
                                         </div>
-
-                                        <span className="lock-icon" title="Grupo de causación - No se puede modificar">🔒</span>
                                       </div>
                                     );
                                   }
@@ -4762,16 +4766,17 @@ function Dashboard({ user, onLogout }) {
                                   const isFromTemplate = typeof signerItem === 'object' && signerItem.fromTemplate === true;
                                   const isFacturaDocument = selectedDocumentType?.code === 'FV';
                                   const canDrag = !uploading && !isCurrentUser && !isFromTemplate && !isFacturaDocument;
+                                  const isLocked = isCurrentUser || isFromTemplate || isFacturaDocument;
 
                                   return (
                                     <div
                                       key={signerId}
-                                      className={`selected-signer-card ${draggedSignerIndex === index ? 'dragging' : ''} ${dragOverSignerIndex === index && draggedSignerIndex !== index ? 'drag-over' : ''} ${isCurrentUser ? 'locked' : ''}`}
+                                      className={`selected-signer-card ${draggedSignerIndex === index ? 'dragging' : ''} ${dragOverSignerIndex === index && draggedSignerIndex !== index ? 'drag-over' : ''} ${isLocked ? 'locked' : ''}`}
                                       draggable={canDrag}
-                                      onDragStart={(e) => handleDragStartSigner(e, index)}
-                                      onDragOver={(e) => handleDragOverSigner(e, index)}
-                                      onDrop={(e) => handleDropSigner(e, index)}
-                                      onDragEnd={handleDragEndSigner}
+                                      onDragStart={canDrag ? (e) => handleDragStartSigner(e, index) : undefined}
+                                      onDragOver={canDrag ? (e) => handleDragOverSigner(e, index) : undefined}
+                                      onDrop={canDrag ? (e) => handleDropSigner(e, index) : undefined}
+                                      onDragEnd={canDrag ? handleDragEndSigner : undefined}
                                     >
                                       <div className="signer-order-badge">
                                         {index + 1}
@@ -6817,12 +6822,12 @@ function Dashboard({ user, onLogout }) {
               <div
                 style={{
                   position: 'relative',
-                  width: '350px',
-                  height: '350px',
+                  width: '300px',
+                  height: '300px',
                   borderRadius: '50%',
                   overflow: 'hidden',
-                  border: '6px solid rgba(255, 255, 255, 0.15)',
-                  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(255, 255, 255, 0.1)',
+                  border: '5px solid rgba(255, 255, 255, 0.15)',
+                  boxShadow: '0 18px 50px rgba(0, 0, 0, 0.35), 0 0 75px rgba(255, 255, 255, 0.1)',
                   transition: 'transform 0.4s ease, box-shadow 0.4s ease'
                 }}
                 onMouseEnter={(e) => {

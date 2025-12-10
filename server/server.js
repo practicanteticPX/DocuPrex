@@ -3,10 +3,10 @@ const { ApolloServer } = require('apollo-server-express');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const helmet = require('helmet');
-// const rateLimit = require('express-rate-limit'); // Deshabilitado para producción con 40 usuarios
 const path = require('path');
 require('dotenv').config();
 
+const serverConfig = require('./config/server');
 const { typeDefs, resolvers } = require('./graphql');
 const uploadRoutes = require('./routes/upload');
 const logsRoutes = require('./routes/logs');
@@ -17,8 +17,8 @@ const { startDocumentCleanupService } = require('./services/documentCleanup');
 const { startReminderService } = require('./services/signatureReminders');
 const { query } = require('./database/db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
-const PORT = process.env.PORT || 5001;
+const JWT_SECRET = serverConfig.jwtSecret;
+const PORT = serverConfig.port;
 
 // Timestamp de inicio del servidor - usado para detectar reinicios
 const SERVER_START_TIME = Date.now();
@@ -55,23 +55,13 @@ async function startServer() {
     frameguard: false // Deshabilitar X-Frame-Options para permitir iframes
   }));
 
-  // Configuración de múltiples orígenes permitidos
-  const allowedOrigins = process.env.FRONTEND_URL
-    ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
-    : [
-        'http://docuprex.com:5173',
-        'http://www.docuprex.com:5173',
-        'http://192.168.0.30:5173',
-        'http://localhost:5173'
-      ];
-
   // CORS con múltiples orígenes
   app.use(cors({
     origin: function (origin, callback) {
       // Permitir requests sin origin (como mobile apps o curl)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      if (serverConfig.corsOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
         console.log('⚠️  Origen bloqueado por CORS:', origin);
@@ -303,8 +293,8 @@ async function startServer() {
 
   // Iniciar servidor
   app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://192.168.0.30:${PORT}`);
-    console.log(`📊 GraphQL disponible en http://192.168.0.30:${PORT}${server.graphqlPath}`);
+    console.log(`🚀 Servidor corriendo en ${serverConfig.backendUrl}`);
+    console.log(`📊 GraphQL disponible en ${serverConfig.backendUrl}${server.graphqlPath}`);
     console.log(`🔐 Autenticación Active Directory configurada`);
     console.log(`   - Host: ${process.env.AD_HOSTNAME || 'No configurado'}`);
     console.log(`   - Protocol: ${process.env.AD_PROTOCOL || 'ldap'}`);

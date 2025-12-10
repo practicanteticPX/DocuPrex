@@ -5,7 +5,8 @@ import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import { Modal } from '../ui/modal';
 import { useCuentasContables, useCentrosCostos, useNegociadores } from '../../hooks';
-import { BACKEND_HOST } from '../../config/api';
+import { BACKEND_HOST, API_URL } from '../../config/api';
+import axios from 'axios';
 import './FacturaTemplate.css';
 
 /**
@@ -822,28 +823,64 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       // 4. Agregar Grupo de Causación (UN SOLO firmante genérico)
       console.log(`📋 Obteniendo grupo de causación: ${grupoCausacion}...`);
-      const causacionResponse = await fetch(`${BACKEND_HOST}/api/facturas/grupos-causacion/${grupoCausacion}`);
-      const causacionData = await causacionResponse.json();
 
-      if (!causacionResponse.ok || !causacionData.success || !causacionData.data || causacionData.data.length === 0) {
-        throw new Error(`No se encontraron miembros del grupo de causación ${grupoCausacion}. Verifique que los usuarios existan en T_Personas.`);
+      const token = localStorage.getItem('token');
+      const causacionResponse = await axios.post(
+        API_URL,
+        {
+          query: `
+            query CausacionGrupo($codigo: String!) {
+              causacionGrupo(codigo: $codigo) {
+                id
+                codigo
+                nombre
+                descripcion
+                activo
+                miembros {
+                  id
+                  userId
+                  cargo
+                  activo
+                  user {
+                    id
+                    name
+                    email
+                  }
+                }
+              }
+            }
+          `,
+          variables: { codigo: grupoCausacion }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!causacionResponse.data?.data?.causacionGrupo || !causacionResponse.data.data.causacionGrupo.miembros || causacionResponse.data.data.causacionGrupo.miembros.length === 0) {
+        throw new Error(`No se encontraron miembros del grupo de causación ${grupoCausacion}. Verifique que los usuarios existan en la tabla causacion_integrantes.`);
       }
 
-      console.log(`✅ Grupo de causación encontrado: ${causacionData.data.length} miembros`);
-      const nombreGrupo = grupoCausacion === 'financiera' ? 'Causación Financiera' : 'Causación Logística';
+      const grupoData = causacionResponse.data.data.causacionGrupo;
+      console.log(`✅ Grupo de causación encontrado: ${grupoData.miembros.length} miembros`);
+
+      // Convertir formato de miembros a formato esperado
+      const miembrosFormateados = grupoData.miembros.map(m => ({
+        nombre: m.user.name,
+        cargo: m.cargo,
+        email: m.user.email
+      }));
 
       // Agregar UN SOLO firmante genérico para el grupo (sin nombre específico)
       // La lista de miembros permitidos se guarda en metadata del documento
       firmantes.push({
-        name: `[${nombreGrupo}]`,  // Nombre genérico del grupo
-        role: nombreGrupo,
+        name: `[${grupoData.nombre}]`,  // Nombre genérico del grupo
+        role: grupoData.nombre,
         cargo: 'Grupo de Causación',
         email: null,
-        grupoMiembros: causacionData.data  // Lista de miembros permitidos para firmar
+        grupoMiembros: miembrosFormateados  // Lista de miembros permitidos para firmar
       });
 
       console.log(`✅ Total de firmantes generados: ${firmantes.length}`);
-      console.log(`📋 Grupo ${nombreGrupo}: ${causacionData.data.length} miembros permitidos`);
+      console.log(`📋 Grupo ${grupoData.nombre}: ${grupoData.miembros.length} miembros permitidos`);
       console.log('📋 Lista de firmantes:', firmantes);
 
       if (onSave) {
@@ -1540,15 +1577,25 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       {/* Modal de validación fuera del overlay */}
       {modalAbierto && (
-        <Modal
-          isOpen={modalAbierto}
-          onClose={() => setModalAbierto(false)}
-          title="Error de Validación"
-        >
-          <div style={{ whiteSpace: 'pre-line' }}>
-            {mensajeError}
+        <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
+          <div className="modal-content-validation" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon-container-warning">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h3 className="modal-validation-title">Completa todos los campos para continuar</h3>
+            <p className="modal-validation-message">{mensajeError}</p>
+            <div className="modal-actions-single">
+              <button
+                className="btn-modal-validation-ok"
+                onClick={() => setModalAbierto(false)}
+              >
+                Entendido
+              </button>
+            </div>
           </div>
-        </Modal>
+        </div>
       )}
     </>
   );

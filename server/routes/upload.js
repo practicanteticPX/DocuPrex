@@ -56,7 +56,7 @@ router.post('/upload', authenticate, (req, res) => {
       });
     }
 
-    const { title, description, documentTypeId, consecutivo } = req.body;
+    const { title, description, documentTypeId, consecutivo, templateData } = req.body;
 
     try {
       // Construir ruta: usuario/archivo.pdf
@@ -65,6 +65,17 @@ router.post('/upload', authenticate, (req, res) => {
 
       // Usar el título proporcionado por el usuario, o el nombre del archivo como fallback
       const docTitle = title?.trim() || path.basename(req.file.originalname, path.extname(req.file.originalname));
+
+      // Parsear templateData si viene como string JSON
+      let parsedMetadata = {};
+      if (templateData) {
+        try {
+          parsedMetadata = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
+        } catch (parseError) {
+          console.error('⚠️ Error al parsear templateData:', parseError);
+          parsedMetadata = {};
+        }
+      }
 
       // Guardar el documento en la base de datos
       const result = await query(
@@ -78,8 +89,9 @@ router.post('/upload', authenticate, (req, res) => {
           status,
           uploaded_by,
           document_type_id,
-          consecutivo
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          consecutivo,
+          metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *`,
         [
           docTitle,
@@ -91,7 +103,8 @@ router.post('/upload', authenticate, (req, res) => {
           'pending',
           req.user.id,
           documentTypeId || null,
-          consecutivo?.trim() || null
+          consecutivo?.trim() || null,
+          JSON.stringify(parsedMetadata)
         ]
       );
 
