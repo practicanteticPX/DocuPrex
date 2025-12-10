@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import { Modal } from '../ui/modal';
 import { useCuentasContables, useCentrosCostos, useNegociadores } from '../../hooks';
+import { BACKEND_HOST } from '../../config/api';
 import './FacturaTemplate.css';
 
 /**
@@ -129,45 +130,39 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
   // Bloquear scroll del body cuando el componente está montado
   useEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-
     const scrollY = window.scrollY;
+    const body = document.body;
+    const html = document.documentElement;
 
-    html.style.overflow = 'hidden';
+    // Guardar estilos originales
+    const originalBodyOverflow = body.style.overflow;
+    const originalHtmlOverflow = html.style.overflow;
+
+    // Bloquear scroll
     body.style.overflow = 'hidden';
-    html.style.position = 'fixed';
+    html.style.overflow = 'hidden';
     body.style.position = 'fixed';
-    html.style.top = `-${scrollY}px`;
     body.style.top = `-${scrollY}px`;
-    html.style.width = '100%';
     body.style.width = '100%';
-    html.style.left = '0';
-    body.style.left = '0';
-    html.style.right = '0';
-    body.style.right = '0';
 
     return () => {
-      html.style.overflow = '';
-      body.style.overflow = '';
-      html.style.position = '';
+      // Restaurar estilos
+      body.style.overflow = originalBodyOverflow;
+      html.style.overflow = originalHtmlOverflow;
       body.style.position = '';
-      html.style.top = '';
       body.style.top = '';
-      html.style.width = '';
       body.style.width = '';
-      html.style.left = '';
-      body.style.left = '';
-      html.style.right = '';
-      body.style.right = '';
 
+      // Restaurar posición de scroll
       window.scrollTo(0, scrollY);
     };
   }, []);
 
-  // Cargar datos automáticos de la factura
+  // Cargar datos automáticos de la factura (solo una vez al montar)
+  const facturaLoadedRef = useRef(false);
+
   useEffect(() => {
-    if (factura) {
+    if (factura && !facturaLoadedRef.current) {
       console.log('📋 Datos de factura recibidos:', factura);
       console.log('📅 fecha_factura:', factura.fecha_factura);
       console.log('📅 fecha_entrega:', factura.fecha_entrega);
@@ -184,6 +179,8 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       setFechaFactura(fechaFacturaFormateada);
       setFechaRecepcion(fechaRecepcionFormateada);
+
+      facturaLoadedRef.current = true;
     }
   }, [factura]);
 
@@ -790,45 +787,64 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
             cargo: cargo || '',
             email: email || null
           });
+          console.log(`✅ Firmante agregado: ${nombre.trim()} - ${rol}`);
         }
       };
 
+      // 1. Agregar Negociador
+      console.log('📋 Agregando Negociador...');
       agregarFirmante(nombreNegociador, 'Negociador', cargoNegociador);
 
-      filasControl.forEach((fila) => {
+      // 2. Agregar Responsables de Cuentas Contables y Centros de Costos
+      console.log('📋 Agregando Responsables de filas de control...');
+      filasControl.forEach((fila, index) => {
+        console.log(`   Fila ${index + 1}:`);
         agregarFirmante(fila.respCuentaContable, 'Resp Cta Cont', fila.cargoCuentaContable);
         agregarFirmante(fila.respCentroCostos, 'Resp Ctro Cost', fila.cargoCentroCostos);
       });
 
-      const negociacionesResponse = await fetch(`${process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000'}/api/facturas/usuario-negociaciones`);
-      if (negociacionesResponse.ok) {
-        const negociacionesData = await negociacionesResponse.json();
-        if (negociacionesData.success && negociacionesData.data) {
-          agregarFirmante(
-            negociacionesData.data.nombre,
-            'Negociaciones',
-            negociacionesData.data.cargo,
-            negociacionesData.data.email
-          );
-        }
+      // 3. Agregar NEGOCIACIONES (OBLIGATORIO)
+      console.log('📋 Obteniendo usuario NEGOCIACIONES...');
+      const negociacionesResponse = await fetch(`${BACKEND_HOST}/api/facturas/usuario-negociaciones`);
+      const negociacionesData = await negociacionesResponse.json();
+
+      if (!negociacionesResponse.ok || !negociacionesData.success || !negociacionesData.data) {
+        throw new Error('No se pudo obtener el usuario NEGOCIACIONES. Este usuario es obligatorio para el flujo de facturas.');
       }
 
-      const causacionResponse = await fetch(`${process.env.REACT_APP_BACKEND_HOST || 'http://localhost:4000'}/api/facturas/grupos-causacion/${grupoCausacion}`);
-      if (causacionResponse.ok) {
-        const causacionData = await causacionResponse.json();
-        if (causacionData.success && causacionData.data && causacionData.data.length > 0) {
-          const nombreGrupo = grupoCausacion === 'financiera' ? 'Causación Financiera' : 'Causación Logística';
+      console.log('✅ Usuario NEGOCIACIONES encontrado:', negociacionesData.data.nombre);
+      agregarFirmante(
+        negociacionesData.data.nombre,
+        'Negociaciones',
+        negociacionesData.data.cargo,
+        negociacionesData.data.email
+      );
 
-          causacionData.data.forEach((miembro) => {
-            agregarFirmante(
-              miembro.nombre,
-              nombreGrupo,
-              miembro.cargo,
-              miembro.email
-            );
-          });
-        }
+      // 4. Agregar Grupo de Causación (UN SOLO firmante genérico)
+      console.log(`📋 Obteniendo grupo de causación: ${grupoCausacion}...`);
+      const causacionResponse = await fetch(`${BACKEND_HOST}/api/facturas/grupos-causacion/${grupoCausacion}`);
+      const causacionData = await causacionResponse.json();
+
+      if (!causacionResponse.ok || !causacionData.success || !causacionData.data || causacionData.data.length === 0) {
+        throw new Error(`No se encontraron miembros del grupo de causación ${grupoCausacion}. Verifique que los usuarios existan en T_Personas.`);
       }
+
+      console.log(`✅ Grupo de causación encontrado: ${causacionData.data.length} miembros`);
+      const nombreGrupo = grupoCausacion === 'financiera' ? 'Causación Financiera' : 'Causación Logística';
+
+      // Agregar UN SOLO firmante genérico para el grupo (sin nombre específico)
+      // La lista de miembros permitidos se guarda en metadata del documento
+      firmantes.push({
+        name: `[${nombreGrupo}]`,  // Nombre genérico del grupo
+        role: nombreGrupo,
+        cargo: 'Grupo de Causación',
+        email: null,
+        grupoMiembros: causacionData.data  // Lista de miembros permitidos para firmar
+      });
+
+      console.log(`✅ Total de firmantes generados: ${firmantes.length}`);
+      console.log(`📋 Grupo ${nombreGrupo}: ${causacionData.data.length} miembros permitidos`);
+      console.log('📋 Lista de firmantes:', firmantes);
 
       if (onSave) {
         onSave({
@@ -847,8 +863,8 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
         });
       }
     } catch (error) {
-      console.error('Error generando firmantes:', error);
-      setMensajeError('Error al generar la lista de firmantes. Por favor intente nuevamente.');
+      console.error('❌ Error generando firmantes:', error);
+      setMensajeError(error.message || 'Error al generar la lista de firmantes. Por favor intente nuevamente.');
       setModalAbierto(true);
     }
   };

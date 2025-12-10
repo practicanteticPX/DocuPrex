@@ -1462,87 +1462,78 @@ function Dashboard({ user, onLogout }) {
 
   /**
    * Extraer firmantes únicos desde los datos de la plantilla de factura
+   * Usa el array 'firmantes' que viene pre-generado desde el template
    * Retorna array de objetos con estructura: { name, cargo, roleIds, roleNames }
    */
   const extractUniqueSignersFromTemplate = (templateData) => {
-    if (!templateData || !availableSigners || availableSigners.length === 0) {
-      console.log('❌ No se pueden extraer firmantes: datos insuficientes');
+    if (!templateData || !templateData.firmantes || !Array.isArray(templateData.firmantes)) {
+      console.log('❌ No se pueden extraer firmantes: array firmantes no encontrado');
       return [];
     }
 
-    const signerMap = new Map();
+    console.log(`📋 Procesando ${templateData.firmantes.length} firmantes de la plantilla...`);
+
+    // Mapeo de roles desde la plantilla a los IDs del sistema
     const roleMapping = {
-      negociador: { id: 8, name: 'Responsable negociaciones' },
-      responsableCuenta: { id: 7, name: 'Responsable cuenta contable' },
-      responsableCentro: { id: 6, name: 'Responsable centro de costos' },
-      causacion: { id: 10, name: 'Causación' }
+      'Negociador': { id: 8, name: 'Negociador' },
+      'Resp Cta Cont': { id: 7, name: 'Resp Cta Cont' },
+      'Resp Ctro Cost': { id: 6, name: 'Resp Ctro Cost' },
+      'Negociaciones': { id: 9, name: 'Negociaciones' },
+      'Causación Financiera': { id: 10, name: 'Causación Financiera' },
+      'Causación Logística': { id: 11, name: 'Causación Logística' }
     };
 
-    // 1. Agregar negociador
-    if (templateData.nombreNegociador && templateData.cargoNegociador) {
-      const negociadorKey = `${templateData.nombreNegociador}|${templateData.cargoNegociador}`;
-      if (!signerMap.has(negociadorKey)) {
-        signerMap.set(negociadorKey, {
-          name: templateData.nombreNegociador,
-          cargo: templateData.cargoNegociador,
-          roleIds: [roleMapping.negociador.id],
-          roleNames: [roleMapping.negociador.name]
-        });
+    // Agrupar firmantes por nombre (un firmante puede tener múltiples roles)
+    const signerMap = new Map();
+
+    templateData.firmantes.forEach((firmante, index) => {
+      const { name, role, cargo, email, grupoMiembros } = firmante;
+
+      if (!name || !role) {
+        console.warn(`⚠️ Firmante ${index + 1} sin nombre o rol:`, firmante);
+        return;
       }
-    }
 
-    // 2. Agregar responsables de cuenta contable y centro de costos desde las filas
-    if (templateData.filasControl && Array.isArray(templateData.filasControl)) {
-      templateData.filasControl.forEach(fila => {
-        // Responsable de cuenta contable
-        if (fila.respCuentaContable && fila.cargoCuentaContable) {
-          const cuentaKey = `${fila.respCuentaContable}|${fila.cargoCuentaContable}`;
-          if (signerMap.has(cuentaKey)) {
-            const existing = signerMap.get(cuentaKey);
-            if (!existing.roleIds.includes(roleMapping.responsableCuenta.id)) {
-              existing.roleIds.push(roleMapping.responsableCuenta.id);
-              existing.roleNames.push(roleMapping.responsableCuenta.name);
-            }
-          } else {
-            signerMap.set(cuentaKey, {
-              name: fila.respCuentaContable,
-              cargo: fila.cargoCuentaContable,
-              roleIds: [roleMapping.responsableCuenta.id],
-              roleNames: [roleMapping.responsableCuenta.name]
-            });
-          }
+      const key = name.trim();
+      const roleInfo = roleMapping[role];
+
+      if (!roleInfo) {
+        console.warn(`⚠️ Rol no reconocido: "${role}" para firmante "${name}"`);
+        return;
+      }
+
+      if (signerMap.has(key)) {
+        // Firmante ya existe, agregar rol adicional
+        const existing = signerMap.get(key);
+        if (!existing.roleIds.includes(roleInfo.id)) {
+          existing.roleIds.push(roleInfo.id);
+          existing.roleNames.push(roleInfo.name);
+        }
+      } else {
+        // Nuevo firmante
+        const signerData = {
+          name: name.trim(),
+          cargo: cargo || '',
+          email: email || null,
+          roleIds: [roleInfo.id],
+          roleNames: [roleInfo.name]
+        };
+
+        // Si es un grupo de Causación, guardar lista de miembros permitidos
+        if (grupoMiembros && Array.isArray(grupoMiembros)) {
+          signerData.grupoMiembros = grupoMiembros;
+          signerData.esGrupoCausacion = true;
+          console.log(`👥 Grupo ${role}: ${grupoMiembros.length} miembros permitidos`);
         }
 
-        // Responsable de centro de costos
-        if (fila.respCentroCostos && fila.cargoCentroCostos) {
-          const centroKey = `${fila.respCentroCostos}|${fila.cargoCentroCostos}`;
-          if (signerMap.has(centroKey)) {
-            const existing = signerMap.get(centroKey);
-            if (!existing.roleIds.includes(roleMapping.responsableCentro.id)) {
-              existing.roleIds.push(roleMapping.responsableCentro.id);
-              existing.roleNames.push(roleMapping.responsableCentro.name);
-            }
-          } else {
-            signerMap.set(centroKey, {
-              name: fila.respCentroCostos,
-              cargo: fila.cargoCentroCostos,
-              roleIds: [roleMapping.responsableCentro.id],
-              roleNames: [roleMapping.responsableCentro.name]
-            });
-          }
-        }
-      });
-    }
+        signerMap.set(key, signerData);
+      }
+    });
 
-    // 3. Agregar grupo de causación
-    // TODO: Implementar cuando se tenga la lista de integrantes del grupo de causación
-    // Por ahora, dejamos espacio para futuro desarrollo
-    if (templateData.grupoCausacion) {
-      console.log(`ℹ️ Grupo de causación seleccionado: ${templateData.grupoCausacion}`);
-      // Aquí se cargarían los integrantes del grupo desde la BD
-    }
+    const result = Array.from(signerMap.values());
+    console.log(`✅ ${result.length} firmantes únicos extraídos con sus roles`);
 
-    return Array.from(signerMap.values());
+    return result;
   };
 
   /**
@@ -1607,6 +1598,21 @@ function Dashboard({ user, onLogout }) {
     const signersToAdd = [];
 
     uniqueSigners.forEach(signerData => {
+      // Si es un grupo de Causación, NO buscar usuario específico
+      if (signerData.esGrupoCausacion) {
+        signersToAdd.push({
+          userId: null,  // Sin usuario asignado hasta que alguien firme
+          roleIds: signerData.roleIds,
+          roleNames: signerData.roleNames,
+          fromTemplate: true,
+          esGrupoCausacion: true,
+          grupoMiembros: signerData.grupoMiembros,  // Lista de miembros permitidos
+          nombreGrupo: signerData.name  // Nombre genérico del grupo
+        });
+        console.log(`✅ Grupo de Causación añadido: "${signerData.name}" con ${signerData.grupoMiembros.length} miembros permitidos`);
+        return;
+      }
+
       // Buscar el usuario usando matching flexible de nombre
       const matchedUser = findUserByNameMatch(signerData.name, availableSigners);
 
@@ -4716,6 +4722,38 @@ function Dashboard({ user, onLogout }) {
 
                               <div className="selected-signers-container">
                                 {selectedSigners.map((signerItem, index) => {
+                                  // Si es un grupo de Causación, manejar especialmente
+                                  if (typeof signerItem === 'object' && signerItem.esGrupoCausacion) {
+                                    return (
+                                      <div
+                                        key={`grupo-causacion-${index}`}
+                                        className="selected-signer-card locked"
+                                      >
+                                        <div className="signer-order-badge">
+                                          {index + 1}
+                                        </div>
+
+                                        <div className="signer-avatar-circle" style={{ backgroundColor: '#6366f1' }}>
+                                          <span style={{ fontSize: '1.2rem' }}>👥</span>
+                                        </div>
+
+                                        <div className="signer-info-modern flex-grow">
+                                          <p className="signer-name-modern">
+                                            {signerItem.nombreGrupo.replace(/[\[\]]/g, '')}
+                                            {signerItem.roleNames && signerItem.roleNames.length > 0 && (
+                                              <span style={{ fontWeight: '400', color: '#374151' }}> - {signerItem.roleNames.join(' / ')}</span>
+                                            )}
+                                          </p>
+                                          <p className="signer-email-modern">
+                                            {signerItem.grupoMiembros.length} miembros permitidos - Firmará el primero que complete
+                                          </p>
+                                        </div>
+
+                                        <span className="lock-icon" title="Grupo de causación - No se puede modificar">🔒</span>
+                                      </div>
+                                    );
+                                  }
+
                                   const signerId = typeof signerItem === 'object' ? signerItem.userId : signerItem;
                                   const signer = availableSigners.find(s => s.id === signerId);
                                   if (!signer) return null;
@@ -7915,10 +7953,12 @@ function Dashboard({ user, onLogout }) {
           onClose={() => {
             setShowFacturaTemplate(false);
             setSelectedFactura(null);
+            setTemplateCompleted(false);
           }}
           onBack={() => {
             setShowFacturaTemplate(false);
             setSelectedFactura(null);
+            setTemplateCompleted(false);
             setActiveStep(0);
             console.log('📍 Volviendo al paso 0 (Buscar factura)...');
           }}

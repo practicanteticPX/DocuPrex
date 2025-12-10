@@ -431,17 +431,17 @@ router.post('/marcar-causado/:numeroControl', async (req, res) => {
 
 /**
  * GET /api/facturas/usuario-negociaciones
- * Obtiene el usuario NEGOCIACIONES de la base de datos
+ * Obtiene el usuario NEGOCIACIONES de la tabla users (DocuPrex)
  */
 router.get('/usuario-negociaciones', async (req, res) => {
   try {
-    const result = await queryFacturas(
-      `SELECT
-        "nombre" as nombre,
-        "cargo" as cargo,
-        "email" as email
-       FROM crud_facturas."T_Personas"
-       WHERE UPPER(TRIM("nombre")) = 'NEGOCIACIONES'
+    // Buscar en la tabla users de PostgreSQL (DocuPrex)
+    const { query } = require('../database/db');
+
+    const result = await query(
+      `SELECT name, email, role
+       FROM users
+       WHERE UPPER(TRIM(name)) = 'NEGOCIACIONES'
        LIMIT 1`,
       []
     );
@@ -449,13 +449,17 @@ router.get('/usuario-negociaciones', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No se encontró el usuario NEGOCIACIONES en T_Personas'
+        message: 'No se encontró el usuario NEGOCIACIONES en la base de datos'
       });
     }
 
     return res.status(200).json({
       success: true,
-      data: result.rows[0]
+      data: {
+        nombre: result.rows[0].name,
+        cargo: result.rows[0].role || 'Usuario del sistema',
+        email: result.rows[0].email
+      }
     });
   } catch (error) {
     console.error('❌ Error obteniendo usuario NEGOCIACIONES:', error);
@@ -470,6 +474,7 @@ router.get('/usuario-negociaciones', async (req, res) => {
 /**
  * GET /api/facturas/grupos-causacion/:grupo
  * Obtiene todos los miembros de un grupo de causación (financiera o logistica)
+ * Busca por coincidencia de nombres en T_Personas
  */
 router.get('/grupos-causacion/:grupo', async (req, res) => {
   try {
@@ -482,29 +487,56 @@ router.get('/grupos-causacion/:grupo', async (req, res) => {
       });
     }
 
-    const nombreGrupo = grupo === 'financiera' ? 'CAUSACION FINANCIERA' : 'CAUSACION LOGISTICA';
+    // Nombres específicos para cada grupo
+    let nombresBuscados = [];
+    let nombreGrupo = '';
 
+    if (grupo === 'financiera') {
+      nombreGrupo = 'CAUSACION FINANCIERA';
+      nombresBuscados = [
+        'Riaño Moncayo Luis Carlos',
+        'Martinez Arias Angelica Johana'
+      ];
+    } else if (grupo === 'logistica') {
+      nombreGrupo = 'CAUSACION LOGISTICA';
+      nombresBuscados = [
+        'Gonzalez Marin Mariana',
+        'Montealegre Castaño Jheison Stiven',
+        'Gonzalez Parra Angel Gabriel'
+      ];
+    }
+
+    // Buscar personas que coincidan con los nombres exactamente
     const result = await queryFacturas(
-      `SELECT
+      `SELECT DISTINCT
         "nombre" as nombre,
-        "cargo" as cargo,
-        "email" as email
+        "cargo" as cargo
        FROM crud_facturas."T_Personas"
-       WHERE UPPER(TRIM("grupo")) = $1
+       WHERE ${nombresBuscados.map((_, i) => `TRIM("nombre") = $${i + 1}`).join(' OR ')}
        ORDER BY "nombre" ASC`,
-      [nombreGrupo]
+      nombresBuscados
     );
+
+    console.log(`🔍 Buscando grupo ${nombreGrupo}, encontrados: ${result.rows.length} miembros`);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: `No se encontraron miembros del grupo ${nombreGrupo}`
+        message: `No se encontraron miembros del grupo ${nombreGrupo}. Buscados: ${nombresBuscados.join(', ')}`,
+        nombresBuscados
       });
     }
 
+    // Agregar email null a cada miembro (T_Personas no tiene email)
+    const dataWithEmail = result.rows.map(row => ({
+      nombre: row.nombre,
+      cargo: row.cargo,
+      email: null
+    }));
+
     return res.status(200).json({
       success: true,
-      data: result.rows,
+      data: dataWithEmail,
       grupo: nombreGrupo
     });
   } catch (error) {

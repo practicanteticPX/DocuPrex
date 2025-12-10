@@ -1780,6 +1780,40 @@ const resolvers = {
         console.error('Error al registrar log de eliminación:', logError);
       }
 
+      // ========== DESMARCAR FACTURA SI ES TIPO FV ==========
+      try {
+        const docTypeResult = await query(
+          `SELECT dt.code
+           FROM document_types dt
+           WHERE dt.id = $1`,
+          [doc.document_type_id]
+        );
+
+        if (docTypeResult.rows.length > 0) {
+          const docType = docTypeResult.rows[0];
+
+          // Solo procesar si es un documento de tipo FV y tiene consecutivo
+          if (docType.code === 'FV' && doc.consecutivo) {
+            const axios = require('axios');
+            const backendHost = process.env.BACKEND_HOST || 'http://localhost:4000';
+
+            try {
+              await axios.post(
+                `${backendHost}/api/facturas/desmarcar-en-proceso/${doc.consecutivo}`,
+                {},
+                { headers: { 'Content-Type': 'application/json' } }
+              );
+              console.log(`✅ Factura ${doc.consecutivo} desmarcada (documento eliminado)`);
+            } catch (desmarcarError) {
+              console.error(`❌ Error al desmarcar factura:`, desmarcarError.message);
+            }
+          }
+        }
+      } catch (facturaError) {
+        console.error('❌ Error al actualizar estados de factura:', facturaError);
+        // No lanzamos el error para que no falle la eliminación
+      }
+
       return true;
     },
 
@@ -2005,6 +2039,41 @@ const resolvers = {
         }
       } catch (updateError) {
         console.error('❌ Error al actualizar página de firmantes:', updateError);
+        // No lanzamos el error para que no falle el rechazo
+      }
+
+      // ========== DESMARCAR FACTURA SI ES TIPO FV ==========
+      try {
+        const docTypeResult = await query(
+          `SELECT dt.code, d.consecutivo
+           FROM documents d
+           LEFT JOIN document_types dt ON d.document_type_id = dt.id
+           WHERE d.id = $1`,
+          [documentId]
+        );
+
+        if (docTypeResult.rows.length > 0) {
+          const docData = docTypeResult.rows[0];
+
+          // Solo procesar si es un documento de tipo FV y tiene consecutivo
+          if (docData.code === 'FV' && docData.consecutivo) {
+            const axios = require('axios');
+            const backendHost = process.env.BACKEND_HOST || 'http://localhost:4000';
+
+            try {
+              await axios.post(
+                `${backendHost}/api/facturas/desmarcar-en-proceso/${docData.consecutivo}`,
+                {},
+                { headers: { 'Content-Type': 'application/json' } }
+              );
+              console.log(`✅ Factura ${docData.consecutivo} desmarcada (documento rechazado)`);
+            } catch (desmarcarError) {
+              console.error(`❌ Error al desmarcar factura:`, desmarcarError.message);
+            }
+          }
+        }
+      } catch (facturaError) {
+        console.error('❌ Error al actualizar estados de factura:', facturaError);
         // No lanzamos el error para que no falle el rechazo
       }
 
@@ -2370,6 +2439,87 @@ const resolvers = {
         }
       } catch (updateError) {
         console.error('❌ Error al actualizar página de firmantes:', updateError);
+        // No lanzamos el error para que no falle la firma
+      }
+
+      // ========== ACTUALIZAR ESTADOS DE FACTURA (si aplica) ==========
+      try {
+        const docTypeResult = await query(
+          `SELECT dt.code, d.consecutivo
+           FROM documents d
+           LEFT JOIN document_types dt ON d.document_type_id = dt.id
+           WHERE d.id = $1`,
+          [documentId]
+        );
+
+        if (docTypeResult.rows.length > 0) {
+          const docData = docTypeResult.rows[0];
+
+          // Solo procesar si es un documento de tipo FV y tiene consecutivo
+          if (docData.code === 'FV' && docData.consecutivo) {
+            const axios = require('axios');
+            const backendHost = process.env.BACKEND_HOST || 'http://localhost:4000';
+
+            // 1. Verificar si el firmante actual pertenece al grupo de Causación
+            const signerRoleResult = await query(
+              `SELECT ds.role_name, ds.role_names
+               FROM document_signers ds
+               WHERE ds.document_id = $1 AND ds.user_id = $2`,
+              [documentId, user.id]
+            );
+
+            if (signerRoleResult.rows.length > 0) {
+              const signerData = signerRoleResult.rows[0];
+
+              // Obtener todos los roles del firmante (manejo de múltiples roles para FV)
+              let signerRoles = [];
+              if (signerData.role_names) {
+                try {
+                  signerRoles = JSON.parse(signerData.role_names);
+                } catch (e) {
+                  signerRoles = [signerData.role_name];
+                }
+              } else if (signerData.role_name) {
+                signerRoles = [signerData.role_name];
+              }
+
+              // Verificar si alguno de sus roles es de Causación
+              const isCausacionRole = signerRoles.some(role =>
+                role && (role.includes('CAUSACION') || role.includes('Causación'))
+              );
+
+              // Si es del grupo de causación, marcar la factura como causada
+              if (isCausacionRole) {
+                try {
+                  await axios.post(
+                    `${backendHost}/api/facturas/marcar-causado/${docData.consecutivo}`,
+                    {},
+                    { headers: { 'Content-Type': 'application/json' } }
+                  );
+                  console.log(`✅ Factura ${docData.consecutivo} marcada como causada (firmó grupo de causación)`);
+                } catch (causError) {
+                  console.error(`❌ Error al marcar factura como causada:`, causError.message);
+                }
+              }
+            }
+
+            // 2. Si el documento está completado, marcar la factura como finalizada
+            if (newStatus === 'completed') {
+              try {
+                await axios.post(
+                  `${backendHost}/api/facturas/marcar-finalizado/${docData.consecutivo}`,
+                  {},
+                  { headers: { 'Content-Type': 'application/json' } }
+                );
+                console.log(`✅ Factura ${docData.consecutivo} marcada como finalizada (documento completado)`);
+              } catch (finError) {
+                console.error(`❌ Error al marcar factura como finalizada:`, finError.message);
+              }
+            }
+          }
+        }
+      } catch (facturaError) {
+        console.error('❌ Error al actualizar estados de factura:', facturaError);
         // No lanzamos el error para que no falle la firma
       }
 

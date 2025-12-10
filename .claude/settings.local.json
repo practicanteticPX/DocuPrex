@@ -38,7 +38,9 @@
       "Bash(npx eslint:*)",
       "Bash(find:*)",
       "Bash(del \"d:\\docuprex_docker\\temp_status_update.md\")",
-      "Bash(del \"d:\\docuprex_docker\\server\\scripts\\add_unique_notification_constraint.sql\")"
+      "Bash(del \"d:\\docuprex_docker\\server\\scripts\\add_unique_notification_constraint.sql\")",
+      "Bash(ls:*)",
+      "Bash(del \"d:\\docuprex_docker\\server\\scripts\\check_personas.js\")"
     ],
     "deny": [],
     "ask": []
