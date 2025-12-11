@@ -489,8 +489,22 @@ function Dashboard({ user, onLogout }) {
   const handleBack = () => {
     setError(''); // Limpiar error al retroceder
 
-    // Si estamos en paso 1, simplemente volver al paso anterior
-    // (Ya NO abrimos automáticamente la plantilla)
+    // Si estamos en paso 0 con un tipo de documento seleccionado,
+    // resetear la selección para volver al selector de tipos
+    if (activeStep === 0 && selectedDocumentType) {
+      setSelectedDocumentType(null);
+      setDocumentTypeRoles([]);
+      setSelectedSigners([]);
+      setTemplateCompleted(false);
+      setFacturaTemplateData(null);
+      setSelectedFactura(null);
+      setDocumentTitle('');
+      setDocumentDescription('');
+      console.log('🔙 Volviendo al selector de tipos de documento');
+      return;
+    }
+
+    // Si estamos en paso 1 o superior, simplemente volver al paso anterior
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
@@ -4983,7 +4997,7 @@ function Dashboard({ user, onLogout }) {
                   <button
                     type="button"
                     className="footer-btn-back"
-                    disabled={activeStep === 0}
+                    disabled={activeStep === 0 && !selectedDocumentType}
                     onClick={handleBack}
                   >
                     Atrás

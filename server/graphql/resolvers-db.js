@@ -1269,10 +1269,20 @@ const resolvers = {
             s.rejected_at,
             s.rejection_reason,
             s.consecutivo,
-            s.real_signer_name
+            s.real_signer_name,
+            signer_user.email as signer_email
           FROM document_signers ds
           LEFT JOIN users u ON ds.user_id = u.id
-          LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+          LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+            (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+            (ds.is_causacion_group = true AND s.signer_id IN (
+              SELECT ci.user_id
+              FROM causacion_integrantes ci
+              JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+              WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+            ))
+          )
+          LEFT JOIN users signer_user ON s.signer_id = signer_user.id
           WHERE ds.document_id = $1
           ORDER BY ds.order_position ASC`,
           [documentId]
@@ -1874,10 +1884,20 @@ const resolvers = {
               s.rejected_at,
               s.rejection_reason,
               s.consecutivo,
-              s.real_signer_name
+              s.real_signer_name,
+              signer_user.email as signer_email
              FROM document_signers ds
              LEFT JOIN users u ON ds.user_id = u.id
-             LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+             LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+               (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+               (ds.is_causacion_group = true AND s.signer_id IN (
+                 SELECT ci.user_id
+                 FROM causacion_integrantes ci
+                 JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                 WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+               ))
+             )
+             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
              WHERE ds.document_id = $1
              ORDER BY ds.order_position ASC`,
             [documentId]

@@ -432,11 +432,20 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         statusTextColor = rgb(0.8, 0.1, 0.1);
       }
 
-      // Construir el nombre del firmante: si tiene real_signer_name, mostrarlo junto al nombre del usuario
+      // Construir el nombre del firmante:
+      // - Si es un grupo de causación firmado, mostrar quien firmó (real_signer_name)
+      // - Si es un grupo pendiente, mostrar solo el nombre del grupo
+      // - Si es un firmante individual con real_signer_name, mostrarlo entre paréntesis
       let signerName = (signer.name || 'Sin nombre').toUpperCase();
-      if (signer.real_signer_name) {
+
+      if (signer.is_causacion_group && signer.status === 'signed' && signer.real_signer_name) {
+        // Para grupos firmados, mostrar quien firmó en lugar del nombre del grupo
+        signerName = signer.real_signer_name.toUpperCase();
+      } else if (!signer.is_causacion_group && signer.real_signer_name) {
+        // Para firmantes individuales, mostrar el nombre con real_signer_name entre paréntesis
         signerName = `${signerName} (${signer.real_signer_name})`;
       }
+
       const maxNameLength = 70;
       const displayName = signerName.length > maxNameLength
         ? signerName.substring(0, maxNameLength) + '...'
@@ -549,16 +558,28 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 18;
       }
 
-      const signerEmail = signer.email || 'No disponible';
-      currentPage.drawText(`${signerEmail}`, {
-        x: margin,
-        y: yPosition,
-        size: 9,
-        font: fontRegular,
-        color: rgb(0.4, 0.4, 0.4),
-      });
+      // Solo mostrar email si:
+      // 1. NO es un grupo de causación pendiente
+      // 2. O si es un grupo pero ya está firmado/rechazado (muestra quien firmó)
+      const isGroupPending = signer.is_causacion_group && signer.status === 'pending';
 
-      yPosition -= 18;
+      // Usar signer_email (quien firmó realmente) si está disponible, sino usar email del firmante
+      const emailToShow = signer.signer_email || signer.email;
+
+      if (!isGroupPending && emailToShow) {
+        currentPage.drawText(`${emailToShow}`, {
+          x: margin,
+          y: yPosition,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.4, 0.4, 0.4),
+        });
+        yPosition -= 18;
+      } else if (!isGroupPending) {
+        // Solo mostrar "No disponible" si NO es un grupo pendiente
+        // (para mantener compatibilidad con firmantes sin email)
+        yPosition -= 0; // No mostrar nada, mantener espacio mínimo
+      }
 
       // Consecutivo (si existe y el documento fue firmado - solo para Legalización de Facturas)
       if (signer.status === 'signed' && signer.consecutivo) {

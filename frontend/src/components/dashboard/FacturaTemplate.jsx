@@ -929,8 +929,8 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       filasControl.forEach((fila, index) => {
         console.log(`   Fila ${index + 1}:`);
-        agregarFirmante(fila.respCuentaContable, roleRespCuentaCont, fila.cargoCuentaContable);
         agregarFirmante(fila.respCentroCostos, roleRespCentroCost, fila.cargoCentroCostos);
+        agregarFirmante(fila.respCuentaContable, roleRespCuentaCont, fila.cargoCuentaContable);
       });
 
       // 3. Agregar NEGOCIACIONES (OBLIGATORIO)
