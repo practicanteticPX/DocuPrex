@@ -214,7 +214,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       size: 10,
       font: fontRegular,
       color: rgb(0.15, 0.15, 0.15),
-      maxWidth: pageWidth - 2 * margin,
+      maxWidth: width - 2 * margin,
     });
 
     yPosition -= 25;

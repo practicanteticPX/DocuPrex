@@ -288,6 +288,8 @@ const resolvers = {
           ds.role_name as "roleName",
           ds.assigned_role_ids as "assignedRoleIds",
           ds.role_names as "roleNames",
+          ds.is_causacion_group as "isCausacionGroup",
+          ds.grupo_codigo as "grupoCodigo",
           u.id as user_id,
           u.name as user_name,
           u.email as user_email,
@@ -306,30 +308,88 @@ const resolvers = {
         ORDER BY ds.order_position ASC
       `, [documentId]);
 
-      return result.rows.map(row => ({
-        userId: row.userId,
-        orderPosition: row.orderPosition,
-        isRequired: row.isRequired,
-        assignedRoleId: row.assignedRoleId,
-        roleName: row.roleName,
-        assignedRoleIds: row.assignedRoleIds || [],
-        roleNames: row.roleNames || [],
-        user: {
-          id: row.user_id,
-          name: row.user_name,
-          email: row.user_email
-        },
-        signature: (row.signature_id && row.signature_status) ? {
-          id: row.signature_id,
-          status: row.signature_status,
-          signedAt: row.signature_signed_at || null,
-          rejectedAt: row.signature_rejected_at || null,
-          rejectionReason: row.signature_rejection_reason || null,
-          consecutivo: row.signature_consecutivo || null,
-          realSignerName: row.signature_real_signer_name || null,
-          createdAt: row.signature_created_at || null
-        } : null
-      }));
+      const expandedSigners = [];
+
+      for (const row of result.rows) {
+        if (row.isCausacionGroup && row.grupoCodigo) {
+          // Expandir grupo de causación en sus miembros
+          const membersResult = await query(`
+            SELECT
+              ci.user_id,
+              u.id,
+              u.name,
+              u.email,
+              s.id as signature_id,
+              s.status as signature_status,
+              s.signed_at as signature_signed_at,
+              s.rejected_at as signature_rejected_at,
+              s.rejection_reason as signature_rejection_reason,
+              s.consecutivo as signature_consecutivo,
+              s.real_signer_name as signature_real_signer_name,
+              s.created_at as signature_created_at
+            FROM causacion_integrantes ci
+            LEFT JOIN users u ON ci.user_id = u.id
+            LEFT JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+            LEFT JOIN signatures s ON s.document_id = $1 AND s.signer_id = ci.user_id
+            WHERE cg.codigo = $2 AND ci.activo = true
+          `, [documentId, row.grupoCodigo]);
+
+          for (const member of membersResult.rows) {
+            expandedSigners.push({
+              userId: member.user_id,
+              orderPosition: row.orderPosition,
+              isRequired: row.isRequired,
+              assignedRoleId: row.assignedRoleId,
+              roleName: row.roleName,
+              assignedRoleIds: row.assignedRoleIds || [],
+              roleNames: row.roleNames || [],
+              user: {
+                id: member.id,
+                name: member.name,
+                email: member.email
+              },
+              signature: (member.signature_id && member.signature_status) ? {
+                id: member.signature_id,
+                status: member.signature_status,
+                signedAt: member.signature_signed_at || null,
+                rejectedAt: member.signature_rejected_at || null,
+                rejectionReason: member.signature_rejection_reason || null,
+                consecutivo: member.signature_consecutivo || null,
+                realSignerName: member.signature_real_signer_name || null,
+                createdAt: member.signature_created_at || null
+              } : null
+            });
+          }
+        } else {
+          // Firmante individual
+          expandedSigners.push({
+            userId: row.userId,
+            orderPosition: row.orderPosition,
+            isRequired: row.isRequired,
+            assignedRoleId: row.assignedRoleId,
+            roleName: row.roleName,
+            assignedRoleIds: row.assignedRoleIds || [],
+            roleNames: row.roleNames || [],
+            user: {
+              id: row.user_id,
+              name: row.user_name,
+              email: row.user_email
+            },
+            signature: (row.signature_id && row.signature_status) ? {
+              id: row.signature_id,
+              status: row.signature_status,
+              signedAt: row.signature_signed_at || null,
+              rejectedAt: row.signature_rejected_at || null,
+              rejectionReason: row.signature_rejection_reason || null,
+              consecutivo: row.signature_consecutivo || null,
+              realSignerName: row.signature_real_signer_name || null,
+              createdAt: row.signature_created_at || null
+            } : null
+          });
+        }
+      }
+
+      return expandedSigners;
     },
 
     mySignatures: async (_, __, { user }) => {
@@ -434,7 +494,7 @@ const resolvers = {
       if (!user) throw new Error('No autenticado');
 
       const result = await query(`
-        SELECT id, codigo, nombre, descripcion, activo
+        SELECT id, codigo, nombre, descripcion, activo, role_code as "roleCode"
         FROM causacion_grupos
         WHERE activo = true
         ORDER BY nombre ASC
@@ -447,7 +507,7 @@ const resolvers = {
       if (!user) throw new Error('No autenticado');
 
       const result = await query(`
-        SELECT id, codigo, nombre, descripcion, activo
+        SELECT id, codigo, nombre, descripcion, activo, role_code as "roleCode"
         FROM causacion_grupos
         WHERE codigo = $1 AND activo = true
       `, [codigo]);
@@ -1145,7 +1205,7 @@ const resolvers = {
           const documentTitle = docTitleResult.rows[0].title;
 
           // Registrar cada asignación (solo usuarios válidos, no grupos)
-          for (const assignment of validAssignments) {
+          for (const assignment of userAssignments) {
             const signerResult = await query('SELECT name FROM users WHERE id = $1', [assignment.userId]);
             if (signerResult.rows.length > 0) {
               const signerName = signerResult.rows[0].name;

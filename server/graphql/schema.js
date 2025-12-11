@@ -156,6 +156,7 @@ const typeDefs = gql`
     nombre: String!
     descripcion: String
     activo: Boolean!
+    roleCode: String
     miembros: [CausacionIntegrante!]!
   }
 

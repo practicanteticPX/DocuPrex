@@ -64,6 +64,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
   const [fvRoles, setFvRoles] = useState(null);
   const [loadingRoles, setLoadingRoles] = useState(true);
 
+  // Estados para grupos de causación dinámicos desde la BD
+  const [causacionGrupos, setCausacionGrupos] = useState([]);
+  const [loadingGrupos, setLoadingGrupos] = useState(true);
+
   // Estados para campos automáticos desde T_Facturas
   const [consecutivo, setConsecutivo] = useState('');
   const [proveedor, setProveedor] = useState('');
@@ -229,6 +233,49 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
     };
 
     cargarRolesFV();
+  }, []);
+
+  // Cargar grupos de causación dinámicamente desde la BD
+  useEffect(() => {
+    const cargarGruposCausacion = async () => {
+      console.log('🔍 Iniciando carga de grupos de causación...');
+      try {
+        const token = localStorage.getItem('token');
+        console.log('🔑 Token obtenido:', token ? 'Presente' : 'Ausente');
+
+        const gruposResponse = await axios.post(
+          API_URL,
+          {
+            query: `
+              query {
+                causacionGrupos {
+                  id
+                  codigo
+                  nombre
+                  descripcion
+                  roleCode
+                  activo
+                }
+              }
+            `
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        console.log('📦 Respuesta completa de GraphQL:', gruposResponse.data);
+        const grupos = gruposResponse.data?.data?.causacionGrupos || [];
+        console.log('✅ Grupos de causación cargados desde BD:', grupos);
+        console.log('📊 Cantidad de grupos:', grupos.length);
+        setCausacionGrupos(grupos);
+        setLoadingGrupos(false);
+      } catch (error) {
+        console.error('❌ Error cargando grupos de causación:', error);
+        console.error('❌ Detalles del error:', error.response?.data || error.message);
+        setLoadingGrupos(false);
+      }
+    };
+
+    cargarGruposCausacion();
   }, []);
 
   // Cargar datos automáticos de la factura (solo una vez al montar)
@@ -919,6 +966,7 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
                 nombre
                 descripcion
                 activo
+                roleCode
                 miembros {
                   id
                   userId
@@ -952,19 +1000,24 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
         email: m.user.email
       }));
 
-      // Agregar UN SOLO firmante genérico para el grupo (sin nombre específico)
+      // Agregar UN SOLO firmante genérico para el grupo
       // La lista de miembros permitidos se guarda en metadata del documento
-      const roleCausacion = grupoCausacion === 'financiera'
-        ? (fvRoles['CAUSACION_FINANCIERA']?.roleName || 'Causación Financiera')
-        : (fvRoles['CAUSACION_LOGISTICA']?.roleName || 'Causación Logística');
+      // Usar el rol "Causación" genérico desde la BD (no los específicos de cada grupo)
+      if (!fvRoles || !fvRoles['CAUSACION']) {
+        console.error('❌ Rol CAUSACION no encontrado en fvRoles');
+        console.error('fvRoles disponibles:', Object.keys(fvRoles || {}));
+        throw new Error('El rol CAUSACION no existe en los roles de FV. Verifique la tabla document_type_roles.');
+      }
+
+      const roleCausacion = fvRoles['CAUSACION'].roleName;  // "Causación" desde BD
 
       firmantes.push({
-        name: `[${grupoData.nombre}]`,  // Nombre genérico del grupo
-        role: roleCausacion,
+        name: `[${grupoData.nombre}]`,  // Nombre del grupo: [Financiera] o [Logística]
+        role: roleCausacion,  // Rol genérico: "Causación" (desde BD)
         cargo: 'Grupo de Causación',
         email: null,
-        grupoCodigo: grupoCausacion,  // Código del grupo: 'financiera' o 'logistica'
-        grupoMiembros: miembrosFormateados  // Lista de miembros permitidos para firmar
+        grupoCodigo: grupoCausacion,  // Código: 'financiera' o 'logistica'
+        grupoMiembros: miembrosFormateados  // Lista de miembros permitidos
       });
 
       console.log(`✅ Total de firmantes generados: ${firmantes.length}`);
@@ -1604,31 +1657,31 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
             </p>
 
             <div className="factura-checklist-grid">
-              <div
-                className="factura-checklist-item"
-                onClick={() => setGrupoCausacion('financiera')}
-              >
-                <div className="factura-checklist-label">
-                  <Checkbox
-                    checked={grupoCausacion === 'financiera'}
-                    onCheckedChange={() => {}}
-                  />
-                  <span className="factura-checklist-text">Financiera</span>
+              {loadingGrupos ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                  Cargando grupos de causación...
                 </div>
-              </div>
-
-              <div
-                className="factura-checklist-item"
-                onClick={() => setGrupoCausacion('logistica')}
-              >
-                <div className="factura-checklist-label">
-                  <Checkbox
-                    checked={grupoCausacion === 'logistica'}
-                    onCheckedChange={() => {}}
-                  />
-                  <span className="factura-checklist-text">Logística</span>
+              ) : causacionGrupos.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#ff6b6b' }}>
+                  No se encontraron grupos de causación. Verifique la configuración.
                 </div>
-              </div>
+              ) : (
+                causacionGrupos.map(grupo => (
+                  <div
+                    key={grupo.codigo}
+                    className="factura-checklist-item"
+                    onClick={() => setGrupoCausacion(grupo.codigo)}
+                  >
+                    <div className="factura-checklist-label">
+                      <Checkbox
+                        checked={grupoCausacion === grupo.codigo}
+                        onCheckedChange={() => {}}
+                      />
+                      <span className="factura-checklist-text">{grupo.nombre}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

@@ -109,11 +109,11 @@ async function generateFacturaTemplatePDF(templateData) {
     yPosition -= 25;
 
     const facturaFields = [
-      { label: 'Consecutivo:', value: templateData.consecutivo || '' },
-      { label: 'Proveedor:', value: templateData.proveedor || '' },
-      { label: 'Número de Factura:', value: templateData.numeroFactura || '' },
-      { label: 'Fecha de Factura:', value: templateData.fechaFactura || '' },
-      { label: 'Fecha de Recepción:', value: templateData.fechaRecepcion || '' }
+      { label: 'Consecutivo:', value: String(templateData.consecutivo || '') },
+      { label: 'Proveedor:', value: String(templateData.proveedor || '') },
+      { label: 'Número de Factura:', value: String(templateData.numeroFactura || '') },
+      { label: 'Fecha de Factura:', value: String(templateData.fechaFactura || '') },
+      { label: 'Fecha de Recepción:', value: String(templateData.fechaRecepcion || '') }
     ];
 
     for (const field of facturaFields) {
@@ -210,8 +210,8 @@ async function generateFacturaTemplatePDF(templateData) {
     yPosition -= 25;
 
     const negociadorFields = [
-      { label: 'Nombre:', value: templateData.nombreNegociador || '' },
-      { label: 'Cargo:', value: templateData.cargoNegociador || '' }
+      { label: 'Nombre:', value: String(templateData.nombreNegociador || '') },
+      { label: 'Cargo:', value: String(templateData.cargoNegociador || '') }
     ];
 
     for (const field of negociadorFields) {
@@ -314,13 +314,13 @@ async function generateFacturaTemplatePDF(templateData) {
         yPosition -= 20;
 
         const controlFields = [
-          { label: 'No. Cuenta Contable:', value: fila.noCuentaContable || '' },
-          { label: 'Nombre Cuenta:', value: fila.nombreCuentaContable || '' },
-          { label: 'Resp. Cuenta Contable:', value: fila.respCuentaContable || '' },
-          { label: 'Cargo:', value: fila.cargoCuentaContable || '' },
-          { label: 'Centro de Costos:', value: fila.centroCostos || '' },
-          { label: 'Resp. Centro de Costos:', value: fila.respCentroCostos || '' },
-          { label: 'Cargo Centro:', value: fila.cargoCentroCostos || '' },
+          { label: 'No. Cuenta Contable:', value: String(fila.noCuentaContable || '') },
+          { label: 'Nombre Cuenta:', value: String(fila.nombreCuentaContable || '') },
+          { label: 'Resp. Cuenta Contable:', value: String(fila.respCuentaContable || '') },
+          { label: 'Cargo:', value: String(fila.cargoCuentaContable || '') },
+          { label: 'Centro de Costos:', value: String(fila.centroCostos || '') },
+          { label: 'Resp. Centro de Costos:', value: String(fila.respCentroCostos || '') },
+          { label: 'Cargo Centro:', value: String(fila.cargoCentroCostos || '') },
           { label: 'Porcentaje:', value: fila.porcentaje ? `${fila.porcentaje}%` : '' }
         ];
 

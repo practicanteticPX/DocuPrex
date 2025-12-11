@@ -426,8 +426,10 @@ function Dashboard({ user, onLogout }) {
     if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'FV') {
       const signersWithoutRoles = selectedSigners.filter(s => {
         if (typeof s === 'object') {
-          const hasRoles = s.roleIds && s.roleIds.length > 0;
-          return !hasRoles;
+          // Aceptar tanto roleIds como roleNames (para firmantes de plantilla)
+          const hasRoleIds = s.roleIds && s.roleIds.length > 0;
+          const hasRoleNames = s.roleNames && s.roleNames.length > 0;
+          return !hasRoleIds && !hasRoleNames;
         }
         return true; // Si es solo ID, no tiene roles
       });
@@ -641,10 +643,10 @@ function Dashboard({ user, onLogout }) {
         let documentState = 'viewer'; // Por defecto, solo visor
         let canSignOrReject = false;
 
-        if (currentUserSigner && currentUserSigner.signature) {
-          const sigStatus = currentUserSigner.signature.status;
+        if (currentUserSigner) {
+          const sigStatus = currentUserSigner.signature?.status;
 
-          if (sigStatus === 'pending') {
+          if (!sigStatus || sigStatus === 'pending') {
             // Verificar si es el turno del usuario
             // El usuario puede firmar si todos los anteriores ya firmaron
             const previousSigners = signers.filter(
@@ -691,7 +693,8 @@ function Dashboard({ user, onLogout }) {
         } else {
           // Abrir el documento con el estado determinado
           console.log('✅ Abriendo documento desde URL con estado:', documentState);
-          handleViewDocument(doc, canSignOrReject);
+          // Pasar false en isWaiting ya que no está en estado 'waiting' (eso se maneja en el if anterior)
+          handleViewDocument(doc, canSignOrReject, false);
           setIsCheckingDocumentFromUrl(false);
           // Limpiar la URL después de abrir el documento
           setTimeout(() => {
@@ -1593,7 +1596,7 @@ function Dashboard({ user, onLogout }) {
           roleNames: signerData.roleNames,
           fromTemplate: true,
           esGrupoCausacion: true,
-          grupoCodigo: signerData.grupoCodigo,  // Código del grupo: 'financiera' o 'logistica'
+          grupoCodigo: signerData.grupoCodigo,  // Código del grupo (cargado desde BD)
           grupoMiembros: signerData.grupoMiembros,  // Lista de miembros permitidos
           nombreGrupo: signerData.name  // Nombre genérico del grupo
         });
@@ -2783,10 +2786,10 @@ function Dashboard({ user, onLogout }) {
         // Buscar la información del firmante actual
         const currentUserSigner = signers.find(s => s.userId === user?.id);
 
-        if (currentUserSigner && currentUserSigner.signature) {
-          const sigStatus = currentUserSigner.signature.status;
+        if (currentUserSigner) {
+          const sigStatus = currentUserSigner.signature?.status;
 
-          if (sigStatus === 'pending') {
+          if (!sigStatus || sigStatus === 'pending') {
             // Verificar si es el turno del usuario
             // El usuario puede firmar si todos los anteriores ya firmaron
             const previousSigners = signers.filter(
@@ -5303,14 +5306,36 @@ function Dashboard({ user, onLogout }) {
                                 const currentUserSigner = signers.find(s => s.userId === user.id);
                                 let isWaiting = false;
 
-                                if (currentUserSigner && currentUserSigner.signature?.status === 'pending') {
-                                  const previousSigners = signers.filter(
-                                    s => s.orderPosition < currentUserSigner.orderPosition
-                                  );
-                                  const allPreviousSigned = previousSigners.every(
-                                    s => s.signature && s.signature.status === 'signed'
-                                  );
-                                  isWaiting = !allPreviousSigned;
+                                console.log('🔍 Validación de orden de firma:');
+                                console.log('   - Usuario actual:', user.name, '(ID:', user.id, ')');
+                                console.log('   - Firmantes del documento:', signers);
+                                console.log('   - Firmante actual:', currentUserSigner);
+
+                                if (currentUserSigner) {
+                                  const signatureStatus = currentUserSigner.signature?.status;
+                                  const isPending = !signatureStatus || signatureStatus === 'pending';
+
+                                  console.log('   - Signature status:', signatureStatus);
+                                  console.log('   - Is pending?:', isPending);
+
+                                  if (isPending) {
+                                    const previousSigners = signers.filter(
+                                      s => s.orderPosition < currentUserSigner.orderPosition
+                                    );
+                                    const allPreviousSigned = previousSigners.every(
+                                      s => s.signature && s.signature.status === 'signed'
+                                    );
+                                    isWaiting = !allPreviousSigned;
+
+                                    console.log('   - Posición actual:', currentUserSigner.orderPosition);
+                                    console.log('   - Firmantes anteriores:', previousSigners);
+                                    console.log('   - Todos firmaron?:', allPreviousSigned);
+                                    console.log('   - ✅ isWaiting:', isWaiting);
+                                  } else {
+                                    console.log('   - Ya firmó o rechazó el documento');
+                                  }
+                                } else {
+                                  console.log('   - ❌ Usuario no es firmante de este documento');
                                 }
 
                                 handleViewDocument(doc, true, isWaiting);

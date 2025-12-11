@@ -42,7 +42,8 @@
       "Bash(ls:*)",
       "Bash(del \"d:\\docuprex_docker\\server\\scripts\\check_personas.js\")",
       "Bash(del \"d:\\docuprex_docker\\server\\scripts\\test_causacion_query.js\")",
-      "Bash(del test_causacion.js)"
+      "Bash(del test_causacion.js)",
+      "Bash(del:*)"
     ],
     "deny": [],
     "ask": []
