@@ -66,12 +66,24 @@ async function generateFacturaTemplatePDF(templateData) {
       });
 
       if (checked) {
-        page.drawText('✓', {
-          x: x + 2,
-          y: y - size + 2,
-          size: 10,
-          font: fontBold,
-          color: rgb(1, 1, 1)
+        // Dibujar checkmark con líneas (compatible con todas las fuentes)
+        const checkColor = rgb(1, 1, 1);
+        const lineWidth = 2;
+
+        // Línea 1 del checkmark: diagonal corta hacia abajo-derecha
+        page.drawLine({
+          start: { x: x + 3, y: y - size / 2 },
+          end: { x: x + size / 2 - 1, y: y - size + 3 },
+          thickness: lineWidth,
+          color: checkColor
+        });
+
+        // Línea 2 del checkmark: diagonal larga hacia arriba-derecha
+        page.drawLine({
+          start: { x: x + size / 2 - 1, y: y - size + 3 },
+          end: { x: x + size - 2, y: y - 3 },
+          thickness: lineWidth,
+          color: checkColor
         });
       }
     };

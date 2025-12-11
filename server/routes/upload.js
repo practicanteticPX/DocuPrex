@@ -64,7 +64,9 @@ router.post('/upload', authenticate, (req, res) => {
       const relativePath = `uploads/${normalizedUserName}/${req.file.filename}`;
 
       // Usar el título proporcionado por el usuario, o el nombre del archivo como fallback
-      const docTitle = title?.trim() || path.basename(req.file.originalname, path.extname(req.file.originalname));
+      // Limpiar espacios extra: trim + reemplazar múltiples espacios por uno solo
+      let docTitle = title?.trim() || path.basename(req.file.originalname, path.extname(req.file.originalname));
+      docTitle = docTitle.replace(/\s+/g, ' '); // Reemplazar múltiples espacios por uno solo
 
       // Parsear templateData si viene como string JSON
       let parsedMetadata = {};

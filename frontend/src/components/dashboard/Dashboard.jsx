@@ -2190,11 +2190,14 @@ function Dashboard({ user, onLogout }) {
       let finalTitle;
       if (selectedDocumentType?.code === 'FV' && facturaTemplateData) {
         // Para FV, generar título automático: FV - {proveedor} - {numero_factura}
-        finalTitle = `FV - ${facturaTemplateData.proveedor} - ${facturaTemplateData.numeroFactura}`;
+        // Limpiar espacios extra del proveedor y número de factura
+        const proveedor = (facturaTemplateData.proveedor?.trim() || '').replace(/\s+/g, ' ');
+        const numeroFactura = (facturaTemplateData.numeroFactura?.trim() || '').replace(/\s+/g, ' ');
+        finalTitle = `FV - ${proveedor} - ${numeroFactura}`;
       } else if (selectedDocumentType) {
-        finalTitle = `${selectedDocumentType.prefix} ${documentTitle.trim()}`;
+        finalTitle = `${selectedDocumentType.prefix} ${documentTitle.trim()}`.replace(/\s+/g, ' ');
       } else {
-        finalTitle = documentTitle.trim();
+        finalTitle = documentTitle.trim().replace(/\s+/g, ' ');
       }
       formData.append('title', finalTitle);
       if (documentDescription.trim()) {
