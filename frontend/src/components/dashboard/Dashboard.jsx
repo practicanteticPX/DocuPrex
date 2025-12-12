@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import './Dashboard.css';
 import './Dashboard.overrides.css';
@@ -10,6 +11,7 @@ import Notifications from './Notifications';
 import DocumentTypeSelector from './DocumentTypeSelector';
 import FacturaSearch from './FacturaSearch';
 import FacturaTemplate from './FacturaTemplate';
+import LoadingScreen from './LoadingScreen';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
@@ -2353,6 +2355,11 @@ function Dashboard({ user, onLogout }) {
         // Mostrar animación de carga
         setShowCreationLoader(true);
 
+        // Ocultar LoadingScreen después de que DocumentCreationLoader esté montado
+        setTimeout(() => {
+          setUploading(false);
+        }, 300);
+
         // Después de 3 segundos (duración de la animación), ocultar loader y mostrar éxito
         setTimeout(() => {
           setShowCreationLoader(false);
@@ -2391,7 +2398,6 @@ function Dashboard({ user, onLogout }) {
         err.message ||
         'Error al subir el documento. Por favor intenta nuevamente.'
       );
-    } finally {
       setUploading(false);
     }
   };
@@ -3842,12 +3848,16 @@ function Dashboard({ user, onLogout }) {
   }
 
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-background">
-        <div className="gradient-circle circle-1"></div>
-        <div className="gradient-circle circle-2"></div>
-        <div className="gradient-circle circle-3"></div>
-      </div>
+    <>
+      <AnimatePresence>
+        {uploading && <LoadingScreen />}
+      </AnimatePresence>
+      <div className="dashboard-container">
+        <div className="dashboard-background">
+          <div className="gradient-circle circle-1"></div>
+          <div className="gradient-circle circle-2"></div>
+          <div className="gradient-circle circle-3"></div>
+        </div>
 
       <div className="dashboard-content">
         <div className="ds-shell">
@@ -8033,6 +8043,7 @@ function Dashboard({ user, onLogout }) {
       )}
 
     </div>
+    </>
   );
 }
 
