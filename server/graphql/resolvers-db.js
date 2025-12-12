@@ -17,6 +17,112 @@ const serverConfig = require('../config/server');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 
+/**
+ * Helper: Obtener firmas de un documento tipo FV
+ * Retorna un objeto con el mapeo: { 'nombre_persona': 'nombre_firmante' }
+ * Usa el templateData para hacer matching correcto de nombres
+ */
+async function obtenerFirmasDocumento(documentId, templateData = null) {
+  try {
+    // Si no se pasa templateData, obtenerlo del documento
+    if (!templateData) {
+      const docResult = await query(
+        'SELECT metadata FROM documents WHERE id = $1',
+        [documentId]
+      );
+      if (docResult.rows.length > 0 && docResult.rows[0].metadata) {
+        templateData = typeof docResult.rows[0].metadata === 'string'
+          ? JSON.parse(docResult.rows[0].metadata)
+          : docResult.rows[0].metadata;
+      }
+    }
+
+    const result = await query(
+      `SELECT
+        ds.user_id,
+        u.name as user_name,
+        u.email,
+        s.real_signer_name,
+        s.status as signature_status
+       FROM document_signers ds
+       JOIN users u ON u.id = ds.user_id
+       LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+       WHERE ds.document_id = $1
+         AND ds.is_causacion_group = FALSE
+         AND s.status = 'signed'
+       ORDER BY ds.order_position ASC`,
+      [documentId]
+    );
+
+    const firmas = {};
+
+    // Helper para normalizar nombres
+    const normalizarNombre = (nombre) => {
+      if (!nombre) return '';
+      return nombre.trim().toUpperCase().replace(/\s+/g, ' ');
+    };
+
+    // Helper para verificar si dos nombres coinciden
+    const nombresCoinciden = (nombre1, nombre2) => {
+      const n1 = normalizarNombre(nombre1);
+      const n2 = normalizarNombre(nombre2);
+
+      if (n1 === n2) return true;
+
+      const words1 = n1.split(' ').filter(w => w.length > 2);
+      const words2 = n2.split(' ').filter(w => w.length > 2);
+
+      let matchCount = 0;
+      words1.forEach(w1 => {
+        if (words2.some(w2 => w2.includes(w1) || w1.includes(w2))) {
+          matchCount++;
+        }
+      });
+
+      return matchCount >= 2;
+    };
+
+    // Para cada firmante que ha firmado
+    result.rows.forEach(row => {
+      // Usar SIEMPRE el nombre de la tabla users (ej: "Juliet Acevedo")
+      const nombreFirmante = row.user_name;
+
+      // Agregar por nombre de usuario directo
+      firmas[row.user_name] = nombreFirmante;
+
+      // Si tenemos templateData, buscar coincidencias
+      if (templateData) {
+        // Verificar si es el negociador
+        if (templateData.nombreNegociador && nombresCoinciden(row.user_name, templateData.nombreNegociador)) {
+          firmas[templateData.nombreNegociador] = nombreFirmante;
+        }
+
+        // Verificar en las filas de control
+        if (templateData.filasControl && Array.isArray(templateData.filasControl)) {
+          templateData.filasControl.forEach(fila => {
+            // Responsable de Cuenta Contable
+            if (fila.respCuentaContable && nombresCoinciden(row.user_name, fila.respCuentaContable)) {
+              firmas[fila.respCuentaContable] = nombreFirmante;
+            }
+
+            // Responsable de Centro de Costos
+            if (fila.respCentroCostos && nombresCoinciden(row.user_name, fila.respCentroCostos)) {
+              firmas[fila.respCentroCostos] = nombreFirmante;
+            }
+          });
+        }
+      }
+    });
+
+    console.log(`📝 Firmas encontradas para documento ${documentId}:`, Object.keys(firmas).length);
+    console.log(`📋 Keys de firmas:`, Object.keys(firmas));
+    return firmas;
+  } catch (error) {
+    console.error('❌ Error al obtener firmas:', error);
+    return {};
+  }
+}
+
 const resolvers = {
   Query: {
     me: async (_, __, { user }) => {
@@ -2119,9 +2225,12 @@ const resolvers = {
           [parsedTemplateData, documentId]
         );
 
+        // Obtener firmas actuales del documento
+        const firmasActuales = await obtenerFirmasDocumento(documentId, parsedTemplateData);
+
         // Regenerar PDF con Puppeteer
         console.log('🔄 Regenerando PDF con nueva plantilla...');
-        const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData);
+        const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales);
 
         // Guardar planilla en archivo temporal
         const fs = require('fs').promises;
@@ -3136,6 +3245,122 @@ const resolvers = {
           'UPDATE documents SET status = $1 WHERE id = $2',
           [newStatus, documentId]
         );
+      }
+
+      // ========== REGENERAR PLANTILLA FV CON FIRMAS ACTUALIZADAS ==========
+      try {
+        const docInfoResult = await query(
+          `SELECT d.id, d.title, d.metadata, d.file_path, d.file_name, d.created_at, d.original_pdf_backup, dt.code as document_type_code
+           FROM documents d
+           LEFT JOIN document_types dt ON d.document_type_id = dt.id
+           WHERE d.id = $1`,
+          [documentId]
+        );
+
+        if (docInfoResult.rows.length > 0) {
+          const docInfo = docInfoResult.rows[0];
+          const isFVDocument = docInfo.document_type_code === 'FV';
+          const hasMetadata = docInfo.metadata && typeof docInfo.metadata === 'object' && Object.keys(docInfo.metadata).length > 0;
+
+          if (isFVDocument && hasMetadata) {
+            console.log('📋 Regenerando plantilla FV con firmas actualizadas...');
+
+            const templateData = typeof docInfo.metadata === 'string'
+              ? JSON.parse(docInfo.metadata)
+              : docInfo.metadata;
+
+            // Obtener firmas actuales
+            const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
+
+            // Regenerar plantilla con firmas
+            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales);
+
+            // Guardar en archivo temporal
+            const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
+            await fs.mkdir(tempDir, { recursive: true });
+            const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
+            await fs.writeFile(tempPlanillaPath, templatePdfBuffer);
+
+            // Obtener ruta del PDF actual
+            const relativePath = docInfo.file_path.replace(/^uploads\//, '');
+            const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
+
+            // Verificar backups
+            let backupFilePaths = [];
+            if (docInfo.original_pdf_backup) {
+              try {
+                const backupPathsArray = JSON.parse(docInfo.original_pdf_backup);
+                for (const relPath of backupPathsArray) {
+                  const backupRelativePath = relPath.replace(/^uploads\//, '');
+                  const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+                  await fs.access(backupFullPath);
+                  backupFilePaths.push(backupFullPath);
+                }
+              } catch (error) {
+                console.warn('⚠️ No se pudieron cargar backups:', error.message);
+                backupFilePaths = [];
+              }
+            }
+
+            // Fusionar: plantilla + backups
+            const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
+            const filesToMerge = [tempPlanillaPath, ...backupFilePaths];
+            await mergePDFs(filesToMerge, tempMergedPath);
+
+            // Agregar informe de firmantes
+            const signersForCover = await query(
+              `SELECT
+                ds.user_id,
+                ds.order_position,
+                ds.role_name,
+                ds.role_names,
+                ds.is_causacion_group,
+                ds.grupo_codigo,
+                u.name as user_name,
+                u.email,
+                COALESCE(s.status, 'pending') as status
+               FROM document_signers ds
+               LEFT JOIN users u ON ds.user_id = u.id
+               LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+               WHERE ds.document_id = $1
+               ORDER BY ds.order_position ASC`,
+              [documentId]
+            );
+
+            const signers = signersForCover.rows.map(row => ({
+              name: row.is_causacion_group ? row.grupo_codigo : row.user_name,
+              email: row.email,
+              order_position: row.order_position,
+              role_name: row.role_name,
+              role_names: row.role_names,
+              status: row.status,
+              is_causacion_group: row.is_causacion_group,
+              grupo_codigo: row.grupo_codigo
+            }));
+
+            const documentInfoForCover = {
+              title: docInfo.title || 'Factura',
+              fileName: docInfo.file_name || '',
+              createdAt: docInfo.created_at,
+              uploadedBy: 'Sistema',
+              documentTypeName: 'Factura'
+            };
+
+            await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
+
+            // Reemplazar archivo original
+            await fs.copyFile(tempMergedPath, currentPdfPath);
+
+            // Limpiar temporales
+            await fs.unlink(tempPlanillaPath);
+            await fs.unlink(tempMergedPath);
+
+            console.log('✅ Plantilla FV regenerada con firmas actualizadas');
+          }
+        }
+      } catch (regenerateError) {
+        console.error('❌ Error al regenerar plantilla FV:', regenerateError);
+        // No lanzamos error para no interrumpir el flujo de firma
       }
 
       // ========== GESTIONAR NOTIFICACIONES INTERNAS ==========

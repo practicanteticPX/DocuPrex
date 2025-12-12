@@ -6,9 +6,10 @@ const { generateFacturaHTML } = require('./facturaTemplateHTML');
  * Renderiza HTML que replica EXACTAMENTE el formulario web
  * Página más grande para que se vea TODO completo
  * @param {Object} templateData - Datos del template de factura
+ * @param {Object} firmas - Objeto con firmas: { 'nombre_persona': 'nombre_firmante' }
  * @returns {Promise<Buffer>} PDF generado con el template
  */
-async function generateFacturaTemplatePDF(templateData) {
+async function generateFacturaTemplatePDF(templateData, firmas = {}) {
   let browser = null;
 
   try {
@@ -25,7 +26,8 @@ async function generateFacturaTemplatePDF(templateData) {
       nombreNegociador: templateData.nombreNegociador || '',
       cargoNegociador: templateData.cargoNegociador || '',
       filasControl: templateData.filasControl || [],
-      totalPorcentaje: templateData.totalPorcentaje || 0
+      totalPorcentaje: templateData.totalPorcentaje || 0,
+      firmas: firmas
     });
 
     browser = await puppeteer.launch({

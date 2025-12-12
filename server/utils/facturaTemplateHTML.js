@@ -15,7 +15,8 @@ function generateFacturaHTML(data) {
     nombreNegociador = '',
     cargoNegociador = '',
     filasControl = [],
-    totalPorcentaje = 0
+    totalPorcentaje = 0,
+    firmas = {} // Objeto con las firmas: { 'nombre_persona': 'nombre_firmante' }
   } = data;
 
   // Usar checklistRevision si existe, si no usar condiciones (compatibilidad)
@@ -43,7 +44,11 @@ function generateFacturaHTML(data) {
   const total = calcularTotal();
   const totalOk = Math.abs(total - 100) < 0.01;
 
-  const filasHTML = filasControl.map(fila => `
+  const filasHTML = filasControl.map(fila => {
+    const firmaCuentaContable = firmas[fila.respCuentaContable] || '';
+    const firmaCentroCostos = firmas[fila.respCentroCostos] || '';
+
+    return `
     <tr>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content">${fila.noCuentaContable || ''}</div>
@@ -53,6 +58,9 @@ function generateFacturaHTML(data) {
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content">${fila.cargoCuentaContable || ''}</div>
+      </td>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
+        <div class="cell-content-firma">${firmaCuentaContable}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content">${fila.nombreCuentaContable || ''}</div>
@@ -67,10 +75,14 @@ function generateFacturaHTML(data) {
         <div class="cell-content">${fila.cargoCentroCostos || ''}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
+        <div class="cell-content-firma">${firmaCentroCostos}</div>
+      </td>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content">${fila.porcentaje || ''}</div>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return `
 <!DOCTYPE html>
@@ -79,7 +91,7 @@ function generateFacturaHTML(data) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Planilla Control Factura</title>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&family=Great+Vibes&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -126,6 +138,12 @@ function generateFacturaHTML(data) {
       gap: 10px;
     }
 
+    .factura-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
     .factura-field {
       display: flex;
       flex-direction: column;
@@ -150,6 +168,24 @@ function generateFacturaHTML(data) {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .ui-input-firma {
+      padding: 7px 10px;
+      border: 1px solid #D1D5DB;
+      border-radius: 4px;
+      font-size: 16px;
+      font-family: 'Great Vibes', cursive;
+      font-weight: 400;
+      font-style: normal;
+      color: #1F2937;
+      background: #E5E7EB;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-height: 34px;
+      display: flex;
+      align-items: center;
     }
 
     .factura-field-checkbox-simple {
@@ -291,6 +327,24 @@ function generateFacturaHTML(data) {
       align-items: center;
     }
 
+    .cell-content-firma {
+      font-size: 14px;
+      font-family: 'Great Vibes', cursive;
+      font-weight: 400;
+      font-style: normal;
+      color: #1F2937;
+      padding: 5px 8px;
+      border: 1px solid #D1D5DB;
+      border-radius: 4px;
+      background: #F9FAFB;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-height: 26px;
+      display: flex;
+      align-items: center;
+    }
+
     .factura-total-section {
       display: flex;
       justify-content: flex-end;
@@ -404,7 +458,7 @@ function generateFacturaHTML(data) {
     <!-- Información del Negociador -->
     <div class="factura-section">
       <h2 class="factura-section-title">Información del Negociador</h2>
-      <div class="factura-grid-2">
+      <div class="factura-grid-3">
         <div class="factura-field">
           <label class="factura-label">Nombre Negociador</label>
           <input type="text" value="${nombreNegociador}" class="ui-input" readonly title="${nombreNegociador}" />
@@ -412,6 +466,10 @@ function generateFacturaHTML(data) {
         <div class="factura-field">
           <label class="factura-label">Cargo Negociador</label>
           <input type="text" value="${cargoNegociador}" class="ui-input" readonly title="${cargoNegociador}" />
+        </div>
+        <div class="factura-field">
+          <label class="factura-label">Firma</label>
+          <div class="ui-input-firma">${firmas[nombreNegociador] || ''}</div>
         </div>
       </div>
     </div>
@@ -426,10 +484,12 @@ function generateFacturaHTML(data) {
               <th>No. Cta<br/>Contable</th>
               <th>Resp. Cta<br/>Contable</th>
               <th>Cargo Resp<br/>Cta Contable</th>
+              <th>Firma</th>
               <th>Cta Contable</th>
               <th>C.Co</th>
               <th>Resp. C.Co</th>
               <th>Cargo Resp.<br/>C.Co</th>
+              <th>Firma</th>
               <th>% C.Co</th>
             </tr>
           </thead>
