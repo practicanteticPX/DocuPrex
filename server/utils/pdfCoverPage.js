@@ -57,11 +57,11 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     const watermarkWidth = fontBold.widthOfTextAtSize(watermarkText, watermarkSize);
 
     // Color de la marca de agua según estado
-    let watermarkColor = rgb(1, 0.93, 0.60); // Gris muy claro para PENDIENTE
+    let watermarkColor = rgb(0.9, 0.9, 0.9); // Gris muy claro para PENDIENTE
     if (documentStatus === 'FIRMADO') {
       watermarkColor = rgb(0.72, 0.94, 0.82); // Verde muy claro
     } else if (documentStatus === 'RECHAZADO') {
-      watermarkColor = rgb(0.96, 0.72, 0.72); // Rojo muy claro
+      watermarkColor = rgb(0.9, 0.9, 0.9); // Gris muy claro
     }
 
     // Dibujar marca de agua centrada y rotada 45 grados
@@ -230,11 +230,11 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 16;
 
-    let statusColor = rgb(0.5, 0.5, 0.5);
+    let statusColor = rgb(0.4, 0.4, 0.4);
     if (documentStatus === 'FIRMADO') {
       statusColor = rgb(0.13, 0.59, 0.25);
     } else if (documentStatus === 'RECHAZADO') {
-      statusColor = rgb(0.8, 0.1, 0.1);
+      statusColor = rgb(0.4, 0.4, 0.4);
     }
 
     coverPage.drawText(documentStatus, {
@@ -420,7 +420,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       let statusText = 'Firma pendiente';
       let statusBadgeColor = rgb(0.95, 0.95, 0.95);
-      let statusTextColor = rgb(0.3, 0.3, 0.3);
+      let statusTextColor = rgb(0.4, 0.4, 0.4);
 
       if (signer.status === 'signed') {
         statusText = 'Firmado';
@@ -428,8 +428,8 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         statusTextColor = rgb(0.13, 0.59, 0.25);
       } else if (signer.status === 'rejected') {
         statusText = 'Rechazado';
-        statusBadgeColor = rgb(0.98, 0.85, 0.85);
-        statusTextColor = rgb(0.8, 0.1, 0.1);
+        statusBadgeColor = rgb(0.95, 0.95, 0.95);
+        statusTextColor = rgb(0.4, 0.4, 0.4);
       }
 
       // Construir el nombre del firmante:

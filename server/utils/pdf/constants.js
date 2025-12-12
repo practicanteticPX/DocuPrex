@@ -43,18 +43,18 @@ const COLORS = {
 
   // Colores de estado (texto)
   SIGNED: rgb(0.0, 0.5, 0.0),      // Verde oscuro
-  PENDING: rgb(0.8, 0.6, 0.0),     // Naranja oscuro
-  REJECTED: rgb(0.8, 0.0, 0.0),    // Rojo oscuro
+  PENDING: rgb(0.4, 0.4, 0.4),     // Gris oscuro
+  REJECTED: rgb(0.4, 0.4, 0.4),    // Gris oscuro
 
   // Colores de marca de agua (transparentes)
   WATERMARK_SIGNED: rgb(0.72, 0.94, 0.82),    // Verde muy claro
-  WATERMARK_PENDING: rgb(1, 0.93, 0.60),      // Amarillo muy claro
-  WATERMARK_REJECTED: rgb(0.96, 0.72, 0.72),  // Rojo muy claro
+  WATERMARK_PENDING: rgb(0.9, 0.9, 0.9),      // Gris muy claro
+  WATERMARK_REJECTED: rgb(0.9, 0.9, 0.9),     // Gris muy claro
 
   // Colores de fondo
   BG_SIGNED: rgb(0.9, 0.97, 0.93),      // Verde muy claro
-  BG_PENDING: rgb(0.98, 0.96, 0.88),    // Amarillo muy claro
-  BG_REJECTED: rgb(0.98, 0.9, 0.9),     // Rojo muy claro
+  BG_PENDING: rgb(0.95, 0.95, 0.95),    // Gris muy claro
+  BG_REJECTED: rgb(0.95, 0.95, 0.95),   // Gris muy claro
 
   // Color de encabezado de tabla
   TABLE_HEADER: rgb(0.95, 0.95, 0.95)
