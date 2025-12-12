@@ -34,6 +34,7 @@ const typeDefs = gql`
     documentType: DocumentType
     documentTypeId: Int
     consecutivo: String
+    templateData: String
     createdAt: String!
     updatedAt: String!
     completedAt: String
@@ -121,6 +122,12 @@ const typeDefs = gql`
   }
 
   type UploadResponse {
+    success: Boolean!
+    message: String!
+    document: Document
+  }
+
+  type UpdateFacturaTemplateResponse {
     success: Boolean!
     message: String!
     document: Document
@@ -226,6 +233,7 @@ const typeDefs = gql`
     assignSigners(documentId: Int!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
     removeSigner(documentId: Int!, userId: Int!): Boolean!
     reorderSigners(documentId: Int!, newOrder: [Int!]!): Boolean!
+    updateFacturaTemplate(documentId: Int!, templateData: String!): UpdateFacturaTemplateResponse!
 
     # Firmas
     signDocument(documentId: Int!, signatureData: String!, consecutivo: String, realSignerName: String): Signature!

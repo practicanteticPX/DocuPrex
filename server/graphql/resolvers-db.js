@@ -2032,6 +2032,224 @@ const resolvers = {
     },
 
     /**
+     * Actualiza la plantilla de factura de un documento existente
+     * BUSINESS RULE: Solo el creador puede editar
+     * BUSINESS RULE: Solo si nadie más ha firmado (autofirma no cuenta)
+     * WORKFLOW:
+     * 1. Verificar permisos
+     * 2. Actualizar templateData en BD
+     * 3. Regenerar PDF con Puppeteer
+     * 4. Actualizar firmantes (añadir/eliminar según cambios)
+     * 5. Enviar notificaciones a nuevos firmantes
+     * 6. Eliminar notificaciones de firmantes eliminados
+     */
+    updateFacturaTemplate: async (_, { documentId, templateData }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const client = await pool.connect();
+
+      try {
+        await client.query('BEGIN');
+
+        // Verificar que el documento existe y el usuario es el creador
+        const docResult = await client.query(
+          'SELECT * FROM documents WHERE id = $1',
+          [documentId]
+        );
+
+        if (docResult.rows.length === 0) {
+          throw new Error('Documento no encontrado');
+        }
+
+        const doc = docResult.rows[0];
+
+        if (doc.uploaded_by !== user.id) {
+          throw new Error('Solo el creador del documento puede editar la planilla');
+        }
+
+        // Verificar que nadie más ha firmado
+        const signaturesResult = await client.query(
+          `SELECT s.* FROM signatures s
+           JOIN users u ON s.user_id = u.id
+           WHERE s.document_id = $1 AND s.status = 'signed' AND s.user_id != $2`,
+          [documentId, user.id]
+        );
+
+        if (signaturesResult.rows.length > 0) {
+          throw new Error('No puedes editar la planilla porque ya hay firmas de otros usuarios');
+        }
+
+        // Parsear templateData
+        const parsedTemplateData = JSON.parse(templateData);
+        console.log('📝 Actualizando template para documento:', documentId);
+
+        // Actualizar templateData en la BD
+        await client.query(
+          'UPDATE documents SET template_data = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [templateData, documentId]
+        );
+
+        // Regenerar PDF con Puppeteer
+        const { generateFacturaTemplatePDF } = require('../utils/pdfFacturaTemplate');
+        const fs = require('fs').promises;
+        const path = require('path');
+
+        console.log('🔄 Regenerando PDF con nueva plantilla...');
+        const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData);
+
+        // Guardar PDF (reemplazar el existente)
+        const relativePath = doc.file_path.replace(/^uploads\//, '');
+        const filePath = path.join(__dirname, '..', 'uploads', relativePath);
+        await fs.writeFile(filePath, pdfBuffer);
+        console.log('✅ PDF regenerado correctamente');
+
+        // Obtener firmantes actuales
+        const currentSignersResult = await client.query(
+          'SELECT * FROM signatures WHERE document_id = $1',
+          [documentId]
+        );
+        const currentSigners = currentSignersResult.rows;
+
+        // Procesar firmantes de la nueva plantilla
+        const newFirmantes = parsedTemplateData.firmantes || [];
+
+        // Crear un mapa de firmantes actuales por email
+        const currentSignersMap = new Map(
+          currentSigners.map(s => [s.user_id, s])
+        );
+
+        // Obtener usuarios de los nuevos firmantes
+        const newSignersEmails = newFirmantes.map(f => f.email);
+        const newSignersResult = await client.query(
+          'SELECT id, email FROM users WHERE email = ANY($1)',
+          [newSignersEmails]
+        );
+        const newSignersMap = new Map(
+          newSignersResult.rows.map(u => [u.email, u.id])
+        );
+
+        // Identificar firmantes a añadir y eliminar
+        const newSignerIds = new Set();
+        for (const firmante of newFirmantes) {
+          const userId = newSignersMap.get(firmante.email);
+          if (userId) {
+            newSignerIds.add(userId);
+          }
+        }
+
+        const currentSignerIds = new Set(currentSigners.map(s => s.user_id));
+
+        // Firmantes a eliminar (están en current pero no en new)
+        const signersToRemove = [...currentSignerIds].filter(id => !newSignerIds.has(id));
+
+        // Firmantes a añadir (están en new pero no en current)
+        const signersToAdd = [...newSignerIds].filter(id => !currentSignerIds.has(id));
+
+        // Eliminar firmantes que ya no están
+        if (signersToRemove.length > 0) {
+          await client.query(
+            'DELETE FROM signatures WHERE document_id = $1 AND user_id = ANY($2)',
+            [documentId, signersToRemove]
+          );
+
+          // Eliminar notificaciones de esos firmantes
+          await client.query(
+            'DELETE FROM notifications WHERE document_id = $1 AND user_id = ANY($2)',
+            [documentId, signersToRemove]
+          );
+
+          console.log(`🗑️ Eliminados ${signersToRemove.length} firmantes`);
+        }
+
+        // Añadir nuevos firmantes
+        const { createNotification } = require('../services/notificationService');
+        const emailService = require('../services/emailService');
+
+        for (let i = 0; i < newFirmantes.length; i++) {
+          const firmante = newFirmantes[i];
+          const userId = newSignersMap.get(firmante.email);
+
+          if (!userId) continue;
+
+          if (signersToAdd.includes(userId)) {
+            // Crear signature
+            const roleNames = (firmante.roles || []).map(r => r.nombre).join(' / ');
+            const orderPosition = i + 1;
+
+            await client.query(
+              `INSERT INTO signatures (document_id, user_id, status, order_position, role_name)
+               VALUES ($1, $2, 'pending', $3, $4)`,
+              [documentId, userId, orderPosition, roleNames || null]
+            );
+
+            // Crear notificación
+            await createNotification({
+              userId: userId,
+              documentId: documentId,
+              type: 'signature_request',
+              message: `Nuevo documento requiere tu firma: ${doc.title}`
+            });
+
+            // Enviar correo (solo si tiene notificaciones habilitadas)
+            try {
+              const userResult = await client.query(
+                'SELECT name, email, email_notifications_enabled FROM users WHERE id = $1',
+                [userId]
+              );
+              if (userResult.rows.length > 0) {
+                const signerUser = userResult.rows[0];
+                if (signerUser.email_notifications_enabled) {
+                  await emailService.sendSignatureRequestEmail({
+                    email: signerUser.email,
+                    name: signerUser.name
+                  }, doc, user.name);
+                  console.log(`📧 Correo enviado a: ${signerUser.email}`);
+                } else {
+                  console.log(`⏭️ Notificaciones desactivadas para: ${signerUser.email}`);
+                }
+              }
+            } catch (emailError) {
+              console.error('Error enviando correo:', emailError);
+            }
+
+            console.log(`➕ Añadido firmante: ${firmante.nombre} (${firmante.email})`);
+          } else {
+            // Actualizar order_position y role_name de firmantes existentes
+            const roleNames = (firmante.roles || []).map(r => r.nombre).join(' / ');
+            const orderPosition = i + 1;
+
+            await client.query(
+              `UPDATE signatures
+               SET order_position = $1, role_name = $2
+               WHERE document_id = $3 AND user_id = $4`,
+              [orderPosition, roleNames || null, documentId, userId]
+            );
+          }
+        }
+
+        await client.query('COMMIT');
+
+        console.log('✅ Plantilla actualizada exitosamente');
+
+        return {
+          success: true,
+          message: 'Plantilla actualizada correctamente',
+          document: {
+            id: documentId,
+            templateData: templateData
+          }
+        };
+
+      } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('❌ Error actualizando plantilla:', error);
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    /**
      * Rejects a document with a reason, halting the signing workflow
      *
      * BUSINESS RULE: Signer must be next in sequential order to reject (same as signing).

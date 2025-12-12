@@ -99,6 +99,8 @@ function Dashboard({ user, onLogout }) {
   const [selectedFactura, setSelectedFactura] = useState(null);
   const [facturaTemplateData, setFacturaTemplateData] = useState(null);
   const [templateCompleted, setTemplateCompleted] = useState(false); // Flag para mostrar form de metadatos después de plantilla
+  const [editingDocument, setEditingDocument] = useState(null); // Documento en edición
+  const [isEditMode, setIsEditMode] = useState(false); // Flag para modo edición
   const [showRejectSuccess, setShowRejectSuccess] = useState(false);
   const [showSignSuccess, setShowSignSuccess] = useState(false);
   const [showOrderError, setShowOrderError] = useState(false);
@@ -1126,6 +1128,12 @@ function Dashboard({ user, onLogout }) {
                 totalSigners
                 signedCount
                 pendingCount
+                uploadedBy {
+                  id
+                  name
+                  email
+                }
+                templateData
                 documentType {
                   id
                   code
@@ -3072,6 +3080,140 @@ function Dashboard({ user, onLogout }) {
     setConfirmDeleteOpen(false);
     setDeleteDocId(null);
     setDeleteDocTitle('');
+  };
+
+  /**
+   * Verificar si el usuario puede editar la planilla de factura
+   * Condiciones:
+   * 1. El usuario es el creador del documento
+   * 2. Solo el creador ha firmado (autofirma) o nadie ha firmado
+   */
+  const canEditFacturaTemplate = (doc) => {
+    if (!doc || !doc.documentType || doc.documentType.code !== 'FV') {
+      return false;
+    }
+
+    // Verificar que el usuario es el creador
+    const isCreator = doc.uploadedBy && (
+      doc.uploadedBy.email === user?.email ||
+      doc.uploadedBy.id === user?.id
+    );
+
+    if (!isCreator) {
+      return false;
+    }
+
+    // Verificar que nadie más que el creador ha firmado
+    const signaturesFromOthers = (doc.signatures || []).filter(sig => {
+      return sig.status === 'signed' &&
+             sig.signer &&
+             sig.signer.email !== user?.email &&
+             sig.signer.id !== user?.id;
+    });
+
+    return signaturesFromOthers.length === 0;
+  };
+
+  /**
+   * Abrir modal para editar planilla de factura
+   */
+  const handleEditFacturaTemplate = (doc) => {
+    console.log('📝 Abriendo edición de planilla para documento:', doc.id);
+
+    // Parsear templateData si existe
+    let parsedTemplateData = null;
+    if (doc.templateData) {
+      try {
+        parsedTemplateData = typeof doc.templateData === 'string'
+          ? JSON.parse(doc.templateData)
+          : doc.templateData;
+      } catch (err) {
+        console.error('Error parseando templateData:', err);
+        showNotif('Error', 'No se pudo cargar los datos de la plantilla', 'error');
+        return;
+      }
+    }
+
+    setEditingDocument(doc);
+    setIsEditMode(true);
+    setFacturaTemplateData(parsedTemplateData);
+    setShowFacturaTemplate(true);
+  };
+
+  /**
+   * Guardar edición de planilla de factura
+   */
+  const handleSaveEditedTemplate = async (updatedTemplateData) => {
+    if (!editingDocument) {
+      console.error('No hay documento en edición');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const token = localStorage.getItem('token');
+
+      console.log('💾 Guardando edición de planilla:', updatedTemplateData);
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation UpdateFacturaTemplate($documentId: Int!, $templateData: String!) {
+              updateFacturaTemplate(documentId: $documentId, templateData: $templateData) {
+                success
+                message
+                document {
+                  id
+                  templateData
+                }
+              }
+            }
+          `,
+          variables: {
+            documentId: parseInt(editingDocument.id),
+            templateData: JSON.stringify(updatedTemplateData)
+          }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const result = response.data.data.updateFacturaTemplate;
+      if (!result.success) {
+        throw new Error(result.message || 'Error al actualizar la plantilla');
+      }
+
+      // Mostrar animación de carga
+      setShowCreationLoader(true);
+
+      // Ocultar LoadingScreen después de que DocumentCreationLoader esté montado
+      setTimeout(() => {
+        setUploading(false);
+      }, 300);
+
+      // Después de 3 segundos, ocultar loader y mostrar éxito
+      setTimeout(async () => {
+        setShowCreationLoader(false);
+        setShowFacturaTemplate(false);
+        setIsEditMode(false);
+        setEditingDocument(null);
+        setFacturaTemplateData(null);
+
+        showNotif('Éxito', 'Planilla actualizada correctamente', 'success');
+
+        // Recargar documentos
+        await loadMyDocuments();
+      }, 3000);
+
+    } catch (err) {
+      console.error('Error al guardar edición:', err);
+      showNotif('Error', err.message || 'No se pudo guardar la edición', 'error');
+      setUploading(false);
+    }
   };
 
   /**
@@ -6046,6 +6188,19 @@ function Dashboard({ user, onLogout }) {
                                 <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                             </button>
+                            {canEditFacturaTemplate(doc) && (
+                              <button
+                                className="btn-action-clean"
+                                onClick={() => handleEditFacturaTemplate(doc)}
+                                title="Editar planilla"
+                                style={{marginTop: '-1.5vw'}}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </button>
+                            )}
                             <button
                               className="btn-action-clean"
                               onClick={() => handleDeleteDocument(doc.id, doc.title)}
@@ -8022,23 +8177,28 @@ function Dashboard({ user, onLogout }) {
       />
 
       {/* Modal de plantilla de factura */}
-      {showFacturaTemplate && selectedFactura && (
+      {showFacturaTemplate && (selectedFactura || editingDocument) && (
         <FacturaTemplate
-          factura={selectedFactura}
+          factura={isEditMode ? editingDocument : selectedFactura}
           savedData={facturaTemplateData}
+          isEditMode={isEditMode}
           onClose={() => {
             setShowFacturaTemplate(false);
             setSelectedFactura(null);
+            setEditingDocument(null);
+            setIsEditMode(false);
             setTemplateCompleted(false);
           }}
           onBack={() => {
             setShowFacturaTemplate(false);
             setSelectedFactura(null);
+            setEditingDocument(null);
+            setIsEditMode(false);
             setTemplateCompleted(false);
             setActiveStep(0);
             console.log('📍 Volviendo al paso 0 (Buscar factura)...');
           }}
-          onSave={handleFacturaTemplateSave}
+          onSave={isEditMode ? handleSaveEditedTemplate : handleFacturaTemplateSave}
         />
       )}
 

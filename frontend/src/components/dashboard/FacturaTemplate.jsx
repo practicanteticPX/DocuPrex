@@ -51,11 +51,12 @@ const CHECKLIST_TOOLTIPS = {
  *
  * @param {Object} factura - Datos de la factura desde T_Facturas
  * @param {Object} savedData - Datos previamente guardados de la plantilla (para edición)
+ * @param {Boolean} isEditMode - Indica si estamos en modo edición
  * @param {Function} onClose - Callback al cerrar el modal
  * @param {Function} onBack - Callback al volver al paso anterior (buscar factura)
  * @param {Function} onSave - Callback al guardar los datos
  */
-const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
+const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSave }) => {
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
   const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
   const { negociadores, loading: loadingNegociadores } = useNegociadores();
@@ -278,11 +279,11 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
     cargarGruposCausacion();
   }, []);
 
-  // Cargar datos automáticos de la factura (solo una vez al montar)
+  // Cargar datos automáticos de la factura (solo una vez al montar y solo si NO estamos en modo edición)
   const facturaLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (factura && !facturaLoadedRef.current) {
+    if (factura && !facturaLoadedRef.current && !isEditMode) {
       console.log('📋 Datos de factura recibidos:', factura);
       console.log('📅 fecha_factura:', factura.fecha_factura);
       console.log('📅 fecha_entrega:', factura.fecha_entrega);
@@ -302,12 +303,19 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
 
       facturaLoadedRef.current = true;
     }
-  }, [factura]);
+  }, [factura, isEditMode]);
 
   // Cargar datos previamente guardados si existen (para edición)
   useEffect(() => {
     if (savedData) {
       console.log('🔄 Cargando datos guardados de la plantilla:', savedData);
+
+      // Restaurar campos automáticos de la factura
+      if (savedData.consecutivo) setConsecutivo(savedData.consecutivo);
+      if (savedData.proveedor) setProveedor(savedData.proveedor);
+      if (savedData.numeroFactura) setNumeroFactura(savedData.numeroFactura);
+      if (savedData.fechaFactura) setFechaFactura(savedData.fechaFactura);
+      if (savedData.fechaRecepcion) setFechaRecepcion(savedData.fechaRecepcion);
 
       // Restaurar campos manuales
       if (savedData.legalizaAnticipo !== undefined) setLegalizaAnticipo(savedData.legalizaAnticipo);
@@ -1413,9 +1421,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
                     onChange={(e) => handleInputNegociadorChange(e.target.value)}
                     onFocus={handleNegociadorFocus}
                     onKeyDown={handleNegociadorKeyDown}
-                    placeholder={loadingNegociadores ? "Cargando..." : "Buscar negociador..."}
-                    disabled={loadingNegociadores}
+                    placeholder={loadingNegociadores ? "Cargando..." : (isEditMode ? nombreNegociador : "Buscar negociador...")}
+                    disabled={loadingNegociadores || isEditMode}
                     title={nombreNegociador}
+                    style={isEditMode ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                   />
                   {dropdownNegociadoresAbierto && !loadingNegociadores && dropdownNegociadoresPosition.top && getNegociadoresFiltrados(inputNegociadorValue || '').length > 0 && (
                     <div
