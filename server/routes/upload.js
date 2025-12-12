@@ -79,6 +79,19 @@ router.post('/upload', authenticate, (req, res) => {
         }
       }
 
+      // 🔑 HACER BACKUP DEL PDF INDIVIDUAL ANTES DE PROCESARLO
+      console.log(`💾 Haciendo backup del archivo individual...`);
+      const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
+      const fs = require('fs').promises;
+      await fs.mkdir(backupDir, { recursive: true });
+
+      const backupFileName = `${Date.now()}_0_${req.file.originalname}`;
+      const backupPath = path.join(backupDir, backupFileName);
+      const relativeBackupPath = `uploads/originals/${backupFileName}`;
+
+      await fs.copyFile(req.file.path, backupPath);
+      console.log(`✅ Backup guardado: ${req.file.originalname}`);
+
       // Guardar el documento en la base de datos
       const result = await query(
         `INSERT INTO documents (
@@ -92,8 +105,9 @@ router.post('/upload', authenticate, (req, res) => {
           uploaded_by,
           document_type_id,
           consecutivo,
-          metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          metadata,
+          original_pdf_backup
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *`,
         [
           docTitle,
@@ -106,7 +120,8 @@ router.post('/upload', authenticate, (req, res) => {
           req.user.id,
           documentTypeId || null,
           consecutivo?.trim() || null,
-          JSON.stringify(parsedMetadata)
+          JSON.stringify(parsedMetadata),
+          JSON.stringify([relativeBackupPath])  // Array con 1 solo elemento
         ]
       );
 
@@ -261,7 +276,7 @@ router.post('/upload-unified', authenticate, (req, res) => {
       });
     }
 
-    const { title, description, documentTypeId, consecutivo } = req.body;
+    const { title, description, documentTypeId, consecutivo, templateData } = req.body;
 
     // Validar que hay más de un archivo para unificar
     if (req.files.length === 1) {
@@ -301,12 +316,42 @@ router.post('/upload-unified', authenticate, (req, res) => {
       const mergedFileName = `unificado-${timestamp}-${randomSuffix}.pdf`;
       mergedPdfPath = path.join(userDir, mergedFileName);
 
+      // 🔑 HACER BACKUP DE CADA PDF INDIVIDUAL ANTES DE FUSIONAR
+      console.log(`💾 Haciendo backup de ${req.files.length} archivos individuales...`);
+      const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
+      const fs = require('fs').promises;
+      await fs.mkdir(backupDir, { recursive: true });
+
+      const backupPaths = [];
+      for (let i = 0; i < req.files.length; i++) {
+        const file = req.files[i];
+        const backupFileName = `${Date.now()}_${i}_${file.originalname}`;
+        const backupPath = path.join(backupDir, backupFileName);
+        const relativeBackupPath = `uploads/originals/${backupFileName}`;
+
+        await fs.copyFile(file.path, backupPath);
+        backupPaths.push(relativeBackupPath);
+        console.log(`   ✅ Backup ${i + 1}/${req.files.length}: ${file.originalname}`);
+      }
+      console.log(`✅ ${backupPaths.length} archivos respaldados exitosamente`);
+
       // Unificar los PDFs
       console.log('🔀 Unificando PDFs...');
       const mergeResult = await mergePDFs(filePaths, mergedPdfPath);
 
       if (!mergeResult.success) {
         throw new Error('Error al unificar los PDFs');
+      }
+
+      // Parsear templateData si viene como string JSON
+      let parsedMetadata = {};
+      if (templateData) {
+        try {
+          parsedMetadata = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
+        } catch (parseError) {
+          console.error('⚠️ Error al parsear templateData:', parseError);
+          parsedMetadata = {};
+        }
       }
 
       // Guardar el documento unificado en la base de datos
@@ -324,8 +369,10 @@ router.post('/upload-unified', authenticate, (req, res) => {
           status,
           uploaded_by,
           document_type_id,
-          consecutivo
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          consecutivo,
+          metadata,
+          original_pdf_backup
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *`,
         [
           docTitle,
@@ -337,7 +384,9 @@ router.post('/upload-unified', authenticate, (req, res) => {
           'pending',
           req.user.id,
           documentTypeId || null,
-          consecutivo?.trim() || null
+          consecutivo?.trim() || null,
+          JSON.stringify(parsedMetadata),
+          JSON.stringify(backupPaths)  // Guardar array de backups como JSON
         ]
       );
 

@@ -45,7 +45,9 @@
       "Bash(del test_causacion.js)",
       "Bash(del:*)",
       "Bash(docker-compose start:*)",
-      "Bash(timeout 15 docker logs:*)"
+      "Bash(timeout 15 docker logs:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFIX edición plantillas FV + informe firmas\n\nProblemas corregidos:\n1. Removidos roles de firmantes en tarjetas del dashboard\n2. Corregida estructura de datos para roles en informe PDF\n3. Removidos corchetes del grupo de causación en informe\n4. Mejorada query SQL para estado de grupos de causación\n5. Agregados logs detallados para debugging de backups PDF\n\nArchivos modificados:\n- Dashboard.jsx: Removidos sig.roleName de 3 ubicaciones\n- FacturaTemplate.jsx: Grupo sin corchetes\n- resolvers-db.js: Estructura snake_case + query mejorada + logs\n\nRefs: #edicion-plantillas #informe-firmas #grupos-causacion\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []

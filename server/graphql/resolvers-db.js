@@ -1323,16 +1323,8 @@ const resolvers = {
             const originalPdfPath = pdfPath;
             const mergedPdfPath = pdfPath.replace('.pdf', '_merged.pdf');
 
-            // Guardar copia del PDF original para permitir ediciones futuras
-            const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
-            await fs.mkdir(backupDir, { recursive: true });
-            const originalFileName = path.basename(originalPdfPath);
-            const backupPath = path.join(backupDir, originalFileName);
-            const relativeBackupPath = `uploads/originals/${originalFileName}`;
-
-            await fs.copyFile(originalPdfPath, backupPath);
-            console.log(`💾 Copia de seguridad del PDF original guardada: ${backupPath}`);
-
+            // Los backups ya se hicieron al subir los archivos, aquí solo fusionamos
+            console.log(`📋 Fusionando plantilla con documento original...`);
             await mergePDFs([templatePdfPath, originalPdfPath], mergedPdfPath);
 
             console.log(`✅ PDFs fusionados: ${mergedPdfPath}`);
@@ -1342,13 +1334,6 @@ const resolvers = {
             await cleanupTempFiles([templatePdfPath]);
 
             console.log(`✅ PDF original reemplazado con PDF fusionado`);
-
-            // Guardar ruta del backup en la base de datos
-            await query(
-              'UPDATE documents SET original_pdf_backup = $1 WHERE id = $2',
-              [relativeBackupPath, documentId]
-            );
-            console.log(`✅ Ruta del backup guardada en BD: ${relativeBackupPath}`);
 
             pdfPath = originalPdfPath;
           } catch (templateError) {
@@ -2123,44 +2108,70 @@ const resolvers = {
         const relativePath = doc.file_path.replace(/^uploads\//, '');
         const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
 
-        // Verificar si existe un backup del PDF original
-        let originalPdfToUse;
-        console.log(`🔍 Verificando backup del PDF original para documento ${documentId}...`);
+        // Verificar si existe backup(s) del PDF original
+        console.log(`🔍 Verificando backups del PDF original para documento ${documentId}...`);
         console.log(`🔍 Campo original_pdf_backup en BD: ${doc.original_pdf_backup || 'NULL'}`);
 
+        let backupFilePaths = [];
         if (doc.original_pdf_backup) {
-          // Usar el PDF original del backup
-          const backupRelativePath = doc.original_pdf_backup.replace(/^uploads\//, '');
-          originalPdfToUse = path.join(__dirname, '..', 'uploads', backupRelativePath);
-          console.log(`📂 Ruta completa del backup: ${originalPdfToUse}`);
-
-          // Verificar que el archivo de backup existe
           try {
-            await fs.access(originalPdfToUse);
-            const backupStats = await fs.stat(originalPdfToUse);
-            console.log(`✅ Archivo de backup encontrado (${Math.round(backupStats.size / 1024)} KB)`);
-          } catch (err) {
-            console.error(`❌ Error accediendo al backup: ${err.message}`);
-            console.warn('⚠️ Archivo de backup no encontrado, usando PDF actual');
-            originalPdfToUse = currentPdfPath;
+            // Parsear el campo como JSON array
+            const backupPathsArray = JSON.parse(doc.original_pdf_backup);
+            console.log(`📦 Encontrados ${backupPathsArray.length} archivo(s) de backup`);
+
+            // Verificar que cada archivo existe
+            for (let i = 0; i < backupPathsArray.length; i++) {
+              const relPath = backupPathsArray[i];
+              const backupRelativePath = relPath.replace(/^uploads\//, '');
+              const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+
+              try {
+                await fs.access(backupFullPath);
+                const backupStats = await fs.stat(backupFullPath);
+
+                // Contar páginas del backup
+                const { PDFDocument: PDFDoc } = require('pdf-lib');
+                const backupBytes = await fs.readFile(backupFullPath);
+                const backupPdfDoc = await PDFDoc.load(backupBytes);
+                const backupPages = backupPdfDoc.getPageCount();
+
+                console.log(`   ✅ Backup ${i + 1}/${backupPathsArray.length}:`);
+                console.log(`      - Archivo: ${path.basename(backupFullPath)}`);
+                console.log(`      - Tamaño: ${Math.round(backupStats.size / 1024)} KB`);
+                console.log(`      - Páginas: ${backupPages}`);
+
+                backupFilePaths.push(backupFullPath);
+              } catch (err) {
+                console.error(`   ❌ Error accediendo al backup ${i + 1}: ${err.message}`);
+              }
+            }
+          } catch (parseError) {
+            console.error(`❌ Error parseando backups: ${parseError.message}`);
+            console.warn('⚠️ No se pudieron cargar los backups, usando PDF actual');
+            backupFilePaths = [currentPdfPath];
           }
         } else {
           // No hay backup, usar el PDF actual (fallback para documentos antiguos)
-          console.warn('⚠️ No hay backup disponible en BD, usando PDF actual (puede contener planilla vieja)');
-          originalPdfToUse = currentPdfPath;
+          console.warn('⚠️ No hay backups disponibles en BD, usando PDF actual (puede contener planilla vieja)');
+          backupFilePaths = [currentPdfPath];
         }
 
-        // Fusionar: Planilla nueva + PDF original
+        // Fusionar: Plantilla nueva + TODOS los PDFs originales individuales
         const { mergePDFs } = require('../utils/pdfMerger');
         const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
 
-        console.log(`📋 Fusionando PDFs:`);
-        console.log(`   1. Plantilla nueva: ${tempPlanillaPath}`);
-        console.log(`   2. PDF original: ${originalPdfToUse}`);
+        // Construir array de archivos a fusionar: [plantilla, backup1, backup2, ...]
+        const filesToMerge = [tempPlanillaPath, ...backupFilePaths];
+
+        console.log(`📋 Fusionando ${filesToMerge.length} PDFs:`);
+        console.log(`   1. Plantilla nueva: ${path.basename(tempPlanillaPath)}`);
+        for (let i = 0; i < backupFilePaths.length; i++) {
+          console.log(`   ${i + 2}. PDF original ${i + 1}: ${path.basename(backupFilePaths[i])}`);
+        }
         console.log(`   → Resultado temporal: ${tempMergedPath}`);
 
-        // Fusionar planilla con PDF original
-        const mergeResult = await mergePDFs([tempPlanillaPath, originalPdfToUse], tempMergedPath);
+        // Fusionar todos los archivos
+        const mergeResult = await mergePDFs(filesToMerge, tempMergedPath);
 
         if (!mergeResult.success) {
           throw new Error(`Error al fusionar PDFs: ${mergeResult.error || 'Error desconocido'}`);
@@ -2589,22 +2600,24 @@ const resolvers = {
           documentTypeName: 'Factura'
         };
 
-        // Actualizar/regenerar portada con firmantes
-        console.log('🔄 Actualizando portada con firmantes...');
-        await updateSignersPage(tempMergedPath, signers, documentInfo);
-        console.log('✅ Portada actualizada correctamente');
+        // Agregar informe de firmantes al final (el PDF fusionado NO tiene informe todavía)
+        console.log('📋 Agregando informe de firmantes al PDF fusionado...');
+        const { addCoverPageWithSigners } = require('../utils/pdfCoverPage');
+        await addCoverPageWithSigners(tempMergedPath, signers, documentInfo);
+        console.log('✅ Informe de firmantes agregado correctamente');
 
         // Reemplazar el archivo original con el fusionado
         await fs.copyFile(tempMergedPath, currentPdfPath);
         console.log('✅ Archivo del documento reemplazado correctamente');
 
-        // Limpiar archivos temporales
+        // 5. Limpiar archivos temporales
+        console.log('🧹 Limpiando archivos temporales...');
         try {
           await fs.unlink(tempPlanillaPath);
           await fs.unlink(tempMergedPath);
-          console.log('🧹 Archivos temporales eliminados');
+          console.log('✅ Archivos temporales eliminados');
         } catch (cleanupError) {
-          console.warn('⚠️ Error limpiando archivos temporales:', cleanupError.message);
+          console.warn('⚠️ No se pudieron eliminar algunos archivos temporales:', cleanupError.message);
         }
 
         await client.query('COMMIT');
