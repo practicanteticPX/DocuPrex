@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs').promises;
-const { query } = require('../database/db');
+const { query, pool } = require('../database/db');
 const { authenticateUser } = require('../services/ldap');
 const { addCoverPageWithSigners, updateSignersPage } = require('../utils/pdfCoverPage');
 const {
@@ -1323,6 +1323,16 @@ const resolvers = {
             const originalPdfPath = pdfPath;
             const mergedPdfPath = pdfPath.replace('.pdf', '_merged.pdf');
 
+            // Guardar copia del PDF original para permitir ediciones futuras
+            const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
+            await fs.mkdir(backupDir, { recursive: true });
+            const originalFileName = path.basename(originalPdfPath);
+            const backupPath = path.join(backupDir, originalFileName);
+            const relativeBackupPath = `uploads/originals/${originalFileName}`;
+
+            await fs.copyFile(originalPdfPath, backupPath);
+            console.log(`💾 Copia de seguridad del PDF original guardada: ${backupPath}`);
+
             await mergePDFs([templatePdfPath, originalPdfPath], mergedPdfPath);
 
             console.log(`✅ PDFs fusionados: ${mergedPdfPath}`);
@@ -1332,6 +1342,13 @@ const resolvers = {
             await cleanupTempFiles([templatePdfPath]);
 
             console.log(`✅ PDF original reemplazado con PDF fusionado`);
+
+            // Guardar ruta del backup en la base de datos
+            await query(
+              'UPDATE documents SET original_pdf_backup = $1 WHERE id = $2',
+              [relativeBackupPath, documentId]
+            );
+            console.log(`✅ Ruta del backup guardada en BD: ${relativeBackupPath}`);
 
             pdfPath = originalPdfPath;
           } catch (templateError) {
@@ -2070,8 +2087,7 @@ const resolvers = {
         // Verificar que nadie más ha firmado
         const signaturesResult = await client.query(
           `SELECT s.* FROM signatures s
-           JOIN users u ON s.user_id = u.id
-           WHERE s.document_id = $1 AND s.status = 'signed' AND s.user_id != $2`,
+           WHERE s.document_id = $1 AND s.status = 'signed' AND s.signer_id != $2`,
           [documentId, user.id]
         );
 
@@ -2083,72 +2099,246 @@ const resolvers = {
         const parsedTemplateData = JSON.parse(templateData);
         console.log('📝 Actualizando template para documento:', documentId);
 
-        // Actualizar templateData en la BD
+        // Actualizar metadata (templateData) en la BD
+        // metadata es JSONB, así que pasamos el objeto parseado
         await client.query(
-          'UPDATE documents SET template_data = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [templateData, documentId]
+          'UPDATE documents SET metadata = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [parsedTemplateData, documentId]
         );
 
         // Regenerar PDF con Puppeteer
-        const { generateFacturaTemplatePDF } = require('../utils/pdfFacturaTemplate');
-        const fs = require('fs').promises;
-        const path = require('path');
-
         console.log('🔄 Regenerando PDF con nueva plantilla...');
         const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData);
 
-        // Guardar PDF (reemplazar el existente)
-        const relativePath = doc.file_path.replace(/^uploads\//, '');
-        const filePath = path.join(__dirname, '..', 'uploads', relativePath);
-        await fs.writeFile(filePath, pdfBuffer);
-        console.log('✅ PDF regenerado correctamente');
+        // Guardar planilla en archivo temporal
+        const fs = require('fs').promises;
+        const path = require('path');
+        const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
+        await fs.mkdir(tempDir, { recursive: true });
+        const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
+        await fs.writeFile(tempPlanillaPath, pdfBuffer);
+        console.log('✅ Planilla PDF generada:', tempPlanillaPath);
 
-        // Obtener firmantes actuales
-        const currentSignersResult = await client.query(
-          'SELECT * FROM signatures WHERE document_id = $1',
-          [documentId]
-        );
-        const currentSigners = currentSignersResult.rows;
+        // Obtener ruta del PDF actual del documento (donde se guardará el resultado)
+        const relativePath = doc.file_path.replace(/^uploads\//, '');
+        const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
+
+        // Verificar si existe un backup del PDF original
+        let originalPdfToUse;
+        if (doc.original_pdf_backup) {
+          // Usar el PDF original del backup
+          const backupRelativePath = doc.original_pdf_backup.replace(/^uploads\//, '');
+          originalPdfToUse = path.join(__dirname, '..', 'uploads', backupRelativePath);
+          console.log(`📂 Usando PDF original del backup: ${originalPdfToUse}`);
+
+          // Verificar que el archivo de backup existe
+          try {
+            await fs.access(originalPdfToUse);
+          } catch {
+            console.warn('⚠️ Archivo de backup no encontrado, usando PDF actual');
+            originalPdfToUse = currentPdfPath;
+          }
+        } else {
+          // No hay backup, usar el PDF actual (fallback para documentos antiguos)
+          console.warn('⚠️ No hay backup disponible, usando PDF actual (puede contener planilla vieja)');
+          originalPdfToUse = currentPdfPath;
+        }
+
+        // Fusionar: Planilla nueva + PDF original
+        const { mergePDFs } = require('../utils/pdfMerger');
+        const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
+
+        // Fusionar planilla con PDF original
+        const mergeResult = await mergePDFs([tempPlanillaPath, originalPdfToUse], tempMergedPath);
+
+        if (!mergeResult.success) {
+          throw new Error('Error al fusionar PDFs');
+        }
+
+        console.log('✅ PDFs fusionados correctamente');
+
+        // DEBUG: Ver estructura completa de templateData para firmantes
+        console.log('🔍 DEBUG - parsedTemplateData.firmantes:', parsedTemplateData.firmantes);
+        console.log('🔍 DEBUG - parsedTemplateData keys:', Object.keys(parsedTemplateData));
 
         // Procesar firmantes de la nueva plantilla
         const newFirmantes = parsedTemplateData.firmantes || [];
+        console.log(`📋 Firmantes en la nueva plantilla (${newFirmantes.length}):`,
+          newFirmantes.map(f => `${f.nombre || f.name || 'SIN_NOMBRE'} (${f.email || 'SIN_EMAIL'})`).join(', '));
 
-        // Crear un mapa de firmantes actuales por email
-        const currentSignersMap = new Map(
-          currentSigners.map(s => [s.user_id, s])
+        // Separar usuarios normales y grupos de causación (IGUAL QUE assignSigners)
+        const userFirmantes = newFirmantes.filter(f => !f.grupoCodigo);
+        const grupoFirmantes = newFirmantes.filter(f => f.grupoCodigo);
+
+        console.log(`📊 Usuarios: ${userFirmantes.length}, Grupos de causación: ${grupoFirmantes.length}`);
+
+        // Obtener firmantes actuales (usuarios) de document_signers
+        const currentUsersQuery = await client.query(
+          'SELECT user_id FROM document_signers WHERE document_id = $1 AND user_id IS NOT NULL',
+          [documentId]
         );
+        const currentUserIds = new Set(currentUsersQuery.rows.map(s => s.user_id));
 
         // Obtener usuarios de los nuevos firmantes
-        const newSignersEmails = newFirmantes.map(f => f.email);
-        const newSignersResult = await client.query(
-          'SELECT id, email FROM users WHERE email = ANY($1)',
-          [newSignersEmails]
-        );
-        const newSignersMap = new Map(
-          newSignersResult.rows.map(u => [u.email, u.id])
-        );
+        // Separar firmantes con email y sin email
+        const firmantesConEmail = userFirmantes.filter(f => f.email && !f.email.includes('SIN_EMAIL'));
+        const firmantesSinEmail = userFirmantes.filter(f => !f.email || f.email.includes('SIN_EMAIL'));
+
+        console.log(`📊 Firmantes con email: ${firmantesConEmail.length}, sin email: ${firmantesSinEmail.length}`);
+
+        // Buscar por email
+        const emailsToSearch = firmantesConEmail.map(f => f.email).filter(Boolean);
+        let usersByEmail = [];
+        if (emailsToSearch.length > 0) {
+          const emailResult = await client.query(
+            'SELECT id, email, name FROM users WHERE email = ANY($1)',
+            [emailsToSearch]
+          );
+          usersByEmail = emailResult.rows;
+        }
+
+        // Buscar por nombre con matching flexible (ignorar grupos de causación que empiezan con '[')
+        const firmantesPorBuscar = firmantesSinEmail.filter(f => f.name && !f.name.startsWith('['));
+        let usersByName = [];
+
+        if (firmantesPorBuscar.length > 0) {
+          console.log(`🔍 Buscando ${firmantesPorBuscar.length} firmantes por nombre...`);
+
+          // Obtener todos los usuarios de la base de datos para hacer matching flexible
+          const allUsersResult = await client.query(
+            'SELECT id, email, name FROM users WHERE email IS NOT NULL'
+          );
+          const allUsers = allUsersResult.rows;
+          console.log(`📊 Total usuarios en BD: ${allUsers.length}`);
+
+          // Función de matching flexible - COPIADA EXACTAMENTE de Dashboard.jsx
+          const findUserByNameMatch = (fullName, usersList) => {
+            if (!fullName || !usersList || usersList.length === 0) return null;
+
+            // Normalizar el nombre completo: uppercase y separar por palabras
+            const searchWords = fullName.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+
+            console.log(`  🔎 Buscando: "${fullName}" → Words: [${searchWords.join(', ')}]`);
+
+            if (searchWords.length === 0) return null;
+
+            // Buscar usuario que tenga coincidencia de al menos 2 palabras (nombre + apellido)
+            const matched = usersList.find(user => {
+              if (!user.name) return false;
+
+              const userWords = user.name.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+
+              if (userWords.length === 0) return false;
+
+              // Contar cuántas palabras del nombre de búsqueda están en el nombre del usuario
+              let matchCount = 0;
+              searchWords.forEach(searchWord => {
+                if (userWords.some(userWord =>
+                  userWord === searchWord ||
+                  userWord.startsWith(searchWord) ||
+                  searchWord.startsWith(userWord)
+                )) {
+                  matchCount++;
+                }
+              });
+
+              const hasMatch = matchCount >= 2 || (userWords.length === 1 && matchCount >= 1);
+
+              if (hasMatch) {
+                console.log(`    ✅ MATCH: "${user.name}" (matchCount: ${matchCount}/${searchWords.length}, userWords: [${userWords.join(', ')}])`);
+              }
+
+              // Requerir al menos 2 coincidencias (nombre + apellido)
+              // O si el usuario tiene solo 1 palabra, que esa palabra coincida
+              return hasMatch;
+            });
+
+            if (!matched) {
+              console.log(`    ❌ No se encontró match`);
+            }
+
+            return matched || null;
+          };
+
+          // Buscar cada firmante con matching flexible
+          for (const firmante of firmantesPorBuscar) {
+            console.log(`\n🔍 Procesando firmante: "${firmante.name}"`);
+            const matchedUser = findUserByNameMatch(firmante.name, allUsers);
+            if (matchedUser) {
+              usersByName.push(matchedUser);
+              console.log(`✅ Match encontrado: "${firmante.name}" → "${matchedUser.name}" (ID: ${matchedUser.id})`);
+            } else {
+              console.log(`❌ NO se encontró match para: "${firmante.name}"`);
+            }
+          }
+        }
+
+        // Combinar resultados en un mapa unificado
+        const newSignersMap = new Map();
+
+        // Agregar usuarios encontrados por email
+        usersByEmail.forEach(u => {
+          newSignersMap.set(`email:${u.email}`, u.id);
+        });
+
+        // Agregar usuarios encontrados por nombre (usando el nombre ORIGINAL del template)
+        firmantesPorBuscar.forEach((firmante, idx) => {
+          if (usersByName[idx]) {
+            newSignersMap.set(`name:${firmante.name}`, usersByName[idx].id);
+          }
+        });
+
+        console.log(`👥 Usuarios encontrados (${usersByEmail.length + usersByName.length}):`,
+          [...usersByEmail, ...usersByName].map(u => `${u.name} (${u.email})`).join(', '));
 
         // Identificar firmantes a añadir y eliminar
         const newSignerIds = new Set();
         for (const firmante of newFirmantes) {
-          const userId = newSignersMap.get(firmante.email);
+          // Buscar primero por email, luego por nombre
+          let userId = null;
+          if (firmante.email && !firmante.email.includes('SIN_EMAIL')) {
+            userId = newSignersMap.get(`email:${firmante.email}`);
+          }
+          if (!userId && firmante.name && !firmante.name.startsWith('[')) {
+            userId = newSignersMap.get(`name:${firmante.name}`);
+          }
+
           if (userId) {
             newSignerIds.add(userId);
+          } else if (!firmante.name.startsWith('[')) {
+            // Solo advertir si no es un grupo de causación
+            console.warn(`⚠️ No se encontró usuario para: ${firmante.name} (${firmante.email || 'SIN_EMAIL'})`);
           }
         }
 
-        const currentSignerIds = new Set(currentSigners.map(s => s.user_id));
+        // Firmantes (usuarios) a eliminar, añadir y mantener
+        const signersToRemove = [...currentUserIds].filter(id => !newSignerIds.has(id));
+        const signersToAdd = [...newSignerIds].filter(id => !currentUserIds.has(id));
+        const signersToKeep = [...newSignerIds].filter(id => currentUserIds.has(id));
 
-        // Firmantes a eliminar (están en current pero no en new)
-        const signersToRemove = [...currentSignerIds].filter(id => !newSignerIds.has(id));
+        console.log(`📊 Análisis de cambios en firmantes (usuarios):`);
+        console.log(`  ✅ Mantener: ${signersToKeep.length} usuarios`);
+        console.log(`  ➕ Añadir: ${signersToAdd.length} usuarios`);
+        console.log(`  🗑️  Eliminar: ${signersToRemove.length} usuarios`);
 
-        // Firmantes a añadir (están en new pero no en current)
-        const signersToAdd = [...newSignerIds].filter(id => !currentSignerIds.has(id));
+        // Grupos de causación: eliminar todos y recrear (más simple y seguro)
+        await client.query(
+          'DELETE FROM document_signers WHERE document_id = $1 AND is_causacion_group = TRUE',
+          [documentId]
+        );
+        console.log(`🗑️ Eliminados todos los grupos de causación (se recrearán)`);
 
-        // Eliminar firmantes que ya no están
+        // Eliminar usuarios que ya no están
         if (signersToRemove.length > 0) {
+          // Eliminar de document_signers
           await client.query(
-            'DELETE FROM signatures WHERE document_id = $1 AND user_id = ANY($2)',
+            'DELETE FROM document_signers WHERE document_id = $1 AND user_id = ANY($2)',
+            [documentId, signersToRemove]
+          );
+
+          // Eliminar de signatures (en cascada por FK, pero explícito es mejor)
+          await client.query(
+            'DELETE FROM signatures WHERE document_id = $1 AND signer_id = ANY($2)',
             [documentId, signersToRemove]
           );
 
@@ -2158,52 +2348,131 @@ const resolvers = {
             [documentId, signersToRemove]
           );
 
-          console.log(`🗑️ Eliminados ${signersToRemove.length} firmantes`);
+          console.log(`🗑️ Eliminados ${signersToRemove.length} usuarios`);
         }
 
-        // Añadir nuevos firmantes
-        const { createNotification } = require('../services/notificationService');
-        const emailService = require('../services/emailService');
-
+        // ========== PROCESAR FIRMANTES (usuarios y grupos) EN ORDEN ==========
+        // Procesar TODOS los firmantes (usuarios + grupos) en el orden que vienen
         for (let i = 0; i < newFirmantes.length; i++) {
           const firmante = newFirmantes[i];
-          const userId = newSignersMap.get(firmante.email);
+          const orderPosition = i + 1;
 
-          if (!userId) continue;
+          // Función helper para normalizar roles (igual que assignSigners)
+          const normalizeRoles = (firmante) => {
+            let roleNames = [];
 
-          if (signersToAdd.includes(userId)) {
-            // Crear signature
-            const roleNames = (firmante.roles || []).map(r => r.nombre).join(' / ');
-            const orderPosition = i + 1;
+            // role puede ser un array o un string
+            if (Array.isArray(firmante.role)) {
+              roleNames = firmante.role;
+            } else if (typeof firmante.role === 'string') {
+              roleNames = [firmante.role];
+            }
+
+            // Fallback a cargo si no hay role
+            if (roleNames.length === 0 && firmante.cargo) {
+              roleNames = [firmante.cargo];
+            }
+
+            return { roleNames };
+          };
+
+          // ========== GRUPO DE CAUSACIÓN ==========
+          if (firmante.grupoCodigo) {
+            const { roleNames } = normalizeRoles(firmante);
+
+            console.log(`📋 Agregando grupo de causación: ${firmante.grupoCodigo} en posición ${orderPosition}`);
 
             await client.query(
-              `INSERT INTO signatures (document_id, user_id, status, order_position, role_name)
-               VALUES ($1, $2, 'pending', $3, $4)`,
-              [documentId, userId, orderPosition, roleNames || null]
+              `INSERT INTO document_signers (
+                document_id, user_id, order_position, is_required,
+                role_name, role_names,
+                is_causacion_group, grupo_codigo
+              )
+              VALUES ($1, NULL, $2, TRUE, $3, $4::text[], TRUE, $5)`,
+              [
+                documentId,
+                orderPosition,
+                roleNames[0] || null, // Legacy singular
+                roleNames,
+                firmante.grupoCodigo
+              ]
             );
 
-            // Crear notificación
-            await createNotification({
-              userId: userId,
-              documentId: documentId,
-              type: 'signature_request',
-              message: `Nuevo documento requiere tu firma: ${doc.title}`
-            });
+            console.log(`✅ Grupo ${firmante.grupoCodigo} agregado`);
+            continue;
+          }
 
-            // Enviar correo (solo si tiene notificaciones habilitadas)
+          // ========== USUARIO NORMAL ==========
+          // Buscar userId primero por email, luego por nombre
+          let userId = null;
+          if (firmante.email && !firmante.email.includes('SIN_EMAIL')) {
+            userId = newSignersMap.get(`email:${firmante.email}`);
+          }
+          if (!userId && firmante.name) {
+            userId = newSignersMap.get(`name:${firmante.name}`);
+          }
+
+          if (!userId) {
+            console.warn(`⚠️ No se encontró usuario para: ${firmante.name}`);
+            continue;
+          }
+
+          const { roleNames } = normalizeRoles(firmante);
+
+          if (signersToAdd.includes(userId)) {
+            // ========== FIRMANTE NUEVO: Añadir y notificar ==========
+            // Insertar en document_signers (estrategia UPDATE primero, luego INSERT)
+            const updateResult = await client.query(
+              `UPDATE document_signers
+               SET order_position = $1, role_name = $2, role_names = $3::text[]
+               WHERE document_id = $4 AND user_id = $5`,
+              [orderPosition, roleNames[0] || null, roleNames, documentId, userId]
+            );
+
+            // Si no existía, insertar nuevo registro
+            if (updateResult.rowCount === 0) {
+              await client.query(
+                `INSERT INTO document_signers (document_id, user_id, order_position, is_required, role_name, role_names)
+                 VALUES ($1, $2, $3, true, $4, $5::text[])`,
+                [documentId, userId, orderPosition, roleNames[0] || null, roleNames]
+              );
+            }
+
+            // Insertar en signatures
+            await client.query(
+              `INSERT INTO signatures (document_id, signer_id, status)
+               VALUES ($1, $2, 'pending')
+               ON CONFLICT (document_id, signer_id) DO NOTHING`,
+              [documentId, userId]
+            );
+
+            // Crear notificación (solo para firmantes NUEVOS)
+            await client.query(
+              `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+               SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+               WHERE NOT EXISTS (
+                 SELECT 1 FROM notifications
+                 WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+               )`,
+              [userId, 'signature_request', documentId, user.id, doc.title]
+            );
+
+            // Enviar correo SOLO si tiene email_notifications = true
             try {
               const userResult = await client.query(
-                'SELECT name, email, email_notifications_enabled FROM users WHERE id = $1',
+                'SELECT name, email, email_notifications FROM users WHERE id = $1',
                 [userId]
               );
               if (userResult.rows.length > 0) {
                 const signerUser = userResult.rows[0];
-                if (signerUser.email_notifications_enabled) {
-                  await emailService.sendSignatureRequestEmail({
-                    email: signerUser.email,
-                    name: signerUser.name
-                  }, doc, user.name);
-                  console.log(`📧 Correo enviado a: ${signerUser.email}`);
+                if (signerUser.email_notifications) {
+                  await notificarAsignacionFirmante(
+                    signerUser.email,
+                    signerUser.name,
+                    doc.title,
+                    user.name
+                  );
+                  console.log(`📧 Correo enviado a: ${signerUser.email} (firmante NUEVO)`);
                 } else {
                   console.log(`⏭️ Notificaciones desactivadas para: ${signerUser.email}`);
                 }
@@ -2212,19 +2481,101 @@ const resolvers = {
               console.error('Error enviando correo:', emailError);
             }
 
-            console.log(`➕ Añadido firmante: ${firmante.nombre} (${firmante.email})`);
+            console.log(`➕ Añadido firmante NUEVO: ${firmante.name}`);
           } else {
-            // Actualizar order_position y role_name de firmantes existentes
-            const roleNames = (firmante.roles || []).map(r => r.nombre).join(' / ');
-            const orderPosition = i + 1;
-
+            // ========== FIRMANTE EXISTENTE: Solo actualizar posición/rol (SIN notificar) ==========
             await client.query(
-              `UPDATE signatures
-               SET order_position = $1, role_name = $2
-               WHERE document_id = $3 AND user_id = $4`,
-              [orderPosition, roleNames || null, documentId, userId]
+              `UPDATE document_signers
+               SET order_position = $1, role_name = $2, role_names = $3::text[]
+               WHERE document_id = $4 AND user_id = $5`,
+              [orderPosition, roleNames[0] || null, roleNames, documentId, userId]
             );
+            console.log(`🔄 Actualizado firmante existente: ${firmante.name} - Posición: ${orderPosition}, Roles: [${roleNames.join(', ')}]`);
           }
+        }
+
+        // Verificar firmantes finales (usuarios + grupos)
+        const finalSignersResult = await client.query(
+          `SELECT
+            ds.user_id,
+            ds.is_causacion_group,
+            ds.grupo_codigo,
+            u.name as user_name,
+            u.email,
+            ds.order_position,
+            ds.role_name,
+            ds.role_names
+           FROM document_signers ds
+           LEFT JOIN users u ON u.id = ds.user_id
+           WHERE ds.document_id = $1
+           ORDER BY ds.order_position ASC`,
+          [documentId]
+        );
+        console.log(`✅ Firmantes finales (${finalSignersResult.rows.length}):`);
+        finalSignersResult.rows.forEach(s => {
+          if (s.is_causacion_group) {
+            console.log(`  #${s.order_position}: [GRUPO] ${s.grupo_codigo} - Roles: ${s.role_names ? s.role_names.join(', ') : s.role_name}`);
+          } else {
+            console.log(`  #${s.order_position}: ${s.user_name} - Roles: ${s.role_names ? s.role_names.join(', ') : s.role_name}`);
+          }
+        });
+
+        // Obtener todos los firmantes actualizados para la portada
+        const signersForCover = await client.query(
+          `SELECT
+            ds.document_id,
+            ds.user_id,
+            ds.order_position,
+            ds.role_name,
+            ds.role_names,
+            ds.is_causacion_group,
+            ds.grupo_codigo,
+            u.name as user_name,
+            u.email,
+            COALESCE(s.status, 'pending') as status
+          FROM document_signers ds
+          LEFT JOIN users u ON ds.user_id = u.id
+          LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+          WHERE ds.document_id = $1
+          ORDER BY ds.order_position ASC`,
+          [documentId]
+        );
+
+        const signers = signersForCover.rows.map(row => ({
+          name: row.is_causacion_group ? `[${row.grupo_codigo}]` : row.user_name,
+          email: row.email,
+          orderPosition: row.order_position,
+          roleName: row.role_names && row.role_names.length > 0 ? row.role_names.join(', ') : row.role_name,
+          status: row.status,
+          isCausacionGroup: row.is_causacion_group,
+          grupoCodigo: row.grupo_codigo
+        }));
+
+        // Preparar información del documento para la portada
+        const documentInfo = {
+          title: doc.title,
+          fileName: doc.file_name,
+          createdAt: doc.created_at,
+          uploadedBy: user.name,
+          documentTypeName: 'Factura'
+        };
+
+        // Actualizar/regenerar portada con firmantes
+        console.log('🔄 Actualizando portada con firmantes...');
+        await updateSignersPage(tempMergedPath, signers, documentInfo);
+        console.log('✅ Portada actualizada correctamente');
+
+        // Reemplazar el archivo original con el fusionado
+        await fs.copyFile(tempMergedPath, currentPdfPath);
+        console.log('✅ Archivo del documento reemplazado correctamente');
+
+        // Limpiar archivos temporales
+        try {
+          await fs.unlink(tempPlanillaPath);
+          await fs.unlink(tempMergedPath);
+          console.log('🧹 Archivos temporales eliminados');
+        } catch (cleanupError) {
+          console.warn('⚠️ Error limpiando archivos temporales:', cleanupError.message);
         }
 
         await client.query('COMMIT');
@@ -2621,6 +2972,40 @@ const resolvers = {
 
       if (result.rows.length === 0) {
         throw new Error('Error al registrar la firma');
+      }
+
+      // Eliminar backup del PDF original si el firmante NO es el creador
+      if (!isOwner) {
+        try {
+          const backupCheck = await query(
+            'SELECT original_pdf_backup FROM documents WHERE id = $1',
+            [documentId]
+          );
+
+          if (backupCheck.rows.length > 0 && backupCheck.rows[0].original_pdf_backup) {
+            const backupPath = backupCheck.rows[0].original_pdf_backup;
+            const fullBackupPath = require('path').join(__dirname, '..', backupPath);
+
+            // Eliminar archivo físico
+            const fs = require('fs').promises;
+            try {
+              await fs.unlink(fullBackupPath);
+              console.log(`🗑️ Backup del PDF original eliminado: ${fullBackupPath}`);
+            } catch (fsError) {
+              console.warn(`⚠️ No se pudo eliminar el archivo de backup: ${fsError.message}`);
+            }
+
+            // Limpiar referencia en BD
+            await query(
+              'UPDATE documents SET original_pdf_backup = NULL WHERE id = $1',
+              [documentId]
+            );
+            console.log(`✅ Referencia del backup limpiada en BD (documento ${documentId})`);
+          }
+        } catch (backupError) {
+          console.error('❌ Error al eliminar backup:', backupError);
+          // No lanzamos error para no interrumpir el flujo de firma
+        }
       }
 
       const statusResult = await query(
@@ -3027,6 +3412,21 @@ const resolvers = {
     signedAt: (parent) => parent.signed_at,
     signatureType: (parent) => parent.signature_type,
 
+    // Mapeo de metadata (BD) a templateData (GraphQL)
+    // metadata es JSONB en PostgreSQL, el driver pg lo devuelve como objeto
+    // El schema GraphQL espera String, así que stringify
+    templateData: (parent) => {
+      if (!parent.metadata) return null;
+
+      // Si metadata ya es un objeto (JSONB), stringificarlo
+      if (typeof parent.metadata === 'object') {
+        return JSON.stringify(parent.metadata);
+      }
+
+      // Si por alguna razón es string, devolverlo tal cual
+      return parent.metadata;
+    },
+
     documentType: async (parent) => {
       if (!parent.document_type_id) return null;
 
@@ -3058,7 +3458,13 @@ const resolvers = {
     },
     signatures: async (parent) => {
       const result = await query(`
-        SELECT s.*, ds.order_position
+        SELECT
+          s.*,
+          ds.order_position,
+          ds.role_name,
+          ds.role_names,
+          ds.is_causacion_group,
+          ds.grupo_codigo
         FROM signatures s
         LEFT JOIN document_signers ds ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
         WHERE s.document_id = $1
@@ -3085,6 +3491,17 @@ const resolvers = {
     realSignerName: (parent) => parent.real_signer_name,
     createdAt: (parent) => parent.created_at,
     updatedAt: (parent) => parent.updated_at,
+
+    // Campos de document_signers (traídos por JOIN)
+    orderPosition: (parent) => parent.order_position,
+    roleName: (parent) => {
+      // Si hay role_names array, unirlos con coma
+      if (parent.role_names && parent.role_names.length > 0) {
+        return parent.role_names.join(', ');
+      }
+      // Fallback a role_name singular
+      return parent.role_name || null;
+    },
 
     document: async (parent) => {
       const result = await query('SELECT * FROM documents WHERE id = $1', [parent.document_id]);

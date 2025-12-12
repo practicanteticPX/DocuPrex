@@ -3119,6 +3119,8 @@ function Dashboard({ user, onLogout }) {
    */
   const handleEditFacturaTemplate = (doc) => {
     console.log('📝 Abriendo edición de planilla para documento:', doc.id);
+    console.log('📝 Documento completo:', doc);
+    console.log('📝 templateData RAW:', doc.templateData);
 
     // Parsear templateData si existe
     let parsedTemplateData = null;
@@ -3127,17 +3129,22 @@ function Dashboard({ user, onLogout }) {
         parsedTemplateData = typeof doc.templateData === 'string'
           ? JSON.parse(doc.templateData)
           : doc.templateData;
+        console.log('📝 templateData PARSEADO:', parsedTemplateData);
       } catch (err) {
-        console.error('Error parseando templateData:', err);
+        console.error('❌ Error parseando templateData:', err);
         showNotif('Error', 'No se pudo cargar los datos de la plantilla', 'error');
         return;
       }
+    } else {
+      console.warn('⚠️ No hay templateData en el documento');
     }
 
+    console.log('📝 Estableciendo estados para edición...');
     setEditingDocument(doc);
     setIsEditMode(true);
     setFacturaTemplateData(parsedTemplateData);
     setShowFacturaTemplate(true);
+    console.log('✅ Modal de edición debe abrirse ahora');
   };
 
   /**
