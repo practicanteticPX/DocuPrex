@@ -1024,6 +1024,10 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
       console.log(`📋 Grupo ${grupoData.nombre}: ${grupoData.miembros.length} miembros permitidos`);
       console.log('📋 Lista de firmantes:', firmantes);
 
+      // Calcular total porcentaje antes de guardar
+      const totalPorcentaje = calcularTotalPorcentaje();
+      console.log('📊 Total Porcentaje:', totalPorcentaje);
+
       if (onSave) {
         onSave({
           consecutivo,
@@ -1037,6 +1041,7 @@ const FacturaTemplate = ({ factura, savedData, onClose, onBack, onSave }) => {
           cargoNegociador,
           grupoCausacion,
           filasControl,
+          totalPorcentaje,
           firmantes
         });
       }

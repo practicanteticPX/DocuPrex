@@ -1,6 +1,19 @@
 # Usar una imagen base de Node.js (versión LTS Alpine para ligereza)
 FROM node:20-alpine
 
+# Instalar dependencias de Chromium para Puppeteer
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Variables de entorno para Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 # Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
