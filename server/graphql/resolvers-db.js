@@ -1983,6 +1983,34 @@ const resolvers = {
         console.error('Error al eliminar archivo:', err);
       }
 
+      // ========== ELIMINAR ARCHIVOS DE BACKUP ORIGINALES ==========
+      if (doc.original_pdf_backup) {
+        try {
+          const backupPaths = JSON.parse(doc.original_pdf_backup);
+          console.log(`🗑️ Eliminando ${backupPaths.length} archivo(s) de backup...`);
+
+          for (let i = 0; i < backupPaths.length; i++) {
+            const backupRelativePath = backupPaths[i].replace(/^uploads\//, '');
+            const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+
+            try {
+              if (fs.existsSync(backupFullPath)) {
+                fs.unlinkSync(backupFullPath);
+                console.log(`   ✅ Backup ${i + 1}/${backupPaths.length} eliminado: ${path.basename(backupFullPath)}`);
+              } else {
+                console.log(`   ⚠️ Backup ${i + 1}/${backupPaths.length} no encontrado: ${path.basename(backupFullPath)}`);
+              }
+            } catch (backupErr) {
+              console.error(`   ❌ Error al eliminar backup ${i + 1}:`, backupErr.message);
+            }
+          }
+
+          console.log(`✅ Backups eliminados exitosamente`);
+        } catch (parseError) {
+          console.error('⚠️ Error al parsear backups para eliminar:', parseError.message);
+        }
+      }
+
       await query('DELETE FROM documents WHERE id = $1', [id]);
 
       // Registrar eliminación en logs
@@ -3016,7 +3044,8 @@ const resolvers = {
         throw new Error('Error al registrar la firma');
       }
 
-      // Eliminar backup del PDF original si el firmante NO es el creador
+      // ========== ELIMINAR BACKUPS si el firmante NO es el creador ==========
+      // Cuando alguien más firma, el documento ya no puede ser editado
       if (!isOwner) {
         try {
           const backupCheck = await query(
@@ -3025,27 +3054,39 @@ const resolvers = {
           );
 
           if (backupCheck.rows.length > 0 && backupCheck.rows[0].original_pdf_backup) {
-            const backupPath = backupCheck.rows[0].original_pdf_backup;
-            const fullBackupPath = require('path').join(__dirname, '..', backupPath);
-
-            // Eliminar archivo físico
             const fs = require('fs').promises;
-            try {
-              await fs.unlink(fullBackupPath);
-              console.log(`🗑️ Backup del PDF original eliminado: ${fullBackupPath}`);
-            } catch (fsError) {
-              console.warn(`⚠️ No se pudo eliminar el archivo de backup: ${fsError.message}`);
-            }
+            const path = require('path');
 
-            // Limpiar referencia en BD
-            await query(
-              'UPDATE documents SET original_pdf_backup = NULL WHERE id = $1',
-              [documentId]
-            );
-            console.log(`✅ Referencia del backup limpiada en BD (documento ${documentId})`);
+            try {
+              // Parsear el campo como JSON array
+              const backupPaths = JSON.parse(backupCheck.rows[0].original_pdf_backup);
+              console.log(`🗑️ Eliminando ${backupPaths.length} archivo(s) de backup (documento ya no editable)...`);
+
+              // Eliminar cada archivo de backup
+              for (let i = 0; i < backupPaths.length; i++) {
+                const backupRelativePath = backupPaths[i].replace(/^uploads\//, '');
+                const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+
+                try {
+                  await fs.unlink(backupFullPath);
+                  console.log(`   ✅ Backup ${i + 1}/${backupPaths.length} eliminado: ${path.basename(backupFullPath)}`);
+                } catch (fsError) {
+                  console.warn(`   ⚠️ Backup ${i + 1}/${backupPaths.length} no encontrado o ya eliminado: ${path.basename(backupFullPath)}`);
+                }
+              }
+
+              // Limpiar referencia en BD
+              await query(
+                'UPDATE documents SET original_pdf_backup = NULL WHERE id = $1',
+                [documentId]
+              );
+              console.log(`✅ ${backupPaths.length} backups eliminados (documento no editable)`);
+            } catch (parseError) {
+              console.error('⚠️ Error al parsear backups:', parseError.message);
+            }
           }
         } catch (backupError) {
-          console.error('❌ Error al eliminar backup:', backupError);
+          console.error('❌ Error al eliminar backups:', backupError);
           // No lanzamos error para no interrumpir el flujo de firma
         }
       }

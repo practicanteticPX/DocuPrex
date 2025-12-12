@@ -909,18 +909,38 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
 
     try {
       const firmantes = [];
-      const firmantesUnicos = new Set();
+      const firmantesMap = new Map(); // Usar Map en lugar de Set para agrupar roles
 
       const agregarFirmante = (nombre, rol, cargo, email) => {
-        const key = `${nombre}-${rol}`;
-        if (!firmantesUnicos.has(key) && nombre && nombre.trim()) {
-          firmantesUnicos.add(key);
-          firmantes.push({
+        if (!nombre || !nombre.trim()) return;
+
+        const nombreKey = nombre.trim().toUpperCase(); // Usar solo el nombre como key
+
+        if (firmantesMap.has(nombreKey)) {
+          // Si la persona ya existe, agregar el rol al array de roles
+          const firmante = firmantesMap.get(nombreKey);
+          if (Array.isArray(firmante.role)) {
+            // Si role ya es array, añadir el nuevo rol si no existe
+            if (!firmante.role.includes(rol)) {
+              firmante.role.push(rol);
+              console.log(`✅ Rol adicional agregado a ${nombre.trim()}: ${rol}`);
+            }
+          } else {
+            // Convertir a array si es string
+            const rolAnterior = firmante.role;
+            firmante.role = [rolAnterior, rol];
+            console.log(`✅ Convertido a múltiples roles para ${nombre.trim()}: [${rolAnterior}, ${rol}]`);
+          }
+        } else {
+          // Nueva persona, crear entrada
+          const nuevoFirmante = {
             name: nombre.trim(),
             role: rol,
             cargo: cargo || '',
             email: email || null
-          });
+          };
+          firmantesMap.set(nombreKey, nuevoFirmante);
+          firmantes.push(nuevoFirmante);
           console.log(`✅ Firmante agregado: ${nombre.trim()} - ${rol}`);
         }
       };

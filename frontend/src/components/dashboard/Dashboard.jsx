@@ -1518,19 +1518,24 @@ function Dashboard({ user, onLogout }) {
 
       const key = name.trim();
 
+      // Normalizar role: si es array, usarlo; si es string, convertir a array
+      const rolesArray = Array.isArray(role) ? role : [role];
+
       if (signerMap.has(key)) {
-        // Firmante ya existe, agregar rol adicional
+        // Firmante ya existe, agregar roles adicionales
         const existing = signerMap.get(key);
-        if (!existing.roleNames.includes(role)) {
-          existing.roleNames.push(role);
-        }
+        rolesArray.forEach(r => {
+          if (!existing.roleNames.includes(r)) {
+            existing.roleNames.push(r);
+          }
+        });
       } else {
         // Nuevo firmante - los nombres de roles vienen directamente de la BD
         const signerData = {
           name: name.trim(),
           cargo: cargo || '',
           email: email || null,
-          roleNames: [role]
+          roleNames: rolesArray
         };
 
         // Si es un grupo de Causación, guardar lista de miembros permitidos
@@ -1538,7 +1543,7 @@ function Dashboard({ user, onLogout }) {
           signerData.grupoMiembros = grupoMiembros;
           signerData.grupoCodigo = grupoCodigo;  // Guardar el código del grupo
           signerData.esGrupoCausacion = true;
-          console.log(`✅ Grupo ${role} (${grupoCodigo}): ${grupoMiembros.length} miembros permitidos`);
+          console.log(`✅ Grupo ${rolesArray.join(', ')} (${grupoCodigo}): ${grupoMiembros.length} miembros permitidos`);
         }
 
         signerMap.set(key, signerData);
