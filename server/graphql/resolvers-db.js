@@ -2125,22 +2125,28 @@ const resolvers = {
 
         // Verificar si existe un backup del PDF original
         let originalPdfToUse;
+        console.log(`🔍 Verificando backup del PDF original para documento ${documentId}...`);
+        console.log(`🔍 Campo original_pdf_backup en BD: ${doc.original_pdf_backup || 'NULL'}`);
+
         if (doc.original_pdf_backup) {
           // Usar el PDF original del backup
           const backupRelativePath = doc.original_pdf_backup.replace(/^uploads\//, '');
           originalPdfToUse = path.join(__dirname, '..', 'uploads', backupRelativePath);
-          console.log(`📂 Usando PDF original del backup: ${originalPdfToUse}`);
+          console.log(`📂 Ruta completa del backup: ${originalPdfToUse}`);
 
           // Verificar que el archivo de backup existe
           try {
             await fs.access(originalPdfToUse);
-          } catch {
+            const backupStats = await fs.stat(originalPdfToUse);
+            console.log(`✅ Archivo de backup encontrado (${Math.round(backupStats.size / 1024)} KB)`);
+          } catch (err) {
+            console.error(`❌ Error accediendo al backup: ${err.message}`);
             console.warn('⚠️ Archivo de backup no encontrado, usando PDF actual');
             originalPdfToUse = currentPdfPath;
           }
         } else {
           // No hay backup, usar el PDF actual (fallback para documentos antiguos)
-          console.warn('⚠️ No hay backup disponible, usando PDF actual (puede contener planilla vieja)');
+          console.warn('⚠️ No hay backup disponible en BD, usando PDF actual (puede contener planilla vieja)');
           originalPdfToUse = currentPdfPath;
         }
 
@@ -2148,14 +2154,21 @@ const resolvers = {
         const { mergePDFs } = require('../utils/pdfMerger');
         const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
 
+        console.log(`📋 Fusionando PDFs:`);
+        console.log(`   1. Plantilla nueva: ${tempPlanillaPath}`);
+        console.log(`   2. PDF original: ${originalPdfToUse}`);
+        console.log(`   → Resultado temporal: ${tempMergedPath}`);
+
         // Fusionar planilla con PDF original
         const mergeResult = await mergePDFs([tempPlanillaPath, originalPdfToUse], tempMergedPath);
 
         if (!mergeResult.success) {
-          throw new Error('Error al fusionar PDFs');
+          throw new Error(`Error al fusionar PDFs: ${mergeResult.error || 'Error desconocido'}`);
         }
 
-        console.log('✅ PDFs fusionados correctamente');
+        // Verificar tamaño del resultado
+        const mergedStats = await fs.stat(tempMergedPath);
+        console.log(`✅ PDFs fusionados correctamente (${Math.round(mergedStats.size / 1024)} KB)`);
 
         // DEBUG: Ver estructura completa de templateData para firmantes
         console.log('🔍 DEBUG - parsedTemplateData.firmantes:', parsedTemplateData.firmantes);
@@ -2532,23 +2545,39 @@ const resolvers = {
             ds.grupo_codigo,
             u.name as user_name,
             u.email,
-            COALESCE(s.status, 'pending') as status
+            COALESCE(s.status, 'pending') as status,
+            s.signed_at,
+            s.rejected_at,
+            s.rejection_reason,
+            s.consecutivo,
+            s.real_signer_name,
+            signer_user.email as signer_email
           FROM document_signers ds
           LEFT JOIN users u ON ds.user_id = u.id
-          LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+          LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+            (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+            (ds.is_causacion_group = true AND s.signer_id IN (
+              SELECT ci.user_id
+              FROM causacion_integrantes ci
+              JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+              WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+            ))
+          )
+          LEFT JOIN users signer_user ON s.signer_id = signer_user.id
           WHERE ds.document_id = $1
           ORDER BY ds.order_position ASC`,
           [documentId]
         );
 
         const signers = signersForCover.rows.map(row => ({
-          name: row.is_causacion_group ? `[${row.grupo_codigo}]` : row.user_name,
+          name: row.is_causacion_group ? row.grupo_codigo : row.user_name,
           email: row.email,
-          orderPosition: row.order_position,
-          roleName: row.role_names && row.role_names.length > 0 ? row.role_names.join(', ') : row.role_name,
+          order_position: row.order_position,
+          role_name: row.role_name,
+          role_names: row.role_names,
           status: row.status,
-          isCausacionGroup: row.is_causacion_group,
-          grupoCodigo: row.grupo_codigo
+          is_causacion_group: row.is_causacion_group,
+          grupo_codigo: row.grupo_codigo
         }));
 
         // Preparar información del documento para la portada

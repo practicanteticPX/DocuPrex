@@ -5,6 +5,114 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2025-12-12 - Correcciones en Edición de Plantillas FV e Informe de Firmas
+
+#### Problems Fixed:
+
+1. **Roles de Firmantes Visibles en Tarjetas de Documentos:**
+   - Los roles de firmantes aparecían en las tarjetas del dashboard (tabs "Mis Documentos" y "Documentos Firmados")
+   - Usuario solicitó que los roles SOLO aparezcan en el informe de firmas PDF, no en la interfaz
+
+2. **Roles No Aparecían en Informe de Firmas al Editar Plantilla:**
+   - Al editar una plantilla de factura, los roles de firmantes desaparecían del informe de firmas PDF
+   - Causado por desajuste en nomenclatura: código enviaba `roleName` (camelCase) pero PDF esperaba `role_name` (snake_case)
+
+3. **Grupo de Causación Mostraba Corchetes:**
+   - En el informe de firmas, el grupo aparecía como `[FINANCIERA]` o `[LOGISTICA]`
+   - Usuario solicitó mostrar solo el nombre del grupo sin corchetes: `FINANCIERA` o `LOGISTICA`
+
+4. **Query Incorrecta para Estado de Grupos de Causación:**
+   - La query SQL no manejaba correctamente el estado de firmas para grupos de causación
+   - Al editar plantilla, el estado del grupo no se mostraba correctamente en el informe
+
+#### Files Modified:
+
+1. **`frontend/src/components/dashboard/Dashboard.jsx`**
+   - **Líneas 5431, 5824, 6166:** Removidas 3 ocurrencias de `sig.roleName` en tarjetas de documentos
+   - **Antes:** `{sig.signer?.name} {sig.roleName && <span> - {sig.roleName}</span>}`
+   - **Después:** `{sig.signer?.name}` (sin roles)
+   - **Resultado:** Roles solo aparecen en informe PDF, interfaz más limpia
+
+2. **`frontend/src/components/dashboard/FacturaTemplate.jsx`**
+   - **Línea 1023:** Removidos corchetes del nombre del grupo de causación
+   - **Antes:** `name: \`[${grupoData.nombre}]\``
+   - **Después:** `name: grupoData.nombre`
+   - **Resultado:** Grupo aparece como "Financiera" o "Logística" sin corchetes
+
+3. **`server/graphql/resolvers-db.js`**
+
+   **Cambio 1: Estructura de datos corregida para informe de firmas (líneas 2559-2568)**
+   ```javascript
+   // ANTES (camelCase - incompatible con pdfCoverPage.js)
+   const signers = signersForCover.rows.map(row => ({
+     name: row.is_causacion_group ? `[${row.grupo_codigo}]` : row.user_name,
+     orderPosition: row.order_position,
+     roleName: row.role_names ? row.role_names.join(', ') : row.role_name,
+   }));
+
+   // DESPUÉS (snake_case - compatible con pdfCoverPage.js)
+   const signers = signersForCover.rows.map(row => ({
+     name: row.is_causacion_group ? row.grupo_codigo : row.user_name,
+     order_position: row.order_position,
+     role_name: row.role_name,
+     role_names: row.role_names,
+     is_causacion_group: row.is_causacion_group,
+     grupo_codigo: row.grupo_codigo
+   }));
+   ```
+   - **Resultado:** Roles se muestran correctamente en informe PDF al editar plantilla
+
+   **Cambio 2: Query SQL mejorada para grupos de causación (líneas 2524-2557)**
+   ```sql
+   -- ANTES: LEFT JOIN simple, no manejaba grupos correctamente
+   LEFT JOIN signatures s ON s.document_id = ds.document_id
+     AND s.signer_id = ds.user_id
+
+   -- DESPUÉS: Lógica completa para usuarios y grupos
+   LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+     (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+     (ds.is_causacion_group = true AND s.signer_id IN (
+       SELECT ci.user_id FROM causacion_integrantes ci
+       JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+       WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+     ))
+   )
+   ```
+   - **Resultado:** Estado correcto de grupos de causación en informe PDF
+
+   **Cambio 3: Logs de debugging para backup de PDFs (líneas 2128-2151, 2157-2171)**
+   - Agregados logs detallados para rastrear el uso del backup del PDF original
+   - Logs muestran: ruta del backup, existencia del archivo, tamaño en KB
+   - Logs de fusión: archivos de entrada, salida y tamaño final
+   - **Resultado:** Mayor visibilidad para debugging de problemas con PDFs originales
+
+#### Technical Debt / Known Issues:
+
+1. **Sistema de Backup de PDFs Originales:**
+   - El sistema de backup está implementado correctamente en `assignSigners` (líneas 1327-1351)
+   - Al crear documento FV: se guarda copia del PDF original en `uploads/originals/`
+   - Al editar plantilla: se usa el backup para fusionar con la nueva plantilla
+   - **Posible problema:** Documentos creados ANTES de implementar el sistema no tienen backup
+   - **Solución:** Campo `original_pdf_backup` debe estar poblado en BD para documentos FV
+
+#### Testing Recommendations:
+
+1. Crear nuevo documento FV y verificar:
+   - Backup se crea en `uploads/originals/`
+   - Campo `original_pdf_backup` tiene valor en BD
+
+2. Editar plantilla de documento FV y verificar:
+   - Logs muestran "✅ Archivo de backup encontrado"
+   - Roles aparecen correctamente en informe PDF
+   - Grupo de causación aparece sin corchetes
+   - Páginas del documento original se preservan
+
+3. Verificar interfaz:
+   - Tarjetas de documentos NO muestran roles
+   - Informe PDF SÍ muestra roles junto a cada firmante
+
+---
+
 ### Session: 2025-12-09 (Continuación) - Restricción Firmantes Factura + Fix Duplicados
 
 #### Problems Fixed:

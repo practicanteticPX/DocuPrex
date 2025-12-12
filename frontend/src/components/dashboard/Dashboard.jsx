@@ -5428,7 +5428,6 @@ function Dashboard({ user, onLogout }) {
                                   ></span>
                                   <span className="signer-name">
                                     {sig.signer?.name || sig.signer?.email}
-                                    {sig.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {sig.roleName}</span>}
                                   </span>
                                 </div>
                               );
@@ -5821,7 +5820,6 @@ function Dashboard({ user, onLogout }) {
                                   ></span>
                                   <span className="signer-name">
                                     {sig.signer?.name || sig.signer?.email}
-                                    {sig.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {sig.roleName}</span>}
                                   </span>
                                 </div>
                               );
@@ -6163,7 +6161,6 @@ function Dashboard({ user, onLogout }) {
                                     ></span>
                                     <span className="signer-name">
                                       {sig.signer.name || sig.signer.email}
-                                      {sig.roleName && <span style={{ fontWeight: '400', color: '#6B7280' }}> - {sig.roleName}</span>}
                                     </span>
                                   </div>
                                 );

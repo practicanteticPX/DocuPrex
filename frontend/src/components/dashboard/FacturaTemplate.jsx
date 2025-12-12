@@ -1020,7 +1020,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
       const roleCausacion = fvRoles['CAUSACION'].roleName;  // "Causación" desde BD
 
       firmantes.push({
-        name: `[${grupoData.nombre}]`,  // Nombre del grupo: [Financiera] o [Logística]
+        name: grupoData.nombre,  // Nombre del grupo: Financiera o Logística (sin corchetes)
         role: roleCausacion,  // Rol genérico: "Causación" (desde BD)
         cargo: 'Grupo de Causación',
         email: null,
