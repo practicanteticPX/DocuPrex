@@ -6591,8 +6591,8 @@ function Dashboard({ user, onLogout }) {
             <div className="pdf-viewer-header-right">
               {isViewingPending && !isWaitingTurn && (
                 <>
-                  {/* Botón Consecutivo (solo para FV) */}
-                  {viewingDocument && viewingDocument.documentType && viewingDocument.documentType.code === 'FV' && (
+                  {/* Botón Consecutivo (solo para FV y usuario t.pineda) */}
+                  {viewingDocument && viewingDocument.documentType && viewingDocument.documentType.code === 'FV' && user && user.email === 't.pineda' && (
                     <button
                       className="pdf-viewer-action-btn consecutivo"
                       onClick={() => {
