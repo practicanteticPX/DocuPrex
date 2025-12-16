@@ -1448,13 +1448,34 @@ const resolvers = {
         }
 
         // Preparar información del documento para la portada
+        let cia = null;
+        console.log('🔍 Metadata type:', typeof docInfo.metadata);
+        console.log('🔍 Metadata value:', docInfo.metadata);
+
+        if (docInfo.metadata && typeof docInfo.metadata === 'object') {
+          cia = docInfo.metadata.cia || null;
+          console.log('📦 CIA extraída de metadata (objeto):', cia);
+        } else if (docInfo.metadata && typeof docInfo.metadata === 'string') {
+          try {
+            const parsedMetadata = JSON.parse(docInfo.metadata);
+            cia = parsedMetadata.cia || null;
+            console.log('📦 CIA extraída de metadata (string parseado):', cia);
+          } catch (e) {
+            console.warn('⚠️ No se pudo parsear metadata como JSON');
+          }
+        }
+
         const documentInfo = {
           title: docInfo.title,
           fileName: docInfo.file_name,
           createdAt: docInfo.created_at,
           uploadedBy: docInfo.uploader_name || 'Sistema',
-          documentTypeName: docInfo.document_type_name || null
+          documentTypeName: docInfo.document_type_name || null,
+          cia: cia
         };
+
+        console.log('🏢 CIA para PDF (assignSigners):', cia);
+        console.log('📄 Document Info completo:', documentInfo);
 
         // Si ya existían firmantes, actualizar la página; si no, crear nueva
         if (hasExistingSigners) {
@@ -2734,8 +2755,11 @@ const resolvers = {
           fileName: doc.file_name,
           createdAt: doc.created_at,
           uploadedBy: user.name,
-          documentTypeName: 'Factura'
+          documentTypeName: 'Factura',
+          cia: parsedTemplateData.cia || null
         };
+
+        console.log('🏢 CIA para PDF:', documentInfo.cia);
 
         // Agregar informe de firmantes al final (el PDF fusionado NO tiene informe todavía)
         console.log('📋 Agregando informe de firmantes al PDF fusionado...');

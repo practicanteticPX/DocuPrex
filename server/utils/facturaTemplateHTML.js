@@ -1,3 +1,34 @@
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Helper function to get logo as base64 data URL
+ * @param {string} cia - Company code (PX, PT, PY, CL)
+ * @returns {string|null} - Base64 data URL or null if not found
+ */
+function getCompanyLogoBase64(cia) {
+  if (!cia) return null;
+
+  try {
+    const ciaUpper = cia.toUpperCase().trim();
+    const logoFileName = `Logo_${ciaUpper}.png`;
+    const logoPath = path.join(__dirname, '..', 'assets', 'logos', logoFileName);
+
+    if (fs.existsSync(logoPath)) {
+      const logoBuffer = fs.readFileSync(logoPath);
+      const base64Logo = logoBuffer.toString('base64');
+      console.log(`🏢 Logo ${ciaUpper} cargado para HTML (${Math.round(logoBuffer.length / 1024)} KB)`);
+      return `data:image/png;base64,${base64Logo}`;
+    } else {
+      console.warn(`⚠️ Logo no encontrado para CIA ${ciaUpper}: ${logoPath}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`❌ Error cargando logo para CIA ${cia}:`, error.message);
+    return null;
+  }
+}
+
 /**
  * Genera HTML que replica EXACTAMENTE el componente FacturaTemplate.jsx
  * TODO en una sola página con textos completos y checks visibles
@@ -6,6 +37,7 @@
 function generateFacturaHTML(data) {
   const {
     consecutivo = '',
+    cia = '',
     numeroFactura = '',
     proveedor = '',
     fechaFactura = '',
@@ -16,8 +48,12 @@ function generateFacturaHTML(data) {
     cargoNegociador = '',
     filasControl = [],
     totalPorcentaje = 0,
+    observaciones = '',
     firmas = {} // Objeto con las firmas: { 'nombre_persona': 'nombre_firmante' }
   } = data;
+
+  // Get logo as base64
+  const logoBase64 = getCompanyLogoBase64(cia);
 
   // Usar checklistRevision si existe, si no usar condiciones (compatibilidad)
   const condiciones = data.condiciones || checklistRevision || {};
@@ -60,10 +96,10 @@ function generateFacturaHTML(data) {
         <div class="cell-content">${fila.cargoCuentaContable || ''}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content-firma">${firmaCuentaContable}</div>
+        <div class="cell-content">${fila.nombreCuentaContable || ''}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.nombreCuentaContable || ''}</div>
+        <div class="cell-content-firma">${firmaCuentaContable}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content">${fila.centroCostos || ''}</div>
@@ -369,10 +405,34 @@ function generateFacturaHTML(data) {
       background: #FEE2E2;
       color: #DC2626;
     }
+
+    /* Company Logo Styles */
+    .company-logo-section {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px 0;
+      margin-bottom: 20px;
+      background: white;
+    }
+
+    .company-logo {
+      max-width: 200px;
+      max-height: 80px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+    }
   </style>
 </head>
 <body>
   <div class="factura-template-container">
+    ${logoBase64 ? `
+    <!-- Company Logo -->
+    <div class="company-logo-section">
+      <img src="${logoBase64}" alt="Logo ${cia}" class="company-logo" />
+    </div>
+    ` : ''}
     <!-- Información General de la Factura -->
     <div class="factura-section">
       <h2 class="factura-section-title">Información General de la Factura</h2>
@@ -484,8 +544,8 @@ function generateFacturaHTML(data) {
               <th>No. Cta<br/>Contable</th>
               <th>Resp. Cta<br/>Contable</th>
               <th>Cargo Resp<br/>Cta Contable</th>
-              <th>Firma</th>
               <th>Cta Contable</th>
+              <th>Firma</th>
               <th>C.Co</th>
               <th>Resp. C.Co</th>
               <th>Cargo Resp.<br/>C.Co</th>
@@ -504,6 +564,28 @@ function generateFacturaHTML(data) {
         </div>
       </div>
     </div>
+
+    ${observaciones ? `
+    <!-- Sección de Observaciones (Contenedor Independiente) -->
+    <div class="factura-section" style="padding: 10px 14px;">
+      <h2 class="factura-section-title" style="font-size: 13px; margin-bottom: 8px;">Observaciones</h2>
+      <div style="
+        background: #FAFAFA;
+        border-left: 3px solid #E5E7EB;
+        border-radius: 4px;
+        padding: 8px 10px;
+        font-size: 10px;
+        line-height: 1.5;
+        color: #4B5563;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-weight: 400;
+        max-width: 65%;
+      ">
+        ${observaciones}
+      </div>
+    </div>
+    ` : ''}
   </div>
 </body>
 </html>

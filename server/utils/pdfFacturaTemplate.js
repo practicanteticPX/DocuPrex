@@ -17,6 +17,7 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}) {
 
     const htmlContent = generateFacturaHTML({
       consecutivo: templateData.consecutivo || '',
+      cia: templateData.cia || '',
       numeroFactura: templateData.numeroFactura || '',
       proveedor: templateData.proveedor || '',
       fechaFactura: templateData.fechaFactura || '',
@@ -27,6 +28,7 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}) {
       cargoNegociador: templateData.cargoNegociador || '',
       filasControl: templateData.filasControl || [],
       totalPorcentaje: templateData.totalPorcentaje || 0,
+      observaciones: templateData.observaciones || '',
       firmas: firmas
     });
 

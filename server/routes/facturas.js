@@ -179,6 +179,7 @@ router.get('/search/:numeroControl', async (req, res) => {
     const result = await queryFacturas(
       `SELECT
         numero_control,
+        cia,
         proveedor,
         numero_factura,
         fecha_factura,
@@ -215,11 +216,13 @@ router.get('/search/:numeroControl', async (req, res) => {
     }
 
     console.log('📋 Factura encontrada:', JSON.stringify(facturaData, null, 2));
+    console.log('🏢 CIA:', facturaData.cia);
     console.log('📅 fecha_factura:', facturaData.fecha_factura);
     console.log('📅 fecha_entrega:', facturaData.fecha_entrega);
 
     const response = {
       numero_control: facturaData.numero_control,
+      cia: facturaData.cia,
       proveedor: facturaData.proveedor,
       numero_factura: facturaData.numero_factura,
       fecha_factura: facturaData.fecha_factura,

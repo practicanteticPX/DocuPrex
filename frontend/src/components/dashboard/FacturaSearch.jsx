@@ -39,6 +39,7 @@ const FacturaSearch = ({ onFacturaSelect }) => {
 
         console.log('🔍 Respuesta del backend:', result);
         console.log('📦 Data recibida:', result.data);
+        console.log('🏢 CIA recibida del backend:', result.data?.cia);
 
         if (response.ok && result.success) {
           setFactura(result.data);

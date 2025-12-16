@@ -33,6 +33,7 @@ services:
       - ./server/uploads:/app/uploads
       - ./server/logs:/app/logs
       - ./server/.env:/app/.env
+      - ./server/assets:/app/assets
     env_file:
       - ./server/.env
     command: npm start

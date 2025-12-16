@@ -73,6 +73,11 @@ router.post('/upload', authenticate, (req, res) => {
       if (templateData) {
         try {
           parsedMetadata = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
+          console.log('📋 Template Data recibido:', {
+            consecutivo: parsedMetadata.consecutivo,
+            cia: parsedMetadata.cia,
+            proveedor: parsedMetadata.proveedor
+          });
         } catch (parseError) {
           console.error('⚠️ Error al parsear templateData:', parseError);
           parsedMetadata = {};
@@ -348,6 +353,11 @@ router.post('/upload-unified', authenticate, (req, res) => {
       if (templateData) {
         try {
           parsedMetadata = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
+          console.log('📋 Template Data recibido:', {
+            consecutivo: parsedMetadata.consecutivo,
+            cia: parsedMetadata.cia,
+            proveedor: parsedMetadata.proveedor
+          });
         } catch (parseError) {
           console.error('⚠️ Error al parsear templateData:', parseError);
           parsedMetadata = {};

@@ -9,6 +9,12 @@ import { BACKEND_HOST, API_URL } from '../../config/api';
 import axios from 'axios';
 import './FacturaTemplate.css';
 
+// Company logos
+import LogoPX from '../../assets/Logo PX.png';
+import LogoPT from '../../assets/Logo PT.png';
+import LogoPY from '../../assets/Logo PY.png';
+import LogoCL from '../../assets/Logo CL.png';
+
 /**
  * Helper para formatear fechas de PostgreSQL a formato YYYY-MM-DD
  * Usa UTC para evitar problemas de zona horaria
@@ -44,6 +50,25 @@ const CHECKLIST_TOOLTIPS = {
 };
 
 /**
+ * Map company code to logo
+ * @param {string} ciaCode - Company code (PX, PT, PY, CL)
+ * @returns {string|null} - Logo image path or null if not found
+ */
+const getCompanyLogo = (ciaCode) => {
+  if (!ciaCode) return null;
+
+  const ciaUpper = ciaCode.toUpperCase().trim();
+  const logoMap = {
+    'PX': LogoPX,
+    'PT': LogoPT,
+    'PY': LogoPY,
+    'CL': LogoCL
+  };
+
+  return logoMap[ciaUpper] || null;
+};
+
+/**
  * FacturaTemplate - Plantilla de legalización de facturas
  *
  * Formulario completo para diligenciar información de factura
@@ -71,6 +96,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
 
   // Estados para campos automáticos desde T_Facturas
   const [consecutivo, setConsecutivo] = useState('');
+  const [cia, setCia] = useState('');
   const [proveedor, setProveedor] = useState('');
   const [numeroFactura, setNumeroFactura] = useState('');
   const [fechaFactura, setFechaFactura] = useState('');
@@ -94,6 +120,9 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
 
   // Estado para grupo de causación
   const [grupoCausacion, setGrupoCausacion] = useState('');
+
+  // Estado para observaciones
+  const [observaciones, setObservaciones] = useState('');
 
   // Estado para las filas de la tabla de control de firmas
   const [filasControl, setFilasControl] = useState([
@@ -287,8 +316,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
       console.log('📋 Datos de factura recibidos:', factura);
       console.log('📅 fecha_factura:', factura.fecha_factura);
       console.log('📅 fecha_entrega:', factura.fecha_entrega);
+      console.log('🏢 cia:', factura.cia);
 
       setConsecutivo(factura.numero_control || '');
+      setCia(factura.cia || '');
       setProveedor(factura.proveedor || '');
       setNumeroFactura(factura.numero_factura || '');
 
@@ -312,6 +343,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
 
       // Restaurar campos automáticos de la factura
       if (savedData.consecutivo) setConsecutivo(savedData.consecutivo);
+      if (savedData.cia) setCia(savedData.cia);
       if (savedData.proveedor) setProveedor(savedData.proveedor);
       if (savedData.numeroFactura) setNumeroFactura(savedData.numeroFactura);
       if (savedData.fechaFactura) setFechaFactura(savedData.fechaFactura);
@@ -323,6 +355,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
       if (savedData.nombreNegociador) setNombreNegociador(savedData.nombreNegociador);
       if (savedData.cargoNegociador) setCargoNegociador(savedData.cargoNegociador);
       if (savedData.grupoCausacion) setGrupoCausacion(savedData.grupoCausacion);
+      if (savedData.observaciones) setObservaciones(savedData.observaciones);
       if (savedData.filasControl) setFilasControl(savedData.filasControl);
 
       console.log('✅ Datos de plantilla restaurados correctamente');
@@ -1056,9 +1089,13 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
       const totalPorcentaje = calcularTotalPorcentaje();
       console.log('📊 Total Porcentaje:', totalPorcentaje);
 
+      console.log('🏢 CIA antes de guardar:', cia);
+      console.log('📋 Consecutivo antes de guardar:', consecutivo);
+
       if (onSave) {
         onSave({
           consecutivo,
+          cia,
           proveedor,
           numeroFactura,
           fechaFactura,
@@ -1068,6 +1105,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
           nombreNegociador,
           cargoNegociador,
           grupoCausacion,
+          observaciones,
           filasControl,
           totalPorcentaje,
           firmantes
@@ -1690,13 +1728,13 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
               Seleccione el grupo que realizará el proceso de causación. Todas las personas del grupo seleccionado recibirán una notificación para firmar.
             </p>
 
-            <div className="factura-checklist-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               {loadingGrupos ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                <div style={{ padding: '20px', textAlign: 'center', color: '#666', gridColumn: '1 / -1' }}>
                   Cargando grupos de causación...
                 </div>
               ) : causacionGrupos.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#ff6b6b' }}>
+                <div style={{ padding: '20px', textAlign: 'center', color: '#ff6b6b', gridColumn: '1 / -1' }}>
                   No se encontraron grupos de causación. Verifique la configuración.
                 </div>
               ) : (
@@ -1716,6 +1754,44 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          {/* Sección: Observaciones (separada) */}
+          <div className="factura-section">
+            <h2 className="factura-section-title">Observaciones</h2>
+            <div className="factura-field">
+              <textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Observaciones adicionales (opcional)"
+                rows="3"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  fontSize: '14px',
+                  lineHeight: '1.5',
+                  fontFamily: 'Google Sans, sans-serif',
+                  color: '#374151',
+                  background: '#FFFFFF',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '8px',
+                  resize: 'vertical',
+                  minHeight: '80px',
+                  maxHeight: '200px',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#9CA3AF';
+                  e.target.style.background = '#F9FAFB';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#D1D5DB';
+                  e.target.style.background = '#FFFFFF';
+                }}
+              />
             </div>
           </div>
         </div>
