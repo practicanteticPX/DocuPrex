@@ -12,6 +12,7 @@ import DocumentTypeSelector from './DocumentTypeSelector';
 import FacturaSearch from './FacturaSearch';
 import FacturaTemplate from './FacturaTemplate';
 import LoadingScreen from './LoadingScreen';
+import SigningLoadingScreen from './SigningLoadingScreen';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
@@ -106,6 +107,7 @@ function Dashboard({ user, onLogout }) {
   const [showOrderError, setShowOrderError] = useState(false);
   const [orderErrorMessage, setOrderErrorMessage] = useState('');
   const [signing, setSigning] = useState(false);
+  const [showSigningLoader, setShowSigningLoader] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
 
@@ -2453,6 +2455,8 @@ function Dashboard({ user, onLogout }) {
 
     try {
       setSigning(true);
+      setShowSigningLoader(true);
+      console.log('🔄 Mostrando animación de firma...');
       const token = localStorage.getItem('token');
 
       // Construir signatureData incluyendo el nombre real si es usuario Negociaciones
@@ -2547,8 +2551,15 @@ function Dashboard({ user, onLogout }) {
         }
       }
 
-      // Mostrar popup de éxito
-      setShowSignSuccess(true);
+      // Mantener loader visible por tiempo suficiente para mostrar el proceso
+      setTimeout(() => {
+        setShowSigningLoader(false);
+      }, 1800);
+
+      // Mostrar popup de éxito después de ocultar el loader con transición smooth
+      setTimeout(() => {
+        setShowSignSuccess(true);
+      }, 2200);
 
       // Limpiar consecutivo después de firmar
       setConsecutivo('');
@@ -2558,6 +2569,7 @@ function Dashboard({ user, onLogout }) {
       await loadSignedDocuments();
     } catch (err) {
       console.error('Error al firmar:', err);
+      setShowSigningLoader(false);
       // Mostrar modal de error
       setOrderErrorMessage(err.message || 'Error al firmar el documento');
       setShowOrderError(true);
@@ -6912,6 +6924,11 @@ function Dashboard({ user, onLogout }) {
 
         </div>
       )}
+
+      {/* Animación de Firma */}
+      <AnimatePresence>
+        {showSigningLoader && <SigningLoadingScreen />}
+      </AnimatePresence>
 
       {/* Modal de Detalles del Desarrollador */}
       {selectedDeveloper && (
