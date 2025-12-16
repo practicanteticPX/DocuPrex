@@ -3153,52 +3153,10 @@ const resolvers = {
         throw new Error('Error al registrar la firma');
       }
 
-      // ========== ELIMINAR BACKUPS si el firmante NO es el creador ==========
-      // Cuando alguien más firma, el documento ya no puede ser editado
-      if (!isOwner) {
-        try {
-          const backupCheck = await query(
-            'SELECT original_pdf_backup FROM documents WHERE id = $1',
-            [documentId]
-          );
-
-          if (backupCheck.rows.length > 0 && backupCheck.rows[0].original_pdf_backup) {
-            const fs = require('fs').promises;
-            const path = require('path');
-
-            try {
-              // Parsear el campo como JSON array
-              const backupPaths = JSON.parse(backupCheck.rows[0].original_pdf_backup);
-              console.log(`🗑️ Eliminando ${backupPaths.length} archivo(s) de backup (documento ya no editable)...`);
-
-              // Eliminar cada archivo de backup
-              for (let i = 0; i < backupPaths.length; i++) {
-                const backupRelativePath = backupPaths[i].replace(/^uploads\//, '');
-                const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
-
-                try {
-                  await fs.unlink(backupFullPath);
-                  console.log(`   ✅ Backup ${i + 1}/${backupPaths.length} eliminado: ${path.basename(backupFullPath)}`);
-                } catch (fsError) {
-                  console.warn(`   ⚠️ Backup ${i + 1}/${backupPaths.length} no encontrado o ya eliminado: ${path.basename(backupFullPath)}`);
-                }
-              }
-
-              // Limpiar referencia en BD
-              await query(
-                'UPDATE documents SET original_pdf_backup = NULL WHERE id = $1',
-                [documentId]
-              );
-              console.log(`✅ ${backupPaths.length} backups eliminados (documento no editable)`);
-            } catch (parseError) {
-              console.error('⚠️ Error al parsear backups:', parseError.message);
-            }
-          }
-        } catch (backupError) {
-          console.error('❌ Error al eliminar backups:', backupError);
-          // No lanzamos error para no interrumpir el flujo de firma
-        }
-      }
+      // ========== LOS BACKUPS NUNCA SE ELIMINAN ==========
+      // Los archivos originales deben mantenerse SIEMPRE
+      // Solo se eliminan cuando se elimina el documento completo (en deleteDocument)
+      console.log('📦 Los backups de PDFs originales se mantienen intactos');
 
       const statusResult = await query(
         `SELECT
@@ -3290,16 +3248,33 @@ const resolvers = {
             if (docInfo.original_pdf_backup) {
               try {
                 const backupPathsArray = JSON.parse(docInfo.original_pdf_backup);
-                for (const relPath of backupPathsArray) {
+                console.log(`📦 Cargando ${backupPathsArray.length} archivo(s) de backup...`);
+
+                for (let i = 0; i < backupPathsArray.length; i++) {
+                  const relPath = backupPathsArray[i];
                   const backupRelativePath = relPath.replace(/^uploads\//, '');
                   const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
-                  await fs.access(backupFullPath);
-                  backupFilePaths.push(backupFullPath);
+
+                  try {
+                    await fs.access(backupFullPath);
+                    backupFilePaths.push(backupFullPath);
+                    console.log(`   ✅ Backup ${i + 1}/${backupPathsArray.length}: ${path.basename(backupFullPath)}`);
+                  } catch (accessError) {
+                    console.error(`   ❌ Backup ${i + 1}/${backupPathsArray.length} NO ENCONTRADO: ${backupFullPath}`);
+                  }
+                }
+
+                if (backupFilePaths.length === 0) {
+                  console.error('❌ CRÍTICO: No se encontró ningún backup de PDF original');
+                } else {
+                  console.log(`✅ ${backupFilePaths.length} de ${backupPathsArray.length} backups cargados exitosamente`);
                 }
               } catch (error) {
-                console.warn('⚠️ No se pudieron cargar backups:', error.message);
+                console.error('❌ Error al cargar backups:', error.message);
                 backupFilePaths = [];
               }
+            } else {
+              console.warn('⚠️ No hay backups registrados para este documento');
             }
 
             // Fusionar: plantilla + backups
