@@ -26,11 +26,21 @@ const SERVER_START_TIME = Date.now();
 // Función para obtener el usuario del token
 const getUserFromToken = (token) => {
   try {
-    if (token) {
-      return jwt.verify(token, JWT_SECRET);
+    if (!token) {
+      console.log('⚠️ getUserFromToken: No token provided');
+      return null;
     }
-    return null;
+    console.log('🔑 getUserFromToken: Token recibido (primeros 20 chars):', token.substring(0, 20) + '...');
+    const decoded = jwt.verify(token, JWT_SECRET);
+    console.log('✅ getUserFromToken: Token válido para usuario:', decoded.username);
+    return decoded;
   } catch (error) {
+    console.error('❌ getUserFromToken: Error verificando token:', error.message);
+    if (error.name === 'TokenExpiredError') {
+      console.error('⏰ Token expirado en:', error.expiredAt);
+    } else if (error.name === 'JsonWebTokenError') {
+      console.error('🚫 Token inválido o malformado');
+    }
     return null;
   }
 };
@@ -249,8 +259,15 @@ async function startServer() {
     resolvers,
     context: ({ req }) => {
       // Obtener token del header
-      const token = req.headers.authorization?.replace('Bearer ', '') || '';
+      const authHeader = req.headers.authorization;
+      console.log('🌐 Apollo Context: Authorization header:', authHeader ? `${authHeader.substring(0, 30)}...` : 'MISSING');
+
+      const token = authHeader?.replace('Bearer ', '') || '';
       const user = getUserFromToken(token);
+
+      if (!user) {
+        console.warn('⚠️ Apollo Context: Usuario no autenticado para esta request');
+      }
 
       // Obtener IP del cliente
       const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'IP desconocida';

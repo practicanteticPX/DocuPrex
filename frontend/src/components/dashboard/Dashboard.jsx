@@ -377,6 +377,52 @@ function Dashboard({ user, onLogout }) {
   // Estado para controlar "ver más" en firmantes de Mis Documentos
   const [expandedSigners, setExpandedSigners] = useState({});
 
+  // Estado para posición del dropdown de firmantes (position: fixed)
+  const [signersDropdownPos, setSignersDropdownPos] = useState(null);
+
+  // Handler para toggle del dropdown de firmantes con posición calculada
+  const handleToggleSignersDropdown = (e, docId, signatures) => {
+    if (signersDropdownPos?.docId === docId) {
+      // Cerrar si ya está abierto
+      setSignersDropdownPos(null);
+      setExpandedSigners({ ...expandedSigners, [docId]: false });
+    } else {
+      // Calcular posición del botón
+      const rect = e.currentTarget.getBoundingClientRect();
+      const dropdownWidth = 180;
+      const dropdownHeight = Math.min(signatures.length * 28 + 50, 220);
+
+      // Calcular posición centrada debajo del botón
+      let left = rect.left + (rect.width / 2) - (dropdownWidth / 2);
+      let top = rect.bottom + 6;
+
+      // Ajustar si se sale de la pantalla
+      if (left < 10) left = 10;
+      if (left + dropdownWidth > window.innerWidth - 10) {
+        left = window.innerWidth - dropdownWidth - 10;
+      }
+      if (top + dropdownHeight > window.innerHeight - 10) {
+        top = rect.top - dropdownHeight - 6;
+      }
+
+      setSignersDropdownPos({ docId, top, left, signatures });
+      setExpandedSigners({ ...expandedSigners, [docId]: true });
+    }
+  };
+
+  // Cerrar dropdown de firmantes al hacer clic fuera
+  useEffect(() => {
+    if (!signersDropdownPos) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.signers-dropdown-fixed') && !e.target.closest('.btn-ver-todos')) {
+        setSignersDropdownPos(null);
+        setExpandedSigners({});
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [signersDropdownPos]);
+
   // Estado para popup de razón de rechazo
   const [rejectionReasonPopup, setRejectionReasonPopup] = useState(null);
 
@@ -5421,10 +5467,10 @@ function Dashboard({ user, onLogout }) {
                             </span>
                           </div>
 
-                          
+
 
                           <div className="doc-signers-row">
-                            {(expandedSigners[doc.id] ? signatures : signatures.slice(0, 3)).map((sig) => {
+                            {signatures.slice(0, 3).map((sig) => {
                               const getSignerStatusColor = (status) => {
                                 if (status === 'signed') return '#10B981';
                                 if (status === 'rejected') return '#EF4444';
@@ -5452,12 +5498,9 @@ function Dashboard({ user, onLogout }) {
                             {signatures.length > 3 && (
                               <button
                                 className="btn-ver-todos"
-                                onClick={() => setExpandedSigners({
-                                  ...expandedSigners,
-                                  [doc.id]: !expandedSigners[doc.id]
-                                })}
+                                onClick={(e) => handleToggleSignersDropdown(e, doc.id, signatures)}
                               >
-                                {expandedSigners[doc.id] ? '- ver menos' : '+ ver todos'}
+                                {signersDropdownPos?.docId === doc.id ? '- ver menos' : '+ ver todos'}
                               </button>
                             )}
                           </div>
@@ -5816,7 +5859,7 @@ function Dashboard({ user, onLogout }) {
                           
 
                           <div className="doc-signers-row">
-                            {(expandedSigners[doc.id] ? signatures : signatures.slice(0, 3)).map((sig) => {
+                            {signatures.slice(0, 3).map((sig) => {
                               const getSignerStatusColor = (status) => {
                                 if (status === 'signed') return '#10B981';
                                 if (status === 'rejected') return '#EF4444';
@@ -5844,12 +5887,9 @@ function Dashboard({ user, onLogout }) {
                             {signatures.length > 3 && (
                               <button
                                 className="btn-ver-todos"
-                                onClick={() => setExpandedSigners({
-                                  ...expandedSigners,
-                                  [doc.id]: !expandedSigners[doc.id]
-                                })}
+                                onClick={(e) => handleToggleSignersDropdown(e, doc.id, signatures)}
                               >
-                                {expandedSigners[doc.id] ? '- ver menos' : '+ ver todos'}
+                                {signersDropdownPos?.docId === doc.id ? '- ver menos' : '+ ver todos'}
                               </button>
                             )}
                           </div>
@@ -6157,7 +6197,7 @@ function Dashboard({ user, onLogout }) {
                             </div>
 
                             <div className="doc-signers-row">
-                              {(expandedSigners[doc.id] ? signatures : signatures.slice(0, 3)).map((sig) => {
+                              {signatures.slice(0, 3).map((sig) => {
                                 const getSignerStatusColor = (status) => {
                                   if (status === 'signed') return '#10B981';
                                   if (status === 'rejected') return '#EF4444';
@@ -6185,12 +6225,9 @@ function Dashboard({ user, onLogout }) {
                               {signatures.length > 3 && (
                                 <button
                                   className="btn-ver-todos"
-                                  onClick={() => setExpandedSigners({
-                                    ...expandedSigners,
-                                    [doc.id]: !expandedSigners[doc.id]
-                                  })}
+                                  onClick={(e) => handleToggleSignersDropdown(e, doc.id, signatures)}
                                 >
-                                  {expandedSigners[doc.id] ? '- ver menos' : '+ ver todos'}
+                                  {signersDropdownPos?.docId === doc.id ? '- ver menos' : '+ ver todos'}
                                 </button>
                               )}
                             </div>
@@ -6496,7 +6533,7 @@ function Dashboard({ user, onLogout }) {
                               </div>
 
                               <div className="doc-signers-row">
-                                {(expandedSigners[doc.id] ? signatures : signatures.slice(0, 3)).map((sig) => {
+                                {signatures.slice(0, 3).map((sig) => {
                                   const getSignerStatusColor = (status) => {
                                     if (status === 'signed') return '#10B981';
                                     if (status === 'rejected') return '#EF4444';
@@ -6522,12 +6559,9 @@ function Dashboard({ user, onLogout }) {
                                 {signatures.length > 3 && (
                                   <button
                                     className="btn-ver-todos"
-                                    onClick={() => setExpandedSigners({
-                                      ...expandedSigners,
-                                      [doc.id]: !expandedSigners[doc.id]
-                                    })}
+                                    onClick={(e) => handleToggleSignersDropdown(e, doc.id, signatures)}
                                   >
-                                    {expandedSigners[doc.id] ? '- ver menos' : '+ ver todos'}
+                                    {signersDropdownPos?.docId === doc.id ? '- ver menos' : '+ ver todos'}
                                   </button>
                                 )}
                               </div>
@@ -8226,6 +8260,32 @@ function Dashboard({ user, onLogout }) {
           }}
           onSave={isEditMode ? handleSaveEditedTemplate : handleFacturaTemplateSave}
         />
+      )}
+
+      {/* Dropdown de firmantes con position: fixed */}
+      {signersDropdownPos && (
+        <div
+          className="signers-dropdown-fixed"
+          style={{
+            position: 'fixed',
+            top: signersDropdownPos.top,
+            left: signersDropdownPos.left,
+            zIndex: 99999
+          }}
+        >
+          <div className="signers-dropdown-title">Firmantes ({signersDropdownPos.signatures.length})</div>
+          <div className="signers-dropdown-list">
+            {signersDropdownPos.signatures.map((sig) => (
+              <div key={sig.id} className="signers-dropdown-item">
+                <span
+                  className="signer-dot"
+                  style={{ backgroundColor: sig.status === 'signed' ? '#10B981' : sig.status === 'rejected' ? '#EF4444' : '#F59E0B' }}
+                ></span>
+                <span className="signer-name">{sig.signer?.name || sig.signer?.email}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
     </div>

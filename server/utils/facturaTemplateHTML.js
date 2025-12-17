@@ -566,23 +566,18 @@ function generateFacturaHTML(data) {
     </div>
 
     ${observaciones ? `
-    <!-- Sección de Observaciones (Contenedor Independiente) -->
-    <div class="factura-section" style="padding: 10px 14px;">
-      <h2 class="factura-section-title" style="font-size: 13px; margin-bottom: 8px;">Observaciones</h2>
-      <div style="
-        background: #FAFAFA;
-        border-left: 3px solid #E5E7EB;
-        border-radius: 4px;
-        padding: 8px 10px;
-        font-size: 10px;
-        line-height: 1.5;
-        color: #4B5563;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        font-weight: 400;
-        max-width: 65%;
-      ">
-        ${observaciones}
+    <!-- Sección de Observaciones -->
+    <div class="factura-section">
+      <h2 class="factura-section-title">Observaciones</h2>
+      <div class="factura-field">
+        <textarea class="ui-input" readonly style="
+          min-height: 60px;
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+          resize: none;
+          line-height: 1.5;
+          background: white;
+        ">${observaciones}</textarea>
       </div>
     </div>
     ` : ''}

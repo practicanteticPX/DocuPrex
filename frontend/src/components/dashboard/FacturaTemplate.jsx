@@ -983,18 +983,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
       const roleNegociador = fvRoles['NEGOCIADOR']?.roleName || 'Negociador';
       agregarFirmante(nombreNegociador, roleNegociador, cargoNegociador);
 
-      // 2. Agregar Responsables de Cuentas Contables y Centros de Costos
-      console.log('📋 Agregando Responsables de filas de control...');
-      const roleRespCuentaCont = fvRoles['RESPONSABLE_CUENTA_CONTABLE']?.roleName || 'Resp Cta Cont';
-      const roleRespCentroCost = fvRoles['RESPONSABLE_CENTRO_COSTOS']?.roleName || 'Resp Ctro Cost';
-
-      filasControl.forEach((fila, index) => {
-        console.log(`   Fila ${index + 1}:`);
-        agregarFirmante(fila.respCentroCostos, roleRespCentroCost, fila.cargoCentroCostos);
-        agregarFirmante(fila.respCuentaContable, roleRespCuentaCont, fila.cargoCuentaContable);
-      });
-
-      // 3. Agregar NEGOCIACIONES (OBLIGATORIO)
+      // 2. Agregar NEGOCIACIONES (OBLIGATORIO)
       console.log('📋 Obteniendo usuario NEGOCIACIONES...');
       const negociacionesResponse = await fetch(`${BACKEND_HOST}/api/facturas/usuario-negociaciones`);
       const negociacionesData = await negociacionesResponse.json();
@@ -1011,6 +1000,17 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
         negociacionesData.data.cargo,
         negociacionesData.data.email
       );
+
+      // 3. Agregar Responsables de Cuentas Contables y Centros de Costos
+      console.log('📋 Agregando Responsables de filas de control...');
+      const roleRespCuentaCont = fvRoles['RESPONSABLE_CUENTA_CONTABLE']?.roleName || 'Resp Cta Cont';
+      const roleRespCentroCost = fvRoles['RESPONSABLE_CENTRO_COSTOS']?.roleName || 'Resp Ctro Cost';
+
+      filasControl.forEach((fila, index) => {
+        console.log(`   Fila ${index + 1}:`);
+        agregarFirmante(fila.respCentroCostos, roleRespCentroCost, fila.cargoCentroCostos);
+        agregarFirmante(fila.respCuentaContable, roleRespCuentaCont, fila.cargoCuentaContable);
+      });
 
       // 4. Agregar Grupo de Causación (UN SOLO firmante genérico)
       console.log(`📋 Obteniendo grupo de causación: ${grupoCausacion}...`);
