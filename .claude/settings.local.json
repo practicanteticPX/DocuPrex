@@ -50,7 +50,8 @@
       "Bash(git commit -m \"$(cat <<''EOF''\nFIX edición plantillas FV + informe firmas\n\nProblemas corregidos:\n1. Removidos roles de firmantes en tarjetas del dashboard\n2. Corregida estructura de datos para roles en informe PDF\n3. Removidos corchetes del grupo de causación en informe\n4. Mejorada query SQL para estado de grupos de causación\n5. Agregados logs detallados para debugging de backups PDF\n\nArchivos modificados:\n- Dashboard.jsx: Removidos sig.roleName de 3 ubicaciones\n- FacturaTemplate.jsx: Grupo sin corchetes\n- resolvers-db.js: Estructura snake_case + query mejorada + logs\n\nRefs: #edicion-plantillas #informe-firmas #grupos-causacion\nEOF\n)\")",
       "Bash(copy:*)",
       "Bash(MSYS_NO_PATHCONV=1 docker exec:*)",
-      "Bash(docker-compose:*)"
+      "Bash(docker-compose:*)",
+      "Bash(timeout 20 docker logs:*)"
     ],
     "deny": [],
     "ask": []

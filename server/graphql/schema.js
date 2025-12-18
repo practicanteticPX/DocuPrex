@@ -49,7 +49,7 @@ const typeDefs = gql`
   }
 
   type Signature {
-    id: Int!
+    id: ID!
     document: Document
     documentId: Int
     signer: User
@@ -68,6 +68,10 @@ const typeDefs = gql`
     updatedAt: String
     roleName: String
     orderPosition: Int
+    # Campos para grupos de causación
+    isCausacionGroup: Boolean
+    grupoCodigo: String
+    grupoNombre: String
   }
 
   type DocumentSigner {
