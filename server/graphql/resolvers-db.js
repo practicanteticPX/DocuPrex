@@ -4195,9 +4195,9 @@ const resolvers = {
             );
 
             if (docTypeCheck.rows.length > 0 && docTypeCheck.rows[0].code === 'FV') {
-              // Verificar que el usuario tiene el rol RESP_CTRO_COST
+              // Verificar que el usuario tiene el rol RESPONSABLE_CENTRO_COSTOS
               const signerCheck = await query(
-                `SELECT ds.role_code, ds.role_names
+                `SELECT ds.assigned_role_ids, ds.role_names
                  FROM document_signers ds
                  WHERE ds.document_id = $1 AND ds.user_id = $2`,
                 [documentId, user.id]
@@ -4207,21 +4207,22 @@ const resolvers = {
                 const signer = signerCheck.rows[0];
                 let hasRespCtroCost = false;
 
-                // Verificar en role_code
-                if (signer.role_code === 'RESP_CTRO_COST') {
-                  hasRespCtroCost = true;
-                }
-
-                // Verificar en role_names array
-                if (!hasRespCtroCost && signer.role_names) {
-                  try {
-                    const roleNames = typeof signer.role_names === 'string'
-                      ? JSON.parse(signer.role_names)
-                      : signer.role_names;
-                    hasRespCtroCost = roleNames.includes('RESP_CTRO_COST');
-                  } catch (e) {
-                    console.error('Error parsing role_names:', e);
-                  }
+                // Buscar el código de rol en la base de datos
+                if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
+                  const roleCodesResult = await query(
+                    `SELECT role_code FROM document_type_roles WHERE id = ANY($1)`,
+                    [signer.assigned_role_ids]
+                  );
+                  const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+                  hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
+                } else if (signer.role_names && signer.role_names.length > 0) {
+                  // Fallback: buscar por role_name
+                  const roleCodesResult = await query(
+                    `SELECT role_code FROM document_type_roles WHERE role_name = ANY($1)`,
+                    [signer.role_names]
+                  );
+                  const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+                  hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
                 }
 
                 if (hasRespCtroCost) {
@@ -4306,7 +4307,7 @@ const resolvers = {
 
       // Verificar que el usuario es firmante con rol resp ctro cost
       const signerCheck = await query(
-        `SELECT ds.role_code, ds.role_names
+        `SELECT ds.assigned_role_ids, ds.role_names
          FROM document_signers ds
          WHERE ds.document_id = $1 AND ds.user_id = $2`,
         [documentId, user.id]
@@ -4317,8 +4318,25 @@ const resolvers = {
       }
 
       const signer = signerCheck.rows[0];
-      const hasRespCtroCost = signer.role_code === 'RESP_CTRO_COST' ||
-        (signer.role_names && signer.role_names.includes('RESP_CTRO_COST'));
+      let hasRespCtroCost = false;
+
+      // Buscar el código de rol en la base de datos
+      if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
+        const roleCodesResult = await query(
+          `SELECT role_code FROM document_type_roles WHERE id = ANY($1)`,
+          [signer.assigned_role_ids]
+        );
+        const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+        hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
+      } else if (signer.role_names && signer.role_names.length > 0) {
+        // Fallback: buscar por role_name
+        const roleCodesResult = await query(
+          `SELECT role_code FROM document_type_roles WHERE role_name = ANY($1)`,
+          [signer.role_names]
+        );
+        const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+        hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
+      }
 
       if (!hasRespCtroCost) {
         throw new Error('Solo el responsable del centro de costos puede retener facturas');
@@ -4533,6 +4551,7 @@ const resolvers = {
           ds.order_position,
           ds.role_name,
           ds.role_names,
+          ds.assigned_role_ids,
           ds.is_causacion_group,
           ds.grupo_codigo,
           u.name as user_name,
@@ -4544,6 +4563,25 @@ const resolvers = {
         WHERE ds.document_id = $1
         ORDER BY ds.order_position ASC
       `, [parent.id]);
+
+      // Para cada signer, obtener los role_codes basados en assigned_role_ids o role_names
+      for (const signer of signersResult.rows) {
+        if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
+          // Usar assigned_role_ids si está disponible
+          const rolesResult = await query(`
+            SELECT role_code FROM document_type_roles WHERE id = ANY($1)
+          `, [signer.assigned_role_ids]);
+          signer.role_codes = rolesResult.rows.map(r => r.role_code);
+        } else if (signer.role_names && signer.role_names.length > 0) {
+          // Fallback: buscar por role_name (compatibilidad con documentos antiguos)
+          const rolesResult = await query(`
+            SELECT role_code FROM document_type_roles WHERE role_name = ANY($1)
+          `, [signer.role_names]);
+          signer.role_codes = rolesResult.rows.map(r => r.role_code);
+        } else {
+          signer.role_codes = [];
+        }
+      }
 
       const results = [];
 
@@ -4580,6 +4618,7 @@ const resolvers = {
               order_position: signer.order_position,
               role_name: signer.role_name,
               role_names: signer.role_names,
+              role_codes: signer.role_codes,
               is_causacion_group: true,
               grupo_codigo: signer.grupo_codigo,
               grupo_nombre: signer.grupo_nombre,
@@ -4602,6 +4641,7 @@ const resolvers = {
               order_position: signer.order_position,
               role_name: signer.role_name,
               role_names: signer.role_names,
+              role_codes: signer.role_codes,
               is_causacion_group: true,
               grupo_codigo: signer.grupo_codigo,
               grupo_nombre: signer.grupo_nombre,
@@ -4626,6 +4666,7 @@ const resolvers = {
               order_position: signer.order_position,
               role_name: signer.role_name,
               role_names: signer.role_names,
+              role_codes: signer.role_codes,
               is_causacion_group: false,
               _signer_name: signer.user_name,
               _signer_email: signer.user_email
@@ -4644,6 +4685,7 @@ const resolvers = {
               order_position: signer.order_position,
               role_name: signer.role_name,
               role_names: signer.role_names,
+              role_codes: signer.role_codes,
               is_causacion_group: false,
               _signer_name: signer.user_name,
               _signer_email: signer.user_email
@@ -4716,7 +4758,7 @@ const resolvers = {
       return parent.role_name || null;
     },
     roleNames: (parent) => {
-      // Devolver array de roles
+      // Devolver array de roles (nombres legibles)
       if (parent.role_names && Array.isArray(parent.role_names) && parent.role_names.length > 0) {
         return parent.role_names;
       }
@@ -4726,7 +4768,24 @@ const resolvers = {
       }
       return [];
     },
-    roleCode: (parent) => parent.role_code || null,
+    roleCode: (parent) => {
+      // Devolver el primer código de rol
+      if (parent.role_codes && parent.role_codes.length > 0) {
+        return parent.role_codes[0];
+      }
+      return parent.role_code || null;
+    },
+    roleCodes: (parent) => {
+      // Devolver array de códigos de roles
+      if (parent.role_codes && Array.isArray(parent.role_codes) && parent.role_codes.length > 0) {
+        return parent.role_codes;
+      }
+      // Fallback a role_code singular como array
+      if (parent.role_code) {
+        return [parent.role_code];
+      }
+      return [];
+    },
     isCausacionGroup: (parent) => parent.is_causacion_group || false,
     grupoCodigo: (parent) => parent.grupo_codigo || null,
     grupoNombre: (parent) => parent.grupo_nombre || null,

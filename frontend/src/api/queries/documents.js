@@ -63,15 +63,17 @@ export const GET_PENDING_DOCUMENTS = `
       signatures {
         id
         signer {
+          id
           name
           email
         }
-        order_position
+        orderPosition
         status
-        signed_at
-        role_code
-        role_name
-        role_names
+        signedAt
+        roleCode
+        roleName
+        roleNames
+        roleCodes
       }
     }
   }

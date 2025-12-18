@@ -2586,24 +2586,43 @@ function Dashboard({ user, onLogout }) {
    * Verifica si el usuario tiene el rol RESP_CTRO_COST en un documento específico
    */
   const hasRespCtroCostRole = (doc) => {
-    if (!doc || !doc.signatures) return false;
+    console.log('🔍 hasRespCtroCostRole - Documento:', doc);
+    console.log('🔍 hasRespCtroCostRole - Usuario actual:', user);
+
+    if (!doc || !doc.signatures) {
+      console.log('❌ hasRespCtroCostRole - No hay documento o signatures');
+      return false;
+    }
+
+    console.log('🔍 hasRespCtroCostRole - Signatures:', doc.signatures);
 
     const mySignature = doc.signatures.find(sig =>
       sig.signer && (sig.signer.id === user.id || sig.signer.email === user.email)
     );
 
-    if (!mySignature) return false;
+    if (!mySignature) {
+      console.log('❌ hasRespCtroCostRole - No se encontró mi firma');
+      return false;
+    }
 
-    // Verificar en roleCode
-    if (mySignature.roleCode === 'RESP_CTRO_COST') {
+    console.log('✅ hasRespCtroCostRole - Mi firma encontrada:', mySignature);
+    console.log('🔍 hasRespCtroCostRole - roleCode:', mySignature.roleCode);
+    console.log('🔍 hasRespCtroCostRole - roleCodes:', mySignature.roleCodes);
+    console.log('🔍 hasRespCtroCostRole - roleNames:', mySignature.roleNames);
+
+    // Verificar en roleCode (primer código)
+    if (mySignature.roleCode === 'RESPONSABLE_CENTRO_COSTOS') {
+      console.log('✅ hasRespCtroCostRole - TRUE (roleCode)');
       return true;
     }
 
-    // Verificar en roleNames array
-    if (mySignature.roleNames && mySignature.roleNames.includes('RESP_CTRO_COST')) {
+    // Verificar en roleCodes array (códigos de roles)
+    if (mySignature.roleCodes && mySignature.roleCodes.includes('RESPONSABLE_CENTRO_COSTOS')) {
+      console.log('✅ hasRespCtroCostRole - TRUE (roleCodes array)');
       return true;
     }
 
+    console.log('❌ hasRespCtroCostRole - FALSE (no tiene RESP_CTRO_COST)');
     return false;
   };
 
@@ -2613,6 +2632,9 @@ function Dashboard({ user, onLogout }) {
    * Si es RESP_CTRO_COST en documento FV, muestra modal de retención
    */
   const initiateSignDocument = (docId) => {
+    console.log('🔍 initiateSignDocument - docId:', docId);
+    console.log('🔍 initiateSignDocument - isNegociacionesUser:', isNegociacionesUser());
+
     if (isNegociacionesUser()) {
       // Guardar la acción pendiente y mostrar modal de firmante real
       setPendingDocumentAction({ type: 'sign', docId });
@@ -2621,17 +2643,24 @@ function Dashboard({ user, onLogout }) {
     } else {
       // Obtener el documento
       const doc = pendingDocuments.find(d => d.id === docId) || viewingDocument;
+      console.log('🔍 initiateSignDocument - Documento encontrado:', doc);
 
       // Verificar si debe mostrar modal de retención
       const isFV = doc && doc.documentType && doc.documentType.code === 'FV';
+      console.log('🔍 initiateSignDocument - isFV:', isFV);
+      console.log('🔍 initiateSignDocument - documentType:', doc?.documentType);
+
       const isRespCtroCost = doc && hasRespCtroCostRole(doc);
+      console.log('🔍 initiateSignDocument - isRespCtroCost:', isRespCtroCost);
 
       if (isFV && isRespCtroCost) {
+        console.log('✅ Mostrar modal de retención');
         // Mostrar modal de retención
         setPendingSignWithRetention({ docId, realSigner: null });
         setRetentionData({ percentage: '', reason: '' });
         setShowRetentionModal(true);
       } else {
+        console.log('⏭️ Firmar directamente sin retención');
         // Firmar directamente sin retención
         handleSignDocument(docId);
       }
