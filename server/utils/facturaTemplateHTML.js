@@ -128,7 +128,7 @@ function generateFacturaHTML(data) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Planilla Control Factura</title>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&family=Great+Vibes&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -205,14 +205,19 @@ function generateFacturaHTML(data) {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      min-height: 32px;
+      height: 32px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
     }
 
     .ui-input-firma {
       padding: 7px 10px;
       border: 1px solid #D1D5DB;
       border-radius: 4px;
-      font-size: 16px;
-      font-family: 'Great Vibes', cursive;
+      font-size: 12px;
+      font-family: 'Kalam', cursive;
       font-weight: 400;
       font-style: normal;
       color: #1F2937;
@@ -220,7 +225,9 @@ function generateFacturaHTML(data) {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      min-height: 34px;
+      min-height: 32px;
+      height: 32px;
+      box-sizing: border-box;
       display: flex;
       align-items: center;
     }
@@ -365,8 +372,8 @@ function generateFacturaHTML(data) {
     }
 
     .cell-content-firma {
-      font-size: 14px;
-      font-family: 'Great Vibes', cursive;
+      font-size: 11px;
+      font-family: 'Kalam', cursive;
       font-weight: 400;
       font-style: normal;
       color: #1F2937;
@@ -549,6 +556,20 @@ function generateFacturaHTML(data) {
         <div class="factura-field">
           <label class="factura-label">Firma</label>
           <div class="ui-input-firma">${firmas[nombreNegociador] || ''}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firmas de Negociaciones y Causación -->
+    <div class="factura-section">
+      <div class="factura-grid-2">
+        <div class="factura-field">
+          <label class="factura-label">Firma Negociaciones</label>
+          <div class="ui-input-firma">${firmas['_NEGOCIACIONES'] || ''}</div>
+        </div>
+        <div class="factura-field">
+          <label class="factura-label">Firma Causación</label>
+          <div class="ui-input-firma">${firmas['_CAUSACION'] || ''}</div>
         </div>
       </div>
     </div>

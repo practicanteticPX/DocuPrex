@@ -49,7 +49,7 @@ const COLORS = {
   // Colores de marca de agua (transparentes)
   WATERMARK_SIGNED: rgb(0.72, 0.94, 0.82),    // Verde muy claro
   WATERMARK_PENDING: rgb(0.9, 0.9, 0.9),      // Gris muy claro
-  WATERMARK_REJECTED: rgb(0.9, 0.9, 0.9),     // Gris muy claro
+  WATERMARK_REJECTED: rgb(0.99, 0.78, 0.78),  // Rojo muy claro
 
   // Colores de fondo
   BG_SIGNED: rgb(0.9, 0.97, 0.93),      // Verde muy claro

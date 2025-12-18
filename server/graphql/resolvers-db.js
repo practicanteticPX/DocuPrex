@@ -43,7 +43,9 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
         u.name as user_name,
         u.email,
         s.real_signer_name,
-        s.status as signature_status
+        s.status as signature_status,
+        ds.role_names,
+        ds.role_name
        FROM document_signers ds
        JOIN users u ON u.id = ds.user_id
        LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
@@ -55,6 +57,8 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
     );
 
     const firmas = {};
+    let firmaNegociaciones = null;
+    let firmaCausacion = null;
 
     // Helper para normalizar nombres
     const normalizarNombre = (nombre) => {
@@ -84,11 +88,33 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
 
     // Para cada firmante que ha firmado
     result.rows.forEach(row => {
-      // Usar SIEMPRE el nombre de la tabla users (ej: "Juliet Acevedo")
-      const nombreFirmante = row.user_name;
+      // Usar real_signer_name si existe (usuario Negociaciones firmando por otro), si no usar user_name
+      const nombreFirmante = row.real_signer_name || row.user_name;
 
       // Agregar por nombre de usuario directo
       firmas[row.user_name] = nombreFirmante;
+
+      // Verificar roles para Negociaciones y Causación
+      let roles = [];
+      if (row.role_names) {
+        roles = Array.isArray(row.role_names) ? row.role_names : [row.role_names];
+      } else if (row.role_name) {
+        roles = [row.role_name];
+      }
+
+      // Verificar si tiene rol de Negociaciones
+      if (roles.some(role => role && (role.toUpperCase().includes('NEGOCIACION') || role.toUpperCase().includes('NEGOCIACIÓN')))) {
+        if (!firmaNegociaciones) {
+          firmaNegociaciones = nombreFirmante;
+        }
+      }
+
+      // Verificar si tiene rol de Causación
+      if (roles.some(role => role && (role.toUpperCase().includes('CAUSACION') || role.toUpperCase().includes('CAUSACIÓN')))) {
+        if (!firmaCausacion) {
+          firmaCausacion = nombreFirmante;
+        }
+      }
 
       // Si tenemos templateData, buscar coincidencias
       if (templateData) {
@@ -113,6 +139,14 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
         }
       }
     });
+
+    // Agregar firmas especiales al objeto de firmas
+    if (firmaNegociaciones) {
+      firmas['_NEGOCIACIONES'] = firmaNegociaciones;
+    }
+    if (firmaCausacion) {
+      firmas['_CAUSACION'] = firmaCausacion;
+    }
 
     console.log(`📝 Firmas encontradas para documento ${documentId}:`, Object.keys(firmas).length);
     console.log(`📋 Keys de firmas:`, Object.keys(firmas));
@@ -4349,6 +4383,10 @@ const resolvers = {
                 const signer = signerCheck.rows[0];
                 let hasRespCtroCost = false;
 
+                console.log(`🔍 [RETENCIÓN] Verificando rol para usuario ${user.name}:`);
+                console.log(`  - assigned_role_ids:`, signer.assigned_role_ids);
+                console.log(`  - role_names:`, signer.role_names);
+
                 // Buscar el código de rol en la base de datos
                 if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
                   const roleCodesResult = await query(
@@ -4356,6 +4394,7 @@ const resolvers = {
                     [signer.assigned_role_ids]
                   );
                   const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+                  console.log(`  - role_codes encontrados:`, roleCodes);
                   hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
                 } else if (signer.role_names && signer.role_names.length > 0) {
                   // Fallback: buscar por role_name
@@ -4364,8 +4403,11 @@ const resolvers = {
                     [signer.role_names]
                   );
                   const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+                  console.log(`  - role_codes encontrados (fallback):`, roleCodes);
                   hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
                 }
+
+                console.log(`  - hasRespCtroCost:`, hasRespCtroCost);
 
                 if (hasRespCtroCost) {
                   // Verificar que no haya una retención activa
