@@ -1878,22 +1878,62 @@ const resolvers = {
           const docInfo = docInfoResult.rows[0];
 
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
-                    COALESCE(s.status, 'pending') as status,
-                    s.signed_at,
-                    s.rejected_at,
-                    s.rejection_reason,
-                    s.consecutivo,
-                    s.real_signer_name
+            `SELECT
+                ds.user_id,
+                ds.order_position,
+                ds.role_name,
+                ds.role_names,
+                ds.is_causacion_group,
+                ds.grupo_codigo,
+                u.name as user_name,
+                cg.nombre as grupo_nombre,
+                u.email,
+                COALESCE(s.status, 'pending') as status,
+                s.signed_at,
+                s.rejected_at,
+                s.rejection_reason,
+                s.consecutivo,
+                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                signer_user.email as signer_email
             FROM document_signers ds
-            JOIN users u ON ds.user_id = u.id
-            LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+            LEFT JOIN users u ON ds.user_id = u.id
+            LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+            LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+              (ds.is_causacion_group = true AND s.signer_id IN (
+                SELECT ci.user_id
+                FROM causacion_integrantes ci
+                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                WHERE cg.codigo = ds.grupo_codigo
+              ))
+            )
+            LEFT JOIN users signer_user ON s.signer_id = signer_user.id
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
           );
 
-          const signers = signersResult.rows;
+          const signers = signersResult.rows.map(row => {
+            const name = row.is_causacion_group
+              ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
+              : (row.user_name || 'Sin nombre');
+
+            return {
+              name: name,
+              email: row.signer_email || row.email,
+              order_position: row.order_position,
+              role_name: row.role_name,
+              role_names: row.role_names,
+              status: row.status,
+              signed_at: row.signed_at,
+              rejected_at: row.rejected_at,
+              rejection_reason: row.rejection_reason,
+              consecutivo: row.consecutivo,
+              is_causacion_group: row.is_causacion_group,
+              grupo_codigo: row.grupo_codigo,
+              real_signer_name: row.real_signer_name
+            };
+          });
 
           if (signers.length > 0) {
             const pdfPath = path.join(__dirname, '..', docInfo.file_path);
@@ -3157,22 +3197,62 @@ const resolvers = {
           const docInfo = docInfoResult.rows[0];
 
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
-                    COALESCE(s.status, 'pending') as status,
-                    s.signed_at,
-                    s.rejected_at,
-                    s.rejection_reason,
-                    s.consecutivo,
-                    s.real_signer_name
+            `SELECT
+                ds.user_id,
+                ds.order_position,
+                ds.role_name,
+                ds.role_names,
+                ds.is_causacion_group,
+                ds.grupo_codigo,
+                u.name as user_name,
+                cg.nombre as grupo_nombre,
+                u.email,
+                COALESCE(s.status, 'pending') as status,
+                s.signed_at,
+                s.rejected_at,
+                s.rejection_reason,
+                s.consecutivo,
+                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                signer_user.email as signer_email
             FROM document_signers ds
-            JOIN users u ON ds.user_id = u.id
-            LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+            LEFT JOIN users u ON ds.user_id = u.id
+            LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+            LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+              (ds.is_causacion_group = true AND s.signer_id IN (
+                SELECT ci.user_id
+                FROM causacion_integrantes ci
+                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                WHERE cg.codigo = ds.grupo_codigo
+              ))
+            )
+            LEFT JOIN users signer_user ON s.signer_id = signer_user.id
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
           );
 
-          const signers = signersResult.rows;
+          const signers = signersResult.rows.map(row => {
+            const name = row.is_causacion_group
+              ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
+              : (row.user_name || 'Sin nombre');
+
+            return {
+              name: name,
+              email: row.signer_email || row.email,
+              order_position: row.order_position,
+              role_name: row.role_name,
+              role_names: row.role_names,
+              status: row.status,
+              signed_at: row.signed_at,
+              rejected_at: row.rejected_at,
+              rejection_reason: row.rejection_reason,
+              consecutivo: row.consecutivo,
+              is_causacion_group: row.is_causacion_group,
+              grupo_codigo: row.grupo_codigo,
+              real_signer_name: row.real_signer_name
+            };
+          });
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
           const documentInfo = {
@@ -3586,26 +3666,55 @@ const resolvers = {
                 ds.is_causacion_group,
                 ds.grupo_codigo,
                 u.name as user_name,
+                cg.nombre as grupo_nombre,
                 u.email,
-                COALESCE(s.status, 'pending') as status
+                COALESCE(s.status, 'pending') as status,
+                s.signed_at,
+                s.rejected_at,
+                s.rejection_reason,
+                s.consecutivo,
+                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                signer_user.email as signer_email
                FROM document_signers ds
                LEFT JOIN users u ON ds.user_id = u.id
-               LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+               LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+               LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+                 (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+                 (ds.is_causacion_group = true AND s.signer_id IN (
+                   SELECT ci.user_id
+                   FROM causacion_integrantes ci
+                   JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                   WHERE cg.codigo = ds.grupo_codigo
+                 ))
+               )
+               LEFT JOIN users signer_user ON s.signer_id = signer_user.id
                WHERE ds.document_id = $1
                ORDER BY ds.order_position ASC`,
               [documentId]
             );
 
-            const signers = signersForCover.rows.map(row => ({
-              name: row.is_causacion_group ? row.grupo_codigo : row.user_name,
-              email: row.email,
-              order_position: row.order_position,
-              role_name: row.role_name,
-              role_names: row.role_names,
-              status: row.status,
-              is_causacion_group: row.is_causacion_group,
-              grupo_codigo: row.grupo_codigo
-            }));
+            const signers = signersForCover.rows.map(row => {
+              // Para grupos de causación, siempre usar el nombre del grupo (o código como fallback)
+              const name = row.is_causacion_group
+                ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
+                : (row.user_name || 'Sin nombre');
+
+              return {
+                name: name,
+                email: row.signer_email || row.email,
+                order_position: row.order_position,
+                role_name: row.role_name,
+                role_names: row.role_names,
+                status: row.status,
+                signed_at: row.signed_at,
+                rejected_at: row.rejected_at,
+                rejection_reason: row.rejection_reason,
+                consecutivo: row.consecutivo,
+                is_causacion_group: row.is_causacion_group,
+                grupo_codigo: row.grupo_codigo,
+                real_signer_name: row.real_signer_name
+              };
+            });
 
             const documentInfoForCover = {
               title: docInfo.title || 'Factura',
@@ -3842,22 +3951,62 @@ const resolvers = {
           const docInfo = docInfoResult.rows[0];
 
           const signersResult = await query(
-            `SELECT u.id, u.name, u.email, ds.order_position, ds.role_name, ds.role_names,
-                    COALESCE(s.status, 'pending') as status,
-                    s.signed_at,
-                    s.rejected_at,
-                    s.rejection_reason,
-                    s.consecutivo,
-                    s.real_signer_name
+            `SELECT
+                ds.user_id,
+                ds.order_position,
+                ds.role_name,
+                ds.role_names,
+                ds.is_causacion_group,
+                ds.grupo_codigo,
+                u.name as user_name,
+                cg.nombre as grupo_nombre,
+                u.email,
+                COALESCE(s.status, 'pending') as status,
+                s.signed_at,
+                s.rejected_at,
+                s.rejection_reason,
+                s.consecutivo,
+                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                signer_user.email as signer_email
             FROM document_signers ds
-            JOIN users u ON ds.user_id = u.id
-            LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
+            LEFT JOIN users u ON ds.user_id = u.id
+            LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+            LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+              (ds.is_causacion_group = true AND s.signer_id IN (
+                SELECT ci.user_id
+                FROM causacion_integrantes ci
+                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                WHERE cg.codigo = ds.grupo_codigo
+              ))
+            )
+            LEFT JOIN users signer_user ON s.signer_id = signer_user.id
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
           );
 
-          const signers = signersResult.rows;
+          const signers = signersResult.rows.map(row => {
+            const name = row.is_causacion_group
+              ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
+              : (row.user_name || 'Sin nombre');
+
+            return {
+              name: name,
+              email: row.signer_email || row.email,
+              order_position: row.order_position,
+              role_name: row.role_name,
+              role_names: row.role_names,
+              status: row.status,
+              signed_at: row.signed_at,
+              rejected_at: row.rejected_at,
+              rejection_reason: row.rejection_reason,
+              consecutivo: row.consecutivo,
+              is_causacion_group: row.is_causacion_group,
+              grupo_codigo: row.grupo_codigo,
+              real_signer_name: row.real_signer_name
+            };
+          });
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
           const documentInfo = {
