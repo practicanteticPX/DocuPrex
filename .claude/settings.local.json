@@ -51,7 +51,9 @@
       "Bash(copy:*)",
       "Bash(MSYS_NO_PATHCONV=1 docker exec:*)",
       "Bash(docker-compose:*)",
-      "Bash(timeout 20 docker logs:*)"
+      "Bash(timeout 20 docker logs:*)",
+      "Bash(git commit:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []
