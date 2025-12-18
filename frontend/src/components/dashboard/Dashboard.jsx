@@ -1072,7 +1072,10 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectionReason
                   rejectedAt
+                  roleCode
                   roleName
+                  roleNames
+                  roleCodes
                   orderPosition
                   realSignerName
                   signer {
@@ -1145,7 +1148,10 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectionReason
                   rejectedAt
+                  roleCode
                   roleName
+                  roleNames
+                  roleCodes
                   orderPosition
                   realSignerName
                   signer {
@@ -3455,6 +3461,12 @@ function Dashboard({ user, onLogout }) {
     );
 
     if (!isCreator) {
+      return false;
+    }
+
+    // Verificar que nadie ha rechazado el documento
+    const hasRejections = (doc.signatures || []).some(sig => sig.status === 'rejected');
+    if (hasRejections) {
       return false;
     }
 

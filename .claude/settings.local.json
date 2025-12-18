@@ -53,7 +53,8 @@
       "Bash(docker-compose:*)",
       "Bash(timeout 20 docker logs:*)",
       "Bash(git commit:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

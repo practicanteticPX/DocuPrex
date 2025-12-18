@@ -35,10 +35,11 @@ export const GET_RETAINED_DOCUMENTS = `
           email
         }
         status
-        signed_at
-        role_code
-        role_name
-        role_names
+        signedAt
+        roleCode
+        roleName
+        roleNames
+        roleCodes
       }
     }
   }

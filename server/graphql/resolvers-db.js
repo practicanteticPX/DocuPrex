@@ -4566,19 +4566,26 @@ const resolvers = {
 
       // Para cada signer, obtener los role_codes basados en assigned_role_ids o role_names
       for (const signer of signersResult.rows) {
+        console.log(`🔍 [signatures resolver] Procesando signer: user_id=${signer.user_id}, assigned_role_ids=${JSON.stringify(signer.assigned_role_ids)}, role_names=${JSON.stringify(signer.role_names)}`);
+
         if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
           // Usar assigned_role_ids si está disponible
+          console.log(`  ➡️ Usando assigned_role_ids`);
           const rolesResult = await query(`
             SELECT role_code FROM document_type_roles WHERE id = ANY($1)
           `, [signer.assigned_role_ids]);
           signer.role_codes = rolesResult.rows.map(r => r.role_code);
+          console.log(`  ✅ role_codes obtenidos: ${JSON.stringify(signer.role_codes)}`);
         } else if (signer.role_names && signer.role_names.length > 0) {
           // Fallback: buscar por role_name (compatibilidad con documentos antiguos)
+          console.log(`  ➡️ Fallback: usando role_names`);
           const rolesResult = await query(`
             SELECT role_code FROM document_type_roles WHERE role_name = ANY($1)
           `, [signer.role_names]);
           signer.role_codes = rolesResult.rows.map(r => r.role_code);
+          console.log(`  ✅ role_codes obtenidos (fallback): ${JSON.stringify(signer.role_codes)}`);
         } else {
+          console.log(`  ❌ No assigned_role_ids ni role_names disponibles`);
           signer.role_codes = [];
         }
       }
