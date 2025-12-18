@@ -8289,9 +8289,9 @@ function Dashboard({ user, onLogout }) {
             {signersDropdownPos.signatures.map((sig) => {
               let roleText = '';
               if (sig.roleNames && Array.isArray(sig.roleNames) && sig.roleNames.length > 0) {
-                roleText = ` - ${sig.roleNames.join(' / ')}`;
+                roleText = sig.roleNames.join(' / ');
               } else if (sig.roleName) {
-                roleText = ` - ${sig.roleName}`;
+                roleText = sig.roleName;
               }
 
               return (
@@ -8300,9 +8300,10 @@ function Dashboard({ user, onLogout }) {
                     className="signer-dot"
                     style={{ backgroundColor: sig.status === 'signed' ? '#10B981' : sig.status === 'rejected' ? '#EF4444' : '#F59E0B' }}
                   ></span>
-                  <span className="signer-name">
-                    {sig.signer?.name || sig.signer?.email}{roleText}
-                  </span>
+                  <div className="signer-info">
+                    <div className="signer-name">{sig.signer?.name || sig.signer?.email}</div>
+                    {roleText && <div className="signer-role">{roleText}</div>}
+                  </div>
                 </div>
               );
             })}

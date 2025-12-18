@@ -1424,7 +1424,7 @@ html:has(.pdf-viewer-minimal-overlay) {
 .signers-dropdown-list {
   display: flex !important;
   flex-direction: column !important;
-  gap: 8px !important;
+  gap: 6px !important;
   max-height: 200px !important;
   overflow-y: auto !important;
 }
@@ -1433,8 +1433,8 @@ html:has(.pdf-viewer-minimal-overlay) {
   display: flex !important;
   align-items: center !important;
   justify-content: flex-start !important;
-  gap: 8px !important;
-  padding: 6px 8px !important;
+  gap: 6px !important;
+  padding: 5px 8px !important;
   border-radius: 6px !important;
   transition: background 0.15s ease !important;
 }
@@ -1444,17 +1444,29 @@ html:has(.pdf-viewer-minimal-overlay) {
 }
 
 .signer-dot {
-  width: 8px !important;
-  height: 8px !important;
+  width: 6px !important;
+  height: 6px !important;
   border-radius: 50% !important;
   flex-shrink: 0 !important;
 }
 
+.signer-info {
+  display: inline !important;
+  white-space: nowrap !important;
+}
+
 .signer-name {
   font-size: 13px !important;
-  color: #374151 !important;
-  white-space: nowrap !important;
-  text-align: left !important;
+  font-weight: 500 !important;
+  color: #1F2937 !important;
+  display: inline !important;
+}
+
+.signer-role {
+  font-size: 11px !important;
+  color: #6B7280 !important;
+  display: inline !important;
+  margin-left: 6px !important;
 }
 
 /* Dropdown fijo de firmantes (position: fixed) */
@@ -1463,10 +1475,9 @@ html:has(.pdf-viewer-minimal-overlay) {
   border: 1px solid #E5E7EB !important;
   border-radius: 10px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
-  padding: 10px !important;
-  width: max-content !important;
-  min-width: 200px !important;
-  max-width: 350px !important;
+  padding: 10px 12px !important;
+  width: fit-content !important;
+  max-width: 340px !important;
   animation: signersFadeIn 0.15s ease-out !important;
 }
 
@@ -1480,28 +1491,23 @@ html:has(.pdf-viewer-minimal-overlay) {
 }
 
 .signers-dropdown-fixed .signers-dropdown-title {
-  font-size: 11px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: #6B7280 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
   margin-bottom: 8px !important;
   padding-bottom: 6px !important;
+  border-bottom: 1px solid #F3F4F6 !important;
 }
 
 .signers-dropdown-fixed .signers-dropdown-list {
-  gap: 4px !important;
-  max-height: 180px !important;
+  gap: 3px !important;
+  max-height: 240px !important;
 }
 
 .signers-dropdown-fixed .signers-dropdown-item {
-  padding: 4px 6px !important;
-  border-radius: 4px !important;
-}
-
-.signers-dropdown-fixed .signer-dot {
-  width: 6px !important;
-  height: 6px !important;
-}
-
-.signers-dropdown-fixed .signer-name {
-  font-size: 12px !important;
+  padding: 5px 8px !important;
 }
 
 /* Badge de estado */
