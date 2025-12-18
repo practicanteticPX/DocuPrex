@@ -58,6 +58,35 @@ export const SIGN_DOCUMENT = `
 `;
 
 /**
+ * Firma un documento con datos completos (incluye firma digital, consecutivo, nombre real y retención)
+ */
+export const SIGN_DOCUMENT_FULL = `
+  mutation SignDocumentFull(
+    $documentId: Int!,
+    $signatureData: String!,
+    $consecutivo: String,
+    $realSignerName: String,
+    $retentionPercentage: Int,
+    $retentionReason: String
+  ) {
+    signDocument(
+      documentId: $documentId,
+      signatureData: $signatureData,
+      consecutivo: $consecutivo,
+      realSignerName: $realSignerName,
+      retentionPercentage: $retentionPercentage,
+      retentionReason: $retentionReason
+    ) {
+      id
+      status
+      signedAt
+      signerId
+      documentId
+    }
+  }
+`;
+
+/**
  * Rechaza un documento
  */
 export const REJECT_DOCUMENT = `

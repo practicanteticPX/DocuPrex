@@ -423,7 +423,12 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       let statusTextColor = rgb(0.4, 0.4, 0.4);
 
       if (signer.status === 'signed') {
-        statusText = 'Firmado';
+        // Verificar si el firmante tiene retención activa
+        if (signer.retention_percentage) {
+          statusText = `Firmado, y retenido por ${signer.retention_percentage}%`;
+        } else {
+          statusText = 'Firmado';
+        }
         statusBadgeColor = rgb(0.82, 0.95, 0.84);
         statusTextColor = rgb(0.13, 0.59, 0.25);
       } else if (signer.status === 'rejected') {
@@ -585,6 +590,18 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
           size: 9,
           font: fontBold,
           color: rgb(0.2, 0.2, 0.2),
+        });
+        yPosition -= 18;
+      }
+
+      // Motivo de retención (si existe)
+      if (signer.status === 'signed' && signer.retention_reason) {
+        currentPage.drawText(`Motivo de retención: ${signer.retention_reason}`, {
+          x: margin,
+          y: yPosition,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.6, 0.3, 0.0),
         });
         yPosition -= 18;
       }

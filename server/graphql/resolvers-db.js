@@ -403,6 +403,36 @@ const resolvers = {
       return result.rows;
     },
 
+    retainedDocuments: async (_, __, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const result = await query(`
+        SELECT DISTINCT
+          d.*,
+          u.name as uploaded_by_name,
+          u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
+          dr.retention_percentage,
+          dr.retention_reason,
+          dr.retained_at,
+          retained_by_user.id as retained_by_id,
+          retained_by_user.name as retained_by_name,
+          retained_by_user.email as retained_by_email
+        FROM documents d
+        JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
+        -- Retención activa (released_at IS NULL)
+        JOIN document_retentions dr ON d.id = dr.document_id
+          AND dr.released_at IS NULL
+        -- Usuario que retuvo
+        JOIN users retained_by_user ON dr.retained_by = retained_by_user.id
+        ORDER BY dr.retained_at DESC
+      `);
+
+      return result.rows;
+    },
+
     documentsByStatus: async (_, { status }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
@@ -1511,7 +1541,10 @@ const resolvers = {
             s.rejection_reason,
             s.consecutivo,
             COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
-            signer_user.email as signer_email
+            signer_user.email as signer_email,
+            dr.retention_percentage,
+            dr.retention_reason,
+            dr.retained_at
           FROM document_signers ds
           LEFT JOIN users u ON ds.user_id = u.id
           LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -1525,6 +1558,9 @@ const resolvers = {
             ))
           )
           LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+          LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
+            AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
+            AND dr.released_at IS NULL
           WHERE ds.document_id = $1
           ORDER BY ds.order_position ASC`,
           [documentId]
@@ -1894,7 +1930,10 @@ const resolvers = {
                 s.rejection_reason,
                 s.consecutivo,
                 COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
-                signer_user.email as signer_email
+                signer_user.email as signer_email,
+                dr.retention_percentage,
+                dr.retention_reason,
+                dr.retained_at
             FROM document_signers ds
             LEFT JOIN users u ON ds.user_id = u.id
             LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -1908,6 +1947,9 @@ const resolvers = {
               ))
             )
             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+            LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
+              AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
+              AND dr.released_at IS NULL
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
@@ -1931,7 +1973,10 @@ const resolvers = {
               consecutivo: row.consecutivo,
               is_causacion_group: row.is_causacion_group,
               grupo_codigo: row.grupo_codigo,
-              real_signer_name: row.real_signer_name
+              real_signer_name: row.real_signer_name,
+              retention_percentage: row.retention_percentage,
+              retention_reason: row.retention_reason,
+              retained_at: row.retained_at
             };
           });
 
@@ -2217,7 +2262,10 @@ const resolvers = {
               s.rejection_reason,
               s.consecutivo,
               COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
-              signer_user.email as signer_email
+              signer_user.email as signer_email,
+              dr.retention_percentage,
+              dr.retention_reason,
+              dr.retained_at
              FROM document_signers ds
              LEFT JOIN users u ON ds.user_id = u.id
              LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -2231,6 +2279,9 @@ const resolvers = {
                ))
              )
              LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+             LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
+               AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
+               AND dr.released_at IS NULL
              WHERE ds.document_id = $1
              ORDER BY ds.order_position ASC`,
             [documentId]
@@ -3213,7 +3264,10 @@ const resolvers = {
                 s.rejection_reason,
                 s.consecutivo,
                 COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
-                signer_user.email as signer_email
+                signer_user.email as signer_email,
+                dr.retention_percentage,
+                dr.retention_reason,
+                dr.retained_at
             FROM document_signers ds
             LEFT JOIN users u ON ds.user_id = u.id
             LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -3227,6 +3281,9 @@ const resolvers = {
               ))
             )
             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+            LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
+              AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
+              AND dr.released_at IS NULL
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
@@ -3250,7 +3307,10 @@ const resolvers = {
               consecutivo: row.consecutivo,
               is_causacion_group: row.is_causacion_group,
               grupo_codigo: row.grupo_codigo,
-              real_signer_name: row.real_signer_name
+              real_signer_name: row.real_signer_name,
+              retention_percentage: row.retention_percentage,
+              retention_reason: row.retention_reason,
+              retained_at: row.retained_at
             };
           });
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
@@ -3340,7 +3400,7 @@ const resolvers = {
      * @returns {Promise<Object>} Signature record
      * @throws {Error} When unauthorized, not in sequence (non-owner), or not assigned to document
      */
-    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName }, { user }) => {
+    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentionPercentage, retentionReason }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
       const docOwnerCheck = await query(
@@ -3967,7 +4027,10 @@ const resolvers = {
                 s.rejection_reason,
                 s.consecutivo,
                 COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
-                signer_user.email as signer_email
+                signer_user.email as signer_email,
+                dr.retention_percentage,
+                dr.retention_reason,
+                dr.retained_at
             FROM document_signers ds
             LEFT JOIN users u ON ds.user_id = u.id
             LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -3981,6 +4044,9 @@ const resolvers = {
               ))
             )
             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+            LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
+              AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
+              AND dr.released_at IS NULL
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
@@ -4004,7 +4070,10 @@ const resolvers = {
               consecutivo: row.consecutivo,
               is_causacion_group: row.is_causacion_group,
               grupo_codigo: row.grupo_codigo,
-              real_signer_name: row.real_signer_name
+              real_signer_name: row.real_signer_name,
+              retention_percentage: row.retention_percentage,
+              retention_reason: row.retention_reason,
+              retained_at: row.retained_at
             };
           });
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
@@ -4107,7 +4176,239 @@ const resolvers = {
         // No lanzamos el error para que no falle la firma
       }
 
+      // ========== PROCESAR RETENCIÓN SI SE PROPORCIONÓ ==========
+      if (retentionPercentage && retentionReason) {
+        try {
+          console.log(`📋 Procesando retención para documento ${documentId}...`);
+
+          // Validar que el porcentaje esté en el rango correcto
+          if (retentionPercentage < 1 || retentionPercentage > 100) {
+            console.warn(`⚠️ Porcentaje de retención inválido: ${retentionPercentage}`);
+          } else {
+            // Verificar que es documento FV
+            const docTypeCheck = await query(
+              `SELECT dt.code
+               FROM documents d
+               LEFT JOIN document_types dt ON d.document_type_id = dt.id
+               WHERE d.id = $1`,
+              [documentId]
+            );
+
+            if (docTypeCheck.rows.length > 0 && docTypeCheck.rows[0].code === 'FV') {
+              // Verificar que el usuario tiene el rol RESP_CTRO_COST
+              const signerCheck = await query(
+                `SELECT ds.role_code, ds.role_names
+                 FROM document_signers ds
+                 WHERE ds.document_id = $1 AND ds.user_id = $2`,
+                [documentId, user.id]
+              );
+
+              if (signerCheck.rows.length > 0) {
+                const signer = signerCheck.rows[0];
+                let hasRespCtroCost = false;
+
+                // Verificar en role_code
+                if (signer.role_code === 'RESP_CTRO_COST') {
+                  hasRespCtroCost = true;
+                }
+
+                // Verificar en role_names array
+                if (!hasRespCtroCost && signer.role_names) {
+                  try {
+                    const roleNames = typeof signer.role_names === 'string'
+                      ? JSON.parse(signer.role_names)
+                      : signer.role_names;
+                    hasRespCtroCost = roleNames.includes('RESP_CTRO_COST');
+                  } catch (e) {
+                    console.error('Error parsing role_names:', e);
+                  }
+                }
+
+                if (hasRespCtroCost) {
+                  // Verificar que no haya una retención activa
+                  const activeRetention = await query(
+                    `SELECT id
+                     FROM document_retentions
+                     WHERE document_id = $1 AND released_at IS NULL`,
+                    [documentId]
+                  );
+
+                  if (activeRetention.rows.length === 0) {
+                    // Crear la retención
+                    await query(
+                      `INSERT INTO document_retentions (document_id, retained_by, retention_percentage, retention_reason)
+                       VALUES ($1, $2, $3, $4)`,
+                      [documentId, user.id, retentionPercentage, retentionReason]
+                    );
+
+                    console.log(`✅ Documento ${documentId} retenido por ${user.name} (${retentionPercentage}%): ${retentionReason}`);
+                  } else {
+                    console.warn(`⚠️ Documento ${documentId} ya tiene una retención activa`);
+                  }
+                } else {
+                  console.warn(`⚠️ Usuario ${user.name} no tiene rol RESP_CTRO_COST, no puede retener`);
+                }
+              }
+            } else {
+              console.warn(`⚠️ Documento ${documentId} no es tipo FV, no se puede retener`);
+            }
+          }
+        } catch (retentionError) {
+          console.error('❌ Error al procesar retención:', retentionError);
+          // No lanzamos el error para que no falle la firma
+        }
+      }
+
       return result.rows[0];
+    },
+
+    /**
+     * Retains a FV document after signing
+     *
+     * BUSINESS RULE: Only responsible for cost center (resp ctro cost) can retain
+     * BUSINESS RULE: Can only be called on FV documents
+     * BUSINESS RULE: User must have already signed the document
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {number} args.documentId - ID of the document
+     * @param {number} args.retentionPercentage - Percentage to retain (1-100)
+     * @param {string} args.retentionReason - Reason for retention
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user
+     * @returns {Promise<Object>} DocumentRetention record
+     * @throws {Error} When unauthorized or invalid document type
+     */
+    retainDocument: async (_, { documentId, retentionPercentage, retentionReason }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      // Validar que el porcentaje esté en el rango correcto
+      if (retentionPercentage < 1 || retentionPercentage > 100) {
+        throw new Error('El porcentaje de retención debe estar entre 1 y 100');
+      }
+
+      // Verificar que es documento FV
+      const docCheck = await query(
+        `SELECT d.id, dt.code
+         FROM documents d
+         LEFT JOIN document_types dt ON d.document_type_id = dt.id
+         WHERE d.id = $1`,
+        [documentId]
+      );
+
+      if (docCheck.rows.length === 0) {
+        throw new Error('Documento no encontrado');
+      }
+
+      if (docCheck.rows[0].code !== 'FV') {
+        throw new Error('Solo se pueden retener documentos de tipo FV');
+      }
+
+      // Verificar que el usuario es firmante con rol resp ctro cost
+      const signerCheck = await query(
+        `SELECT ds.role_code, ds.role_names
+         FROM document_signers ds
+         WHERE ds.document_id = $1 AND ds.user_id = $2`,
+        [documentId, user.id]
+      );
+
+      if (signerCheck.rows.length === 0) {
+        throw new Error('No estás asignado como firmante de este documento');
+      }
+
+      const signer = signerCheck.rows[0];
+      const hasRespCtroCost = signer.role_code === 'RESP_CTRO_COST' ||
+        (signer.role_names && signer.role_names.includes('RESP_CTRO_COST'));
+
+      if (!hasRespCtroCost) {
+        throw new Error('Solo el responsable del centro de costos puede retener facturas');
+      }
+
+      // Verificar que el usuario ya firmó el documento
+      const signatureCheck = await query(
+        `SELECT id, status
+         FROM signatures
+         WHERE document_id = $1 AND signer_id = $2 AND status = 'signed'`,
+        [documentId, user.id]
+      );
+
+      if (signatureCheck.rows.length === 0) {
+        throw new Error('Debes firmar el documento antes de retenerlo');
+      }
+
+      // Verificar que no haya una retención activa
+      const activeRetention = await query(
+        `SELECT id
+         FROM document_retentions
+         WHERE document_id = $1 AND released_at IS NULL`,
+        [documentId]
+      );
+
+      if (activeRetention.rows.length > 0) {
+        throw new Error('Este documento ya tiene una retención activa');
+      }
+
+      // Crear la retención
+      const result = await query(
+        `INSERT INTO document_retentions (document_id, retained_by, retention_percentage, retention_reason)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [documentId, user.id, retentionPercentage, retentionReason]
+      );
+
+      console.log(`📋 Documento ${documentId} retenido por ${user.name} (${retentionPercentage}%)`);
+
+      return result.rows[0];
+    },
+
+    /**
+     * Releases a retained FV document
+     *
+     * BUSINESS RULE: Only the same user who retained can release
+     * BUSINESS RULE: Can only release actively retained documents
+     *
+     * @param {Object} _ - Parent (unused)
+     * @param {Object} args - Arguments object
+     * @param {number} args.documentId - ID of the document
+     * @param {Object} context - GraphQL context
+     * @param {Object} context.user - Authenticated user
+     * @returns {Promise<Boolean>} Success status
+     * @throws {Error} When unauthorized or document not retained
+     */
+    releaseDocument: async (_, { documentId }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      // Buscar retención activa
+      const retentionCheck = await query(
+        `SELECT id, retained_by
+         FROM document_retentions
+         WHERE document_id = $1 AND released_at IS NULL`,
+        [documentId]
+      );
+
+      if (retentionCheck.rows.length === 0) {
+        throw new Error('Este documento no tiene una retención activa');
+      }
+
+      const retention = retentionCheck.rows[0];
+
+      // Verificar que el usuario es quien retuvo
+      if (retention.retained_by !== user.id) {
+        throw new Error('Solo quien retuvo el documento puede liberarlo');
+      }
+
+      // Liberar la retención
+      const now = new Date().toISOString();
+      await query(
+        `UPDATE document_retentions
+         SET released_at = $1, released_by = $2
+         WHERE id = $3`,
+        [now, user.id, retention.id]
+      );
+
+      console.log(`✅ Documento ${documentId} liberado por ${user.name}`);
+
+      return true;
     },
 
     /**
@@ -4356,6 +4657,37 @@ const resolvers = {
     totalSigners: (parent) => parent.total_signers || 0,
     signedCount: (parent) => parent.signed_count || 0,
     pendingCount: (parent) => parent.pending_count || 0,
+
+    retention: async (parent) => {
+      // Buscar retención activa para este documento
+      const result = await query(
+        `SELECT dr.*, u.name as retained_by_name, u.email as retained_by_email
+         FROM document_retentions dr
+         JOIN users u ON dr.retained_by = u.id
+         WHERE dr.document_id = $1 AND dr.released_at IS NULL
+         LIMIT 1`,
+        [parent.id]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const retention = result.rows[0];
+      return {
+        id: retention.id,
+        document_id: retention.document_id,
+        retained_by: retention.retained_by,
+        retention_percentage: retention.retention_percentage,
+        retention_reason: retention.retention_reason,
+        retained_at: retention.retained_at,
+        released_at: retention.released_at,
+        released_by: retention.released_by,
+        // Datos precargados para el resolver
+        _retained_by_name: retention.retained_by_name,
+        _retained_by_email: retention.retained_by_email
+      };
+    },
   },
 
   Signature: {
@@ -4510,6 +4842,47 @@ const resolvers = {
 
     user: async (parent) => {
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.user_id]);
+      return result.rows[0];
+    },
+  },
+
+  DocumentRetention: {
+    // Mapeo de snake_case (BD) a camelCase (GraphQL)
+    documentId: (parent) => parent.document_id,
+    retainedById: (parent) => parent.retained_by,
+    retentionPercentage: (parent) => parent.retention_percentage,
+    retentionReason: (parent) => parent.retention_reason,
+    retainedAt: (parent) => parent.retained_at,
+    releasedAt: (parent) => parent.released_at,
+    releasedById: (parent) => parent.released_by,
+
+    retainedBy: async (parent) => {
+      // Si ya tenemos los datos precargados, usarlos
+      if (parent._retained_by_name || parent._retained_by_email) {
+        return {
+          id: parent.retained_by,
+          name: parent._retained_by_name,
+          email: parent._retained_by_email
+        };
+      }
+      // Si no, hacer la consulta
+      const result = await query('SELECT * FROM users WHERE id = $1', [parent.retained_by]);
+      return result.rows[0];
+    },
+
+    releasedBy: async (parent) => {
+      if (!parent.released_by) return null;
+
+      // Si ya tenemos los datos precargados, usarlos
+      if (parent._released_by_name || parent._released_by_email) {
+        return {
+          id: parent.released_by,
+          name: parent._released_by_name,
+          email: parent._released_by_email
+        };
+      }
+      // Si no, hacer la consulta
+      const result = await query('SELECT * FROM users WHERE id = $1', [parent.released_by]);
       return result.rows[0];
     },
   },

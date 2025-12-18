@@ -46,6 +46,8 @@ const typeDefs = gql`
     # Campos de firma (solo disponibles en signedDocuments)
     signedAt: String
     signatureType: String
+    # Retención
+    retention: DocumentRetention
   }
 
   type Signature {
@@ -182,6 +184,19 @@ const typeDefs = gql`
     activo: Boolean!
   }
 
+  type DocumentRetention {
+    id: Int!
+    documentId: Int!
+    retainedBy: User!
+    retainedById: Int!
+    retentionPercentage: Int!
+    retentionReason: String!
+    retainedAt: String!
+    releasedAt: String
+    releasedBy: User
+    releasedById: Int
+  }
+
   type Query {
     # Usuarios
     me: User
@@ -197,6 +212,7 @@ const typeDefs = gql`
     signedDocuments: [Document!]!
     rejectedByMeDocuments: [Document!]!
     rejectedByOthersDocuments: [Document!]!
+    retainedDocuments: [Document!]!
     documentsByStatus(status: String!): [Document!]!
 
     # Tipos de Documentos
@@ -242,8 +258,12 @@ const typeDefs = gql`
     updateFacturaTemplate(documentId: Int!, templateData: String!): UpdateFacturaTemplateResponse!
 
     # Firmas
-    signDocument(documentId: Int!, signatureData: String!, consecutivo: String, realSignerName: String): Signature!
+    signDocument(documentId: Int!, signatureData: String!, consecutivo: String, realSignerName: String, retentionPercentage: Int, retentionReason: String): Signature!
     rejectDocument(documentId: Int!, reason: String, realSignerName: String): Boolean!
+
+    # Retenciones
+    retainDocument(documentId: Int!, retentionPercentage: Int!, retentionReason: String!): DocumentRetention!
+    releaseDocument(documentId: Int!): Boolean!
 
     # Notificaciones
     markNotificationAsRead(notificationId: Int!): Notification!

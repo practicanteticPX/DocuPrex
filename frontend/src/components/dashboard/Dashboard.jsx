@@ -67,10 +67,12 @@ function Dashboard({ user, onLogout }) {
   const [myDocuments, setMyDocuments] = useState([]);
   const [rejectedByMe, setRejectedByMe] = useState([]);
   const [rejectedByOthers, setRejectedByOthers] = useState([]);
+  const [retainedDocuments, setRetainedDocuments] = useState([]);
   const [loadingPending, setLoadingPending] = useState(false);
   const [loadingSigned, setLoadingSigned] = useState(false);
   const [loadingMy, setLoadingMy] = useState(false);
   const [loadingRejected, setLoadingRejected] = useState(false);
+  const [loadingRetained, setLoadingRetained] = useState(false);
   const [viewingDocument, setViewingDocument] = useState(null);
   const [isViewingPending, setIsViewingPending] = useState(false);
   const [isWaitingTurn, setIsWaitingTurn] = useState(false);
@@ -158,6 +160,9 @@ function Dashboard({ user, onLogout }) {
   // Estados para filtros de "Documentos rechazados"
   const [rejectedDocsSearchTerm, setRejectedDocsSearchTerm] = useState('');
 
+  // Estados para filtros de "Documentos retenidos"
+  const [retainedDocsSearchTerm, setRetainedDocsSearchTerm] = useState('');
+
   // Estados para filtros de tipo de documento
   const [pendingDocsTypeFilter, setPendingDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
   const [myDocsTypeFilter, setMyDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
@@ -170,6 +175,11 @@ function Dashboard({ user, onLogout }) {
   const [realSignerAction, setRealSignerAction] = useState('firmar'); // 'firmar' o 'rechazar'
   const [realSignerName, setRealSignerName] = useState('');
   const [pendingDocumentAction, setPendingDocumentAction] = useState(null); // Guarda la acción pendiente
+
+  // Estados para modal de retención de facturas (usuario con rol RESP_CTRO_COST)
+  const [showRetentionModal, setShowRetentionModal] = useState(false);
+  const [retentionData, setRetentionData] = useState({ percentage: '', reason: '' });
+  const [pendingSignWithRetention, setPendingSignWithRetention] = useState(null); // { docId, realSigner }
 
   // Estados para configuración
   const [showSettings, setShowSettings] = useState(false);
@@ -952,6 +962,13 @@ function Dashboard({ user, onLogout }) {
     }
   }, [activeTab]);
 
+  // Cargar documentos retenidos al montar o cambiar de tab
+  useEffect(() => {
+    if (activeTab === 'retained') {
+      loadRetainedDocuments();
+    }
+  }, [activeTab]);
+
   // Detectar si hay un documento en la URL al cargar (formato: /documento/{id})
   useEffect(() => {
     // Esperar a que el usuario esté cargado antes de intentar cargar el documento
@@ -1472,6 +1489,87 @@ function Dashboard({ user, onLogout }) {
       setError('Error al cargar documentos rechazados');
     } finally {
       setLoadingRejected(false);
+    }
+  };
+
+  const loadRetainedDocuments = async () => {
+    setLoadingRetained(true);
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            query {
+              retainedDocuments {
+                id
+                title
+                description
+                fileName
+                filePath
+                fileSize
+                status
+                consecutivo
+                createdAt
+                documentType {
+                  id
+                  code
+                  name
+                }
+                uploadedBy {
+                  id
+                  name
+                  email
+                }
+                retention {
+                  id
+                  retentionPercentage
+                  retentionReason
+                  retainedAt
+                  retainedBy {
+                    id
+                    name
+                    email
+                  }
+                }
+                signatures {
+                  id
+                  status
+                  signedAt
+                  roleName
+                  roleNames
+                  orderPosition
+                  realSignerName
+                  signer {
+                    id
+                    name
+                    email
+                  }
+                }
+              }
+            }
+          `
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      setRetainedDocuments(response.data.data.retainedDocuments || []);
+    } catch (err) {
+      console.error('Error al cargar documentos retenidos:', err);
+      if (!isAuthError(err)) {
+        setError('Error al cargar documentos retenidos');
+      }
+    } finally {
+      setLoadingRetained(false);
     }
   };
 
@@ -2485,25 +2583,65 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
+   * Verifica si el usuario tiene el rol RESP_CTRO_COST en un documento específico
+   */
+  const hasRespCtroCostRole = (doc) => {
+    if (!doc || !doc.signatures) return false;
+
+    const mySignature = doc.signatures.find(sig =>
+      sig.signer && (sig.signer.id === user.id || sig.signer.email === user.email)
+    );
+
+    if (!mySignature) return false;
+
+    // Verificar en roleCode
+    if (mySignature.roleCode === 'RESP_CTRO_COST') {
+      return true;
+    }
+
+    // Verificar en roleNames array
+    if (mySignature.roleNames && mySignature.roleNames.includes('RESP_CTRO_COST')) {
+      return true;
+    }
+
+    return false;
+  };
+
+  /**
    * Maneja el inicio del proceso de firma
    * Si es usuario Negociaciones, muestra modal de selección primero
+   * Si es RESP_CTRO_COST en documento FV, muestra modal de retención
    */
   const initiateSignDocument = (docId) => {
     if (isNegociacionesUser()) {
-      // Guardar la acción pendiente y mostrar modal
+      // Guardar la acción pendiente y mostrar modal de firmante real
       setPendingDocumentAction({ type: 'sign', docId });
       setRealSignerAction('firmar');
       setShowRealSignerModal(true);
     } else {
-      // Firmar directamente
-      handleSignDocument(docId);
+      // Obtener el documento
+      const doc = pendingDocuments.find(d => d.id === docId) || viewingDocument;
+
+      // Verificar si debe mostrar modal de retención
+      const isFV = doc && doc.documentType && doc.documentType.code === 'FV';
+      const isRespCtroCost = doc && hasRespCtroCostRole(doc);
+
+      if (isFV && isRespCtroCost) {
+        // Mostrar modal de retención
+        setPendingSignWithRetention({ docId, realSigner: null });
+        setRetentionData({ percentage: '', reason: '' });
+        setShowRetentionModal(true);
+      } else {
+        // Firmar directamente sin retención
+        handleSignDocument(docId);
+      }
     }
   };
 
   /**
    * Firma el documento (función interna, llamada después del modal si es necesario)
    */
-  const handleSignDocument = async (docId, realSigner = null) => {
+  const handleSignDocument = async (docId, realSigner = null, retention = null) => {
     // Prevenir múltiples clicks
     if (signing) {
       console.warn('Ya se está procesando una firma');
@@ -2527,8 +2665,22 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation SignDocument($documentId: Int!, $signatureData: String!, $consecutivo: String, $realSignerName: String) {
-              signDocument(documentId: $documentId, signatureData: $signatureData, consecutivo: $consecutivo, realSignerName: $realSignerName) {
+            mutation SignDocument(
+              $documentId: Int!,
+              $signatureData: String!,
+              $consecutivo: String,
+              $realSignerName: String,
+              $retentionPercentage: Int,
+              $retentionReason: String
+            ) {
+              signDocument(
+                documentId: $documentId,
+                signatureData: $signatureData,
+                consecutivo: $consecutivo,
+                realSignerName: $realSignerName,
+                retentionPercentage: $retentionPercentage,
+                retentionReason: $retentionReason
+              ) {
                 id
                 status
                 signedAt
@@ -2541,7 +2693,9 @@ function Dashboard({ user, onLogout }) {
             documentId: docId,
             signatureData: signatureData,
             consecutivo: consecutivo || null,
-            realSignerName: realSigner || null
+            realSignerName: realSigner || null,
+            retentionPercentage: retention?.percentage || null,
+            retentionReason: retention?.reason || null
           }
         },
         {
@@ -2659,14 +2813,112 @@ function Dashboard({ user, onLogout }) {
 
     if (pendingDocumentAction) {
       if (pendingDocumentAction.type === 'sign') {
-        // Ejecutar firma con el nombre real
-        handleSignDocument(pendingDocumentAction.docId, signerName);
+        // Verificar si después debe mostrar modal de retención
+        const doc = pendingDocuments.find(d => d.id === pendingDocumentAction.docId) || viewingDocument;
+        const isFV = doc && doc.documentType && doc.documentType.code === 'FV';
+        const isRespCtroCost = doc && hasRespCtroCostRole(doc);
+
+        if (isFV && isRespCtroCost) {
+          // Guardar el nombre del firmante real y mostrar modal de retención
+          setPendingSignWithRetention({ docId: pendingDocumentAction.docId, realSigner: signerName });
+          setRetentionData({ percentage: '', reason: '' });
+          setShowRetentionModal(true);
+        } else {
+          // Ejecutar firma directamente con el nombre real, sin retención
+          handleSignDocument(pendingDocumentAction.docId, signerName);
+        }
       } else if (pendingDocumentAction.type === 'reject') {
         // Ejecutar rechazo con el nombre real
         handleRejectDocument(pendingDocumentAction.docId, pendingDocumentAction.reason, signerName);
       }
       // Limpiar acción pendiente
       setPendingDocumentAction(null);
+    }
+  };
+
+  /**
+   * Maneja la confirmación del modal de retención
+   */
+  const handleRetentionConfirm = (wantsRetention, percentage = null, reason = null) => {
+    setShowRetentionModal(false);
+
+    if (pendingSignWithRetention) {
+      const { docId, realSigner } = pendingSignWithRetention;
+
+      if (wantsRetention && percentage && reason) {
+        // Firmar con retención
+        handleSignDocument(docId, realSigner, { percentage: parseInt(percentage), reason });
+      } else {
+        // Firmar sin retención
+        handleSignDocument(docId, realSigner);
+      }
+
+      setPendingSignWithRetention(null);
+      setRetentionData({ percentage: '', reason: '' });
+    }
+  };
+
+  /**
+   * Libera un documento retenido
+   */
+  const handleReleaseDocument = async (documentId) => {
+    if (!confirm('¿Estás seguro de que deseas liberar esta factura retenida?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation ReleaseDocument($documentId: Int!) {
+              releaseDocument(documentId: $documentId)
+            }
+          `,
+          variables: {
+            documentId: documentId
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      // Recargar documentos retenidos y firmados
+      await loadRetainedDocuments();
+      await loadSignedDocuments();
+
+      // Mostrar notificación de éxito
+      setNotificationData({
+        title: 'Factura Liberada',
+        message: 'La factura ha sido liberada exitosamente',
+        type: 'success'
+      });
+      setShowNotification(true);
+
+      setTimeout(() => {
+        setShowNotification(false);
+      }, 3000);
+    } catch (err) {
+      console.error('Error al liberar documento:', err);
+      setNotificationData({
+        title: 'Error',
+        message: err.message || 'No se pudo liberar la factura',
+        type: 'error'
+      });
+      setShowNotification(true);
+
+      setTimeout(() => {
+        setShowNotification(false);
+      }, 3000);
     }
   };
 
@@ -4122,7 +4374,14 @@ function Dashboard({ user, onLogout }) {
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Rechazados
-                
+
+              </button>
+              <button className={`ds-nav-item ${activeTab === 'retained' ? 'active' : ''}`} onClick={() => setActiveTab('retained')}>
+                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 15V3M12 15L8 11M12 15L16 11M2 17L2.621 19.485C2.72915 19.9177 2.97882 20.3018 3.33033 20.5763C3.68184 20.8508 4.11501 21.0001 4.561 21H19.439C19.885 21.0001 20.3182 20.8508 20.6697 20.5763C21.0212 20.3018 21.2708 19.9177 21.379 19.485L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Retenidos
+
               </button>
             </nav>
           </aside>
@@ -4486,6 +4745,18 @@ function Dashboard({ user, onLogout }) {
               Rechazados
               {!loadingRejected && (rejectedByMe.length + rejectedByOthers.length) > 0 && (
                 <span className="badge badge-danger">{rejectedByMe.length + rejectedByOthers.length}</span>
+              )}
+            </button>
+            <button
+              className={`tab ${activeTab === 'retained' ? 'active' : ''}`}
+              onClick={() => setActiveTab('retained')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 15V3M12 15L8 11M12 15L16 11M2 17L2.621 19.485C2.72915 19.9177 2.97882 20.3018 3.33033 20.5763C3.68184 20.8508 4.11501 21.0001 4.561 21H19.439C19.885 21.0001 20.3182 20.8508 20.6697 20.5763C21.0212 20.3018 21.2708 19.9177 21.379 19.485L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Retenidos
+              {!loadingRetained && retainedDocuments.length > 0 && (
+                <span className="badge badge-warning">{retainedDocuments.length}</span>
               )}
             </button>
           </div>
@@ -6601,6 +6872,162 @@ function Dashboard({ user, onLogout }) {
               )}
             </div>
           )}
+
+          {/* Retained Documents Section */}
+          {activeTab === 'retained' && (
+            <div className="section my-documents-section-clean">
+              <div className="section-header-minimal">
+                <div>
+                  <h2 className="section-title-minimal">Documentos Retenidos</h2>
+                  <p className="section-subtitle-minimal">
+                    {(() => {
+                      const filteredCount = retainedDocuments.filter(doc =>
+                        doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase())
+                      ).length;
+                      return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} retenido${filteredCount !== 1 ? 's' : ''}`;
+                    })()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Buscador */}
+              {retainedDocuments.length > 0 && (
+                <div className="my-docs-filters">
+                  <div className="filter-search">
+                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <input
+                      type="text"
+                      className="filter-search-input"
+                      placeholder="Buscar por nombre de documento..."
+                      value={retainedDocsSearchTerm}
+                      onChange={(e) => setRetainedDocsSearchTerm(e.target.value)}
+                    />
+                    {retainedDocsSearchTerm && (
+                      <button
+                        className="clear-search-btn"
+                        onClick={() => setRetainedDocsSearchTerm('')}
+                        title="Limpiar búsqueda"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de documentos retenidos */}
+              {loadingRetained ? (
+                <div className="loading-container">
+                  <Loader />
+                </div>
+              ) : retainedDocuments.length === 0 ? (
+                <div className="empty-state">
+                  <svg className="empty-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 15V3M12 15L8 11M12 15L16 11M2 17L2.621 19.485C2.72915 19.9177 2.97882 20.3018 3.33033 20.5763C3.68184 20.8508 4.11501 21.0001 4.561 21H19.439C19.885 21.0001 20.3182 20.8508 20.6697 20.5763C21.0212 20.3018 21.2708 19.9177 21.379 19.485L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <p className="empty-title">No hay documentos retenidos</p>
+                  <p className="empty-subtitle">Los documentos FV retenidos aparecerán aquí</p>
+                </div>
+              ) : (
+                (() => {
+                  const filteredDocs = retainedDocuments.filter(doc =>
+                    doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase())
+                  );
+
+                  return filteredDocs.length === 0 ? (
+                    <div className="empty-state">
+                      <svg className="empty-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <p className="empty-title">No se encontraron resultados</p>
+                      <p className="empty-subtitle">Intenta con otros términos de búsqueda</p>
+                    </div>
+                  ) : (
+                    <div className="documents-grid-clean">
+                      {filteredDocs.map((doc) => {
+                        const retention = doc.retention;
+                        const canRelease = retention && retention.retainedBy.id === user.id;
+
+                        return (
+                          <div key={doc.id} className="doc-card-clean">
+                            <div className="doc-card-header-clean">
+                              <div className="doc-card-title-clean">{doc.title}</div>
+                              <div className="doc-card-badges-clean">
+                                <span className="status-badge-clean status-warning">
+                                  Retenido {retention?.retentionPercentage}%
+                                </span>
+                              </div>
+                            </div>
+
+                            {retention && (
+                              <div className="doc-card-info-clean" style={{ marginTop: '12px', padding: '12px', backgroundColor: '#FFF9E6', borderRadius: '8px', border: '1px solid #F59E0B' }}>
+                                <div style={{ fontSize: '13px', color: '#92400E', marginBottom: '6px' }}>
+                                  <strong>Retenido por:</strong> {retention.retainedBy.name}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#78350F' }}>
+                                  <strong>Razón:</strong> {retention.retentionReason}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="doc-card-info-clean">
+                              <div className="doc-card-meta-clean">
+                                <span className="doc-card-meta-item-clean">
+                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 7V3M16 7V3M7 11H17M5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  {new Date(doc.createdAt).toLocaleDateString('es-ES', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </span>
+                                <span className="doc-card-meta-item-clean">
+                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21M16 7C16 9.20914 14.2091 11 12 11C9.79086 11 8 9.20914 8 7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  {doc.uploadedBy?.name || 'Desconocido'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="doc-card-actions-clean">
+                              <button
+                                className="doc-action-btn-clean secondary"
+                                onClick={() => handleDocumentClick(doc, false)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z" stroke="currentColor" strokeWidth="2"/>
+                                  <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2"/>
+                                </svg>
+                                Ver
+                              </button>
+                              {canRelease && (
+                                <button
+                                  className="doc-action-btn-clean primary"
+                                  onClick={() => handleReleaseDocument(doc.id)}
+                                  style={{ backgroundColor: '#10B981', borderColor: '#10B981' }}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 11L12 14L22 4M21 12V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V5C3 3.89543 3.89543 3 5 3H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  Liberar factura
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          )}
         </main>
           </div>{/* /.ds-content */}
         </div>{/* /.ds-shell */}
@@ -8246,6 +8673,240 @@ function Dashboard({ user, onLogout }) {
         onConfirm={handleRealSignerConfirm}
         action={realSignerAction}
       />
+
+      {/* Modal de retención de factura (RESP_CTRO_COST en documentos FV) */}
+      {showRetentionModal && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10000
+          }}
+        >
+          <div
+            className="modal-content"
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '32px',
+              maxWidth: '500px',
+              width: '90%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            <h2 style={{
+              marginTop: 0,
+              marginBottom: '24px',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              color: '#1F2937'
+            }}>
+              Retención de Factura
+            </h2>
+
+            <p style={{
+              fontSize: '16px',
+              marginBottom: '24px',
+              color: '#4B5563'
+            }}>
+              ¿Deseas retener esta factura?
+            </p>
+
+            <div style={{ marginBottom: '24px' }}>
+              <button
+                onClick={() => {
+                  setRetentionData({ ...retentionData, wantsRetention: false });
+                }}
+                style={{
+                  padding: '12px 24px',
+                  marginRight: '12px',
+                  borderRadius: '8px',
+                  border: retentionData.wantsRetention === false ? '2px solid #3B82F6' : '2px solid #E5E7EB',
+                  backgroundColor: retentionData.wantsRetention === false ? '#EFF6FF' : 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                No
+              </button>
+              <button
+                onClick={() => {
+                  setRetentionData({ ...retentionData, wantsRetention: true });
+                }}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  border: retentionData.wantsRetention === true ? '2px solid #3B82F6' : '2px solid #E5E7EB',
+                  backgroundColor: retentionData.wantsRetention === true ? '#EFF6FF' : 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                Sí
+              </button>
+            </div>
+
+            {retentionData.wantsRetention === true && (
+              <>
+                <div style={{ marginBottom: '20px' }}>
+                  <label
+                    htmlFor="retention-percentage"
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: '#374151'
+                    }}
+                  >
+                    Porcentaje de retención (1-100%)
+                  </label>
+                  <input
+                    id="retention-percentage"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={retentionData.percentage}
+                    onChange={(e) => setRetentionData({ ...retentionData, percentage: e.target.value })}
+                    placeholder="Ej: 50"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '2px solid #E5E7EB',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      transition: 'border-color 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3B82F6'}
+                    onBlur={(e) => e.target.style.borderColor = '#E5E7EB'}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '28px' }}>
+                  <label
+                    htmlFor="retention-reason"
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: '#374151'
+                    }}
+                  >
+                    Razón de la retención
+                  </label>
+                  <textarea
+                    id="retention-reason"
+                    value={retentionData.reason}
+                    onChange={(e) => setRetentionData({ ...retentionData, reason: e.target.value })}
+                    placeholder="Describe brevemente por qué se retiene esta factura..."
+                    rows={4}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '2px solid #E5E7EB',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      resize: 'vertical',
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                      transition: 'border-color 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3B82F6'}
+                    onBlur={(e) => e.target.style.borderColor = '#E5E7EB'}
+                  />
+                </div>
+              </>
+            )}
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px',
+              marginTop: '28px'
+            }}>
+              <button
+                onClick={() => {
+                  setShowRetentionModal(false);
+                  setPendingSignWithRetention(null);
+                  setRetentionData({ percentage: '', reason: '' });
+                }}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  border: '2px solid #E5E7EB',
+                  backgroundColor: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#6B7280'
+                }}
+              >
+                Cancelar
+              </button>
+              {retentionData.wantsRetention === false && (
+                <button
+                  onClick={() => handleRetentionConfirm(false)}
+                  style={{
+                    padding: '12px 24px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#3B82F6',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  Firmar sin retener
+                </button>
+              )}
+              {retentionData.wantsRetention === true && (
+                <button
+                  onClick={() => {
+                    if (!retentionData.percentage || !retentionData.reason) {
+                      alert('Debes ingresar el porcentaje y la razón de la retención');
+                      return;
+                    }
+                    const percentage = parseInt(retentionData.percentage);
+                    if (percentage < 1 || percentage > 100) {
+                      alert('El porcentaje debe estar entre 1 y 100');
+                      return;
+                    }
+                    handleRetentionConfirm(true, percentage, retentionData.reason);
+                  }}
+                  disabled={!retentionData.percentage || !retentionData.reason}
+                  style={{
+                    padding: '12px 24px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: (!retentionData.percentage || !retentionData.reason) ? '#9CA3AF' : '#EF4444',
+                    color: 'white',
+                    cursor: (!retentionData.percentage || !retentionData.reason) ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  Firmar y retener
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de plantilla de factura */}
       {showFacturaTemplate && (selectedFactura || editingDocument) && (
