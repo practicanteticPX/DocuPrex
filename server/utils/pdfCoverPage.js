@@ -438,17 +438,13 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       }
 
       // Construir el nombre del firmante:
-      // - Si es un grupo de causación firmado, mostrar quien firmó (real_signer_name)
-      // - Si es Negociaciones u otro usuario con real_signer_name, mostrar "NOMBRE (Real Signer)"
-      // - Si es un grupo pendiente, mostrar solo el nombre del grupo
+      // - Si está firmado y tiene real_signer_name, mostrar quien firmó (grupos de causación y Negociaciones)
+      // - Si es pendiente, mostrar el nombre original (grupo o usuario)
       let signerName = (signer.name || 'Sin nombre').toUpperCase();
 
-      if (signer.is_causacion_group && signer.status === 'signed' && signer.real_signer_name) {
-        // Para grupos firmados, mostrar quien firmó en lugar del nombre del grupo
+      if (signer.status === 'signed' && signer.real_signer_name) {
+        // Reemplazar con el nombre de quien firmó realmente
         signerName = signer.real_signer_name.toUpperCase();
-      } else if (!signer.is_causacion_group && signer.status === 'signed' && signer.real_signer_name && signer.real_signer_name.toUpperCase() !== signerName) {
-        // Para usuarios normales con real_signer_name (ej: Negociaciones), mostrar con paréntesis
-        signerName = `${signerName} (${signer.real_signer_name.toUpperCase()})`;
       }
 
       const maxNameLength = 70;

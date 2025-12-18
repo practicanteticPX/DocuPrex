@@ -5749,7 +5749,7 @@ function Dashboard({ user, onLogout }) {
                                   if (rejectedSignature) {
                                     setRejectionReasonPopup({
                                       title: doc.title,
-                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                      rejectedBy: rejectedSignature.realSignerName || rejectedSignature.signer?.name || rejectedSignature.signer?.email,
                                       reason: rejectedSignature.rejectionReason,
                                       rejectedAt: rejectedSignature.rejectedAt
                                     });
@@ -5801,7 +5801,7 @@ function Dashboard({ user, onLogout }) {
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                   ></span>
                                   <span className="signer-name">
-                                    {sig.signer?.name || sig.signer?.email}
+                                    {(sig.status === 'signed' && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
                                   </span>
                                 </div>
                               );
@@ -6138,7 +6138,7 @@ function Dashboard({ user, onLogout }) {
                                   if (rejectedSignature) {
                                     setRejectionReasonPopup({
                                       title: doc.title,
-                                      rejectedBy: rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                      rejectedBy: rejectedSignature.realSignerName || rejectedSignature.signer?.name || rejectedSignature.signer?.email,
                                       reason: rejectedSignature.rejectionReason,
                                       rejectedAt: rejectedSignature.rejectedAt
                                     });
@@ -6190,7 +6190,7 @@ function Dashboard({ user, onLogout }) {
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                   ></span>
                                   <span className="signer-name">
-                                    {sig.signer?.name || sig.signer?.email}
+                                    {(sig.status === 'signed' && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
                                   </span>
                                 </div>
                               );
@@ -8984,6 +8984,11 @@ function Dashboard({ user, onLogout }) {
                 roleText = sig.roleName;
               }
 
+              // Si está firmado y tiene realSignerName, mostrar quien firmó realmente (grupos de causación y Negociaciones)
+              const displayName = (sig.status === 'signed' && sig.realSignerName)
+                ? sig.realSignerName
+                : (sig.signer?.name || sig.signer?.email);
+
               return (
                 <div key={sig.id} className="signers-dropdown-item">
                   <span
@@ -8991,7 +8996,7 @@ function Dashboard({ user, onLogout }) {
                     style={{ backgroundColor: sig.status === 'signed' ? '#10B981' : sig.status === 'rejected' ? '#EF4444' : '#F59E0B' }}
                   ></span>
                   <div className="signer-info">
-                    <div className="signer-name">{sig.signer?.name || sig.signer?.email}</div>
+                    <div className="signer-name">{displayName}</div>
                     {roleText && <div className="signer-role">{roleText}</div>}
                   </div>
                 </div>
