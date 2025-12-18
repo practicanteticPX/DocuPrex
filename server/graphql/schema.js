@@ -67,6 +67,8 @@ const typeDefs = gql`
     createdAt: String
     updatedAt: String
     roleName: String
+    roleNames: [String!]
+    roleCode: String
     orderPosition: Int
     # Campos para grupos de causación
     isCausacionGroup: Boolean

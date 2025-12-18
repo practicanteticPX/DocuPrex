@@ -435,15 +435,11 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       // Construir el nombre del firmante:
       // - Si es un grupo de causación firmado, mostrar quien firmó (real_signer_name)
       // - Si es un grupo pendiente, mostrar solo el nombre del grupo
-      // - Si es un firmante individual con real_signer_name, mostrarlo entre paréntesis
       let signerName = (signer.name || 'Sin nombre').toUpperCase();
 
       if (signer.is_causacion_group && signer.status === 'signed' && signer.real_signer_name) {
         // Para grupos firmados, mostrar quien firmó en lugar del nombre del grupo
         signerName = signer.real_signer_name.toUpperCase();
-      } else if (!signer.is_causacion_group && signer.real_signer_name) {
-        // Para firmantes individuales, mostrar el nombre con real_signer_name entre paréntesis
-        signerName = `${signerName} (${signer.real_signer_name})`;
       }
 
       const maxNameLength = 70;

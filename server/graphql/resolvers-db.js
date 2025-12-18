@@ -4227,13 +4227,28 @@ const resolvers = {
     // Campos de document_signers (traídos por JOIN)
     orderPosition: (parent) => parent.order_position,
     roleName: (parent) => {
-      // Si hay role_names array, unirlos con coma
+      // Si hay role_names array, devolver el primero
       if (parent.role_names && parent.role_names.length > 0) {
-        return parent.role_names.join(', ');
+        return parent.role_names[0];
       }
       // Fallback a role_name singular
       return parent.role_name || null;
     },
+    roleNames: (parent) => {
+      // Devolver array de roles
+      if (parent.role_names && Array.isArray(parent.role_names) && parent.role_names.length > 0) {
+        return parent.role_names;
+      }
+      // Fallback a role_name singular como array
+      if (parent.role_name) {
+        return [parent.role_name];
+      }
+      return [];
+    },
+    roleCode: (parent) => parent.role_code || null,
+    isCausacionGroup: (parent) => parent.is_causacion_group || false,
+    grupoCodigo: (parent) => parent.grupo_codigo || null,
+    grupoNombre: (parent) => parent.grupo_nombre || null,
 
     document: async (parent) => {
       const result = await query('SELECT * FROM documents WHERE id = $1', [parent.document_id]);

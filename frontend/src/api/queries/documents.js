@@ -36,6 +36,7 @@ export const SIGNER_FRAGMENT = `
     rejection_reason
     role_code
     role_name
+    role_names
     consecutivo
   }
 `;
@@ -59,14 +60,18 @@ export const GET_PENDING_DOCUMENTS = `
       my_signature_status
       my_order_position
       current_required_position
-      signers {
+      signatures {
         id
-        name
+        signer {
+          name
+          email
+        }
         order_position
         status
         signed_at
         role_code
         role_name
+        role_names
       }
     }
   }
@@ -87,13 +92,17 @@ export const GET_SIGNED_DOCUMENTS = `
       uploaded_by
       uploader_name
       document_type_code
-      signers {
+      signatures {
         id
-        name
+        signer {
+          name
+          email
+        }
         status
         signed_at
         role_code
         role_name
+        role_names
         consecutivo
       }
     }
@@ -113,9 +122,12 @@ export const GET_MY_DOCUMENTS = `
       status
       created_at
       document_type_code
-      signers {
+      signatures {
         id
-        name
+        signer {
+          name
+          email
+        }
         order_position
         status
         signed_at
@@ -123,6 +135,7 @@ export const GET_MY_DOCUMENTS = `
         rejection_reason
         role_code
         role_name
+        role_names
         consecutivo
       }
     }
@@ -146,12 +159,16 @@ export const GET_REJECTED_BY_ME_DOCUMENTS = `
       rejection_reason
       rejected_at
       document_type_code
-      signers {
+      signatures {
         id
-        name
+        signer {
+          name
+          email
+        }
         status
         role_code
         role_name
+        role_names
       }
     }
   }
@@ -173,13 +190,17 @@ export const GET_REJECTED_BY_OTHERS_DOCUMENTS = `
       rejector_name
       rejection_reason
       rejected_at
-      signers {
+      signatures {
         id
-        name
+        signer {
+          name
+          email
+        }
         status
         rejection_reason
         role_code
         role_name
+        role_names
       }
     }
   }
@@ -201,10 +222,12 @@ export const GET_DOCUMENT_BY_ID = `
       uploaded_by
       uploader_name
       document_type_code
-      signers {
+      signatures {
         id
-        name
-        email
+        signer {
+          name
+          email
+        }
         order_position
         status
         signed_at
@@ -212,6 +235,7 @@ export const GET_DOCUMENT_BY_ID = `
         rejection_reason
         role_code
         role_name
+        role_names
         consecutivo
       }
     }
@@ -233,13 +257,17 @@ export const GET_ALL_DOCUMENTS = `
       uploaded_by
       uploader_name
       document_type_code
-      signers {
+      signatures {
         id
-        name
+        signer {
+          name
+          email
+        }
         status
         signed_at
         role_code
         role_name
+        role_names
       }
     }
   }

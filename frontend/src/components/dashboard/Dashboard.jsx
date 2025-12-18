@@ -389,24 +389,35 @@ function Dashboard({ user, onLogout }) {
     } else {
       // Calcular posición del botón
       const rect = e.currentTarget.getBoundingClientRect();
-      const dropdownWidth = 180;
       const dropdownHeight = Math.min(signatures.length * 28 + 50, 220);
 
-      // Calcular posición centrada debajo del botón
-      let left = rect.left + (rect.width / 2) - (dropdownWidth / 2);
+      // Posicionar inicialmente (se ajustará después)
+      let left = rect.left;
       let top = rect.bottom + 6;
-
-      // Ajustar si se sale de la pantalla
-      if (left < 10) left = 10;
-      if (left + dropdownWidth > window.innerWidth - 10) {
-        left = window.innerWidth - dropdownWidth - 10;
-      }
-      if (top + dropdownHeight > window.innerHeight - 10) {
-        top = rect.top - dropdownHeight - 6;
-      }
 
       setSignersDropdownPos({ docId, top, left, signatures });
       setExpandedSigners({ ...expandedSigners, [docId]: true });
+
+      // Ajustar posición después de renderizar
+      setTimeout(() => {
+        const dropdown = document.querySelector('.signers-dropdown-fixed');
+        if (dropdown) {
+          const dropdownWidth = dropdown.offsetWidth;
+          let adjustedLeft = rect.left + (rect.width / 2) - (dropdownWidth / 2);
+          let adjustedTop = rect.bottom + 6;
+
+          // Ajustar si se sale de la pantalla
+          if (adjustedLeft < 10) adjustedLeft = 10;
+          if (adjustedLeft + dropdownWidth > window.innerWidth - 10) {
+            adjustedLeft = window.innerWidth - dropdownWidth - 10;
+          }
+          if (adjustedTop + dropdownHeight > window.innerHeight - 10) {
+            adjustedTop = rect.top - dropdownHeight - 6;
+          }
+
+          setSignersDropdownPos({ docId, top: adjustedTop, left: adjustedLeft, signatures });
+        }
+      }, 0);
     }
   };
 
@@ -8275,15 +8286,26 @@ function Dashboard({ user, onLogout }) {
         >
           <div className="signers-dropdown-title">Firmantes ({signersDropdownPos.signatures.length})</div>
           <div className="signers-dropdown-list">
-            {signersDropdownPos.signatures.map((sig) => (
-              <div key={sig.id} className="signers-dropdown-item">
-                <span
-                  className="signer-dot"
-                  style={{ backgroundColor: sig.status === 'signed' ? '#10B981' : sig.status === 'rejected' ? '#EF4444' : '#F59E0B' }}
-                ></span>
-                <span className="signer-name">{sig.signer?.name || sig.signer?.email}</span>
-              </div>
-            ))}
+            {signersDropdownPos.signatures.map((sig) => {
+              let roleText = '';
+              if (sig.roleNames && Array.isArray(sig.roleNames) && sig.roleNames.length > 0) {
+                roleText = ` - ${sig.roleNames.join(' / ')}`;
+              } else if (sig.roleName) {
+                roleText = ` - ${sig.roleName}`;
+              }
+
+              return (
+                <div key={sig.id} className="signers-dropdown-item">
+                  <span
+                    className="signer-dot"
+                    style={{ backgroundColor: sig.status === 'signed' ? '#10B981' : sig.status === 'rejected' ? '#EF4444' : '#F59E0B' }}
+                  ></span>
+                  <span className="signer-name">
+                    {sig.signer?.name || sig.signer?.email}{roleText}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

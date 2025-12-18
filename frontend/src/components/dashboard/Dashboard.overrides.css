@@ -1432,6 +1432,7 @@ html:has(.pdf-viewer-minimal-overlay) {
 .signers-dropdown-item {
   display: flex !important;
   align-items: center !important;
+  justify-content: flex-start !important;
   gap: 8px !important;
   padding: 6px 8px !important;
   border-radius: 6px !important;
@@ -1452,9 +1453,8 @@ html:has(.pdf-viewer-minimal-overlay) {
 .signer-name {
   font-size: 13px !important;
   color: #374151 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
   white-space: nowrap !important;
+  text-align: left !important;
 }
 
 /* Dropdown fijo de firmantes (position: fixed) */
@@ -1464,7 +1464,9 @@ html:has(.pdf-viewer-minimal-overlay) {
   border-radius: 10px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
   padding: 10px !important;
-  width: 180px !important;
+  width: max-content !important;
+  min-width: 200px !important;
+  max-width: 350px !important;
   animation: signersFadeIn 0.15s ease-out !important;
 }
 
