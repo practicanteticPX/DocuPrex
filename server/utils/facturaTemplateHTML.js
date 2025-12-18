@@ -49,7 +49,8 @@ function generateFacturaHTML(data) {
     filasControl = [],
     totalPorcentaje = 0,
     observaciones = '',
-    firmas = {} // Objeto con las firmas: { 'nombre_persona': 'nombre_firmante' }
+    firmas = {}, // Objeto con las firmas: { 'nombre_persona': 'nombre_firmante' }
+    isRejected = false // Si el documento fue rechazado
   } = data;
 
   // Get logo as base64
@@ -423,9 +424,27 @@ function generateFacturaHTML(data) {
       height: auto;
       object-fit: contain;
     }
+
+    /* Marca de agua RECHAZADO */
+    .rejected-watermark {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 120px;
+      font-weight: 900;
+      font-family: 'Google Sans', sans-serif;
+      color: rgba(220, 38, 38, 0.18);
+      text-transform: uppercase;
+      letter-spacing: 20px;
+      pointer-events: none;
+      z-index: 9999;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
+  ${isRejected ? '<div class="rejected-watermark">RECHAZADO</div>' : ''}
   <div class="factura-template-container">
     ${logoBase64 ? `
     <!-- Company Logo -->

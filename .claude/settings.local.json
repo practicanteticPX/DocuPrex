@@ -54,7 +54,8 @@
       "Bash(timeout 20 docker logs:*)",
       "Bash(git commit:*)",
       "Bash(git restore:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(docker ps:*)"
     ],
     "deny": [],
     "ask": []

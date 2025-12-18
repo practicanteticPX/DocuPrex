@@ -7,9 +7,10 @@ const { generateFacturaHTML } = require('./facturaTemplateHTML');
  * Página más grande para que se vea TODO completo
  * @param {Object} templateData - Datos del template de factura
  * @param {Object} firmas - Objeto con firmas: { 'nombre_persona': 'nombre_firmante' }
+ * @param {boolean} isRejected - Si el documento fue rechazado (muestra marca de agua)
  * @returns {Promise<Buffer>} PDF generado con el template
  */
-async function generateFacturaTemplatePDF(templateData, firmas = {}) {
+async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected = false) {
   let browser = null;
 
   try {
@@ -29,7 +30,8 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}) {
       filasControl: templateData.filasControl || [],
       totalPorcentaje: templateData.totalPorcentaje || 0,
       observaciones: templateData.observaciones || '',
-      firmas: firmas
+      firmas: firmas,
+      isRejected: isRejected
     });
 
     browser = await puppeteer.launch({

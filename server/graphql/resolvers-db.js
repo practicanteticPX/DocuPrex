@@ -3162,6 +3162,9 @@ const resolvers = {
         [newStatus, documentId]
       );
 
+      // Variable para almacenar datos de firmantes (se usará después para FV)
+      let signersDataForLater = null;
+
       // ========== GESTIONAR NOTIFICACIONES INTERNAS Y EMAILS ==========
       try {
         // 1. Eliminar TODAS las notificaciones de signature_request del documento
@@ -3236,7 +3239,7 @@ const resolvers = {
         console.log(`📋 Actualizando página de firmantes para documento ${documentId}...`);
 
         const docInfoResult = await query(
-          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name, dt.code as document_type_code
           FROM documents d
           LEFT JOIN users u ON d.uploaded_by = u.id
           LEFT JOIN document_types dt ON d.document_type_id = dt.id
@@ -3323,9 +3326,18 @@ const resolvers = {
             documentTypeName: docInfo.document_type_name || null
           };
 
-          await updateSignersPage(pdfPath, signers, documentInfo);
+          // Verificar si es tipo FV con metadata (plantilla)
+          const isFacturaVenta = docInfo.document_type_code === 'FV' && docInfo.metadata;
 
-          console.log('✅ Página de firmantes actualizada después de rechazar');
+          if (isFacturaVenta) {
+            // Guardar datos para actualizar DESPUÉS del merge de la plantilla
+            signersDataForLater = { pdfPath, signers, documentInfo };
+            console.log('⏭️ Documento tipo FV: Página de firmantes se actualizará después del merge');
+          } else {
+            // Para otros documentos, actualizar inmediatamente
+            await updateSignersPage(pdfPath, signers, documentInfo);
+            console.log('✅ Página de firmantes actualizada después de rechazar');
+          }
         }
       } catch (updateError) {
         console.error('❌ Error al actualizar página de firmantes:', updateError);
@@ -3364,6 +3376,136 @@ const resolvers = {
         }
       } catch (facturaError) {
         console.error('❌ Error al actualizar estados de factura:', facturaError);
+        // No lanzamos el error para que no falle el rechazo
+      }
+
+      // ========== REGENERAR PLANTILLA FV CON MARCA DE AGUA "RECHAZADO" ==========
+      try {
+        const docDataResult = await query(
+          `SELECT d.*, dt.code
+           FROM documents d
+           LEFT JOIN document_types dt ON d.document_type_id = dt.id
+           WHERE d.id = $1`,
+          [documentId]
+        );
+
+        if (docDataResult.rows.length > 0) {
+          const doc = docDataResult.rows[0];
+
+          // Solo regenerar si es tipo FV y tiene metadata (plantilla)
+          if (doc.code === 'FV' && doc.metadata) {
+            console.log(`🔄 Regenerando plantilla FV con marca de agua RECHAZADO para documento ${documentId}...`);
+
+            const parsedTemplateData = typeof doc.metadata === 'object' ? doc.metadata : JSON.parse(doc.metadata);
+
+            // Obtener firmas actuales del documento
+            const obtenerFirmasDocumento = async (documentId, templateData) => {
+              const firmasMap = {};
+              const signersResult = await query(
+                `SELECT s.signer_id, s.status, s.real_signer_name, u.name
+                 FROM signatures s
+                 JOIN users u ON s.signer_id = u.id
+                 WHERE s.document_id = $1 AND s.status = 'signed'`,
+                [documentId]
+              );
+
+              signersResult.rows.forEach(signer => {
+                const nombreFirmante = signer.real_signer_name || signer.name;
+                if (templateData.filasControl && Array.isArray(templateData.filasControl)) {
+                  templateData.filasControl.forEach(fila => {
+                    if (fila.respCuentaContable === signer.name || fila.respCentroCostos === signer.name) {
+                      if (fila.respCuentaContable === signer.name) {
+                        firmasMap[fila.respCuentaContable] = nombreFirmante;
+                      }
+                      if (fila.respCentroCostos === signer.name) {
+                        firmasMap[fila.respCentroCostos] = nombreFirmante;
+                      }
+                    }
+                  });
+                }
+                if (templateData.nombreNegociador === signer.name) {
+                  firmasMap[templateData.nombreNegociador] = nombreFirmante;
+                }
+              });
+
+              return firmasMap;
+            };
+
+            const firmasActuales = await obtenerFirmasDocumento(documentId, parsedTemplateData);
+
+            // Regenerar PDF con marca de agua RECHAZADO
+            const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, true);
+
+            // Guardar planilla en archivo temporal
+            const fs = require('fs').promises;
+            const path = require('path');
+            const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
+            await fs.mkdir(tempDir, { recursive: true });
+            const tempPlanillaPath = path.join(tempDir, `planilla_rechazada_${documentId}_${Date.now()}.pdf`);
+            await fs.writeFile(tempPlanillaPath, pdfBuffer);
+            console.log('✅ Planilla PDF con marca RECHAZADO generada:', tempPlanillaPath);
+
+            // Obtener ruta del PDF actual
+            const relativePath = doc.file_path.replace(/^uploads\//, '');
+            const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
+
+            // Buscar backups del PDF original
+            let backupFilePaths = [];
+            if (doc.original_pdf_backup) {
+              try {
+                backupFilePaths = JSON.parse(doc.original_pdf_backup);
+              } catch (e) {
+                backupFilePaths = [doc.original_pdf_backup];
+              }
+            }
+
+            console.log('📋 Backups encontrados:', backupFilePaths);
+            console.log('📋 Campo original_pdf_backup:', doc.original_pdf_backup);
+
+            if (backupFilePaths.length === 0) {
+              console.log('⚠️ No se encontraron backups del PDF original. No se puede regenerar.');
+              throw new Error('No se encontraron backups del PDF original para regenerar');
+            }
+
+            // Merge: planilla + backups (sin página de firmantes aún)
+            // ORDEN CORRECTO: 1. Planilla con RECHAZADO, 2. PDFs originales
+            const filesToMerge = [
+              tempPlanillaPath,
+              ...backupFilePaths.map(bp => path.join(__dirname, '..', 'uploads', bp.replace(/^uploads\//, '')))
+            ];
+
+            console.log('📋 Archivos a fusionar (orden: planilla + backups):', filesToMerge);
+
+            // Fusionar en un archivo temporal (NO en currentPdfPath todavía)
+            const tempMergedPath = path.join(tempDir, `merged_rejected_${documentId}_${Date.now()}.pdf`);
+            await mergePDFs(filesToMerge, tempMergedPath);
+            console.log('✅ PDF base fusionado (planilla + backups) en temporal');
+
+            // Limpiar planilla temporal
+            await cleanupTempFiles([tempPlanillaPath]);
+
+            // AHORA agregar informe de firmantes al PDF fusionado temporal
+            if (signersDataForLater) {
+              console.log('📋 Agregando informe de firmantes al PDF fusionado...');
+              const { addCoverPageWithSigners } = require('../utils/pdfCoverPage');
+              await addCoverPageWithSigners(
+                tempMergedPath,
+                signersDataForLater.signers,
+                signersDataForLater.documentInfo
+              );
+              console.log('✅ Informe de firmantes agregado al PDF');
+            }
+
+            // Copiar el resultado temporal al archivo final
+            await fs.copyFile(tempMergedPath, currentPdfPath);
+            console.log('✅ Archivo del documento reemplazado correctamente');
+
+            // Limpiar temporal fusionado
+            await cleanupTempFiles([tempMergedPath]);
+          }
+        }
+      } catch (regenerateError) {
+        console.error('❌ Error al regenerar plantilla con marca RECHAZADO:', regenerateError);
         // No lanzamos el error para que no falle el rechazo
       }
 
@@ -4668,6 +4810,7 @@ const resolvers = {
 
           if (userSignature.rows.length > 0) {
             const sig = userSignature.rows[0];
+            console.log(`🔍 [signatures] Usuario ${signer.user_name}: status=${sig.status}, role_names from DS=${JSON.stringify(signer.role_names)}, role_name from DS=${signer.role_name}`);
             results.push({
               ...sig,
               order_position: signer.order_position,

@@ -61,7 +61,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     if (documentStatus === 'FIRMADO') {
       watermarkColor = rgb(0.72, 0.94, 0.82); // Verde muy claro
     } else if (documentStatus === 'RECHAZADO') {
-      watermarkColor = rgb(0.9, 0.9, 0.9); // Gris muy claro
+      watermarkColor = rgb(0.99, 0.78, 0.78); // Rojo muy claro
     }
 
     // Dibujar marca de agua centrada y rotada 45 grados
@@ -234,7 +234,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     if (documentStatus === 'FIRMADO') {
       statusColor = rgb(0.13, 0.59, 0.25);
     } else if (documentStatus === 'RECHAZADO') {
-      statusColor = rgb(0.4, 0.4, 0.4);
+      statusColor = rgb(0.87, 0.15, 0.15);
     }
 
     coverPage.drawText(documentStatus, {
@@ -259,7 +259,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
       yPosition -= 16;
 
-      const rejectedByName = rejectedSigner.name || 'Sin nombre';
+      const rejectedByName = rejectedSigner.real_signer_name || rejectedSigner.name || 'Sin nombre';
       coverPage.drawText(rejectedByName, {
         x: margin,
         y: yPosition,
@@ -433,17 +433,17 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         statusTextColor = rgb(0.13, 0.59, 0.25);
       } else if (signer.status === 'rejected') {
         statusText = 'Rechazado';
-        statusBadgeColor = rgb(0.95, 0.95, 0.95);
-        statusTextColor = rgb(0.4, 0.4, 0.4);
+        statusBadgeColor = rgb(0.99, 0.89, 0.89);
+        statusTextColor = rgb(0.87, 0.15, 0.15);
       }
 
       // Construir el nombre del firmante:
-      // - Si está firmado y tiene real_signer_name, mostrar quien firmó (grupos de causación y Negociaciones)
+      // - Si está firmado/rechazado y tiene real_signer_name, mostrar quien firmó/rechazó (grupos de causación y Negociaciones)
       // - Si es pendiente, mostrar el nombre original (grupo o usuario)
       let signerName = (signer.name || 'Sin nombre').toUpperCase();
 
-      if (signer.status === 'signed' && signer.real_signer_name) {
-        // Reemplazar con el nombre de quien firmó realmente
+      if ((signer.status === 'signed' || signer.status === 'rejected') && signer.real_signer_name) {
+        // Reemplazar con el nombre de quien firmó/rechazó realmente
         signerName = signer.real_signer_name.toUpperCase();
       }
 

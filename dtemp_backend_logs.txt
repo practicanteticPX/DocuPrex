@@ -1,0 +1,200 @@
+  ✅ role_codes obtenidos (fallback): ["RESPONSABLE_CENTRO_COSTOS","RESPONSABLE_CUENTA_CONTABLE"]
+🔍 [signatures resolver] Procesando signer: user_id=null, assigned_role_ids=[], role_names=["Causación"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["CAUSACION"]
+🔍 [signatures] Usuario Juliet Acevedo: status=signed, role_names from DS=["Negociador"], role_name from DS=Negociador
+🔍 [signatures] Usuario Negociaciones: status=pending, role_names from DS=["Negociaciones"], role_name from DS=Negociaciones
+🔍 [signatures] Usuario Marcela Arango: status=pending, role_names from DS=["Resp Ctro Cost","Resp Cta Cont"], role_name from DS=Resp Ctro Cost
+🌐 Apollo Context: Authorization header: MISSING
+⚠️ getUserFromToken: No token provided
+⚠️ Apollo Context: Usuario no autenticado para esta request
+🔍 Intentando autenticar usuario: negociaciones
+🔍 Username length: 13
+🔍 Username charCodes: [
+  110, 101, 103, 111,  99,
+  105,  97,  99, 105, 111,
+  110, 101, 115
+]
+🔐 Intentando autenticar usuario: negociaciones
+🔤 Username bytes: <Buffer 6e 65 67 6f 63 69 61 63 69 6f 6e 65 73>
+🔍 URL LDAP: ldap://192.168.0.253:389
+🔑 Intentando bind con cuenta de servicio: glpi.sync@prexxa.local
+✓ Bind de servicio exitoso
+🔍 Username original: "negociaciones"
+🔍 Username escapado: "negociaciones"
+🔍 Buscando usuario con filtro: (&(objectClass=user)(sAMAccountName=negociaciones))
+🔍 Base de búsqueda: DC=prexxa,DC=local
+✓ Entrada encontrada: CN=Negociaciones,OU=Sabaneta,OU=Prexxa,DC=prexxa,DC=local
+📋 Atributos del usuario: {
+  "dn": "CN=Negociaciones,OU=Sabaneta,OU=Prexxa,DC=prexxa,DC=local",
+  "cn": "Negociaciones",
+  "displayName": "Negociaciones",
+  "sAMAccountName": "negociaciones",
+  "userPrincipalName": "negociaciones@prexxa.local",
+  "mail": "negociaciones@prexxa.com.co"
+}
+📊 Total de entradas encontradas: 1
+✓ Usuario encontrado: Negociaciones
+🔐 Verificando contraseña para DN original: CN=Negociaciones,OU=Sabaneta,OU=Prexxa,DC=prexxa,DC=local
+🔐 DN decodificado: CN=Negociaciones,OU=Sabaneta,OU=Prexxa,DC=prexxa,DC=local
+✓ Contraseña verificada correctamente con DN escapado
+✓ Contraseña verificada para: negociaciones
+✓ Autenticación exitosa: negociaciones
+✓ Usuario existente autenticado desde AD: negociaciones
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🔍 pendingDocuments para user 78 (undefined), grupos: []
+📋 pendingDocuments encontrados: 1 [ { id: 145, title: 'FV - NEU ENERGY S.A.S. E.S.P. - 000072186' } ]
+🔍 [signatures resolver] Procesando signer: user_id=45, assigned_role_ids=[], role_names=["Negociador"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["NEGOCIADOR"]
+🔍 [signatures resolver] Procesando signer: user_id=78, assigned_role_ids=[], role_names=["Negociaciones"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["NEGOCIACIONES","RESPONSABLE_NEGOCIACIONES"]
+🔍 [signatures resolver] Procesando signer: user_id=10, assigned_role_ids=[], role_names=["Resp Ctro Cost","Resp Cta Cont"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["RESPONSABLE_CENTRO_COSTOS","RESPONSABLE_CUENTA_CONTABLE"]
+🔍 [signatures resolver] Procesando signer: user_id=null, assigned_role_ids=[], role_names=["Causación"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["CAUSACION"]
+🔍 [signatures] Usuario Juliet Acevedo: status=signed, role_names from DS=["Negociador"], role_name from DS=Negociador
+🔍 [signatures] Usuario Negociaciones: status=pending, role_names from DS=["Negociaciones"], role_name from DS=Negociaciones
+🔍 [signatures] Usuario Marcela Arango: status=pending, role_names from DS=["Resp Ctro Cost","Resp Cta Cont"], role_name from DS=Resp Ctro Cost
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🔍 Verificando cédula para: Carolina Martinez
+🔢 Últimos 4 dígitos recibidos: 1234 Tipo: string
+👤 Usuario: undefined
+💳 Cédula completa en BD: 1234
+🔢 Últimos 4 en BD: 1234
+🔢 Últimos 4 recibidos: 1234
+✅ ¿Coinciden? true
+✅ Verificación exitosa
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+⏭️ Notificaciones desactivadas para el creador: e.zuluaga@prexxa.com.co
+📋 Actualizando página de firmantes para documento 145...
+⏭️ Documento tipo FV: Página de firmantes se actualizará después del merge
+✅ Factura 24101 desmarcada de en_proceso
+✅ Factura 24101 desmarcada (documento rechazado)
+🔄 Regenerando plantilla FV con marca de agua RECHAZADO para documento 145...
+📋 Generando PDF de plantilla de factura (HTML → PDF)...
+🏢 Logo PT cargado para HTML (3 KB)
+✅ PDF de plantilla generado correctamente (página grande)
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+✅ Planilla PDF con marca RECHAZADO generada: /app/uploads/temp/planilla_rechazada_145_1766088378714.pdf
+📋 Backups encontrados: [ 'uploads/originals/1766088295458_0_Invoice-1BE47DC5-0012.pdf' ]
+📋 Campo original_pdf_backup: ["uploads/originals/1766088295458_0_Invoice-1BE47DC5-0012.pdf"]
+📋 Archivos a fusionar (orden: planilla + backups): [
+  '/app/uploads/temp/planilla_rechazada_145_1766088378714.pdf',
+  '/app/uploads/originals/1766088295458_0_Invoice-1BE47DC5-0012.pdf'
+]
+📄 Iniciando unificación de 2 PDFs...
+  📖 Procesando archivo 1/2: planilla_rechazada_145_1766088378714.pdf
+  ✅ 1 página(s) agregadas
+  📖 Procesando archivo 2/2: 1766088295458_0_Invoice-1BE47DC5-0012.pdf
+  ✅ 1 página(s) agregadas
+✅ PDF unificado creado exitosamente
+  📄 Total de páginas: 2
+  💾 Tamaño: 0.16 MB
+  📁 Guardado en: /app/uploads/temp/merged_rejected_145_1766088378751.pdf
+✅ PDF base fusionado (planilla + backups) en temporal
+🗑️  Archivo temporal eliminado: planilla_rechazada_145_1766088378714.pdf
+📋 Agregando informe de firmantes al PDF fusionado...
+📄 Agregando página de información de firmantes a: merged_rejected_145_1766088378751.pdf
+✅ 2 página(s) de firmantes agregada(s) exitosamente
+✅ Informe de firmantes agregado al PDF
+✅ Archivo del documento reemplazado correctamente
+🗑️  Archivo temporal eliminado: merged_rejected_145_1766088378751.pdf
+✅ Factura 24101 desmarcada de en_proceso
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🔍 pendingDocuments para user 78 (undefined), grupos: []
+📋 pendingDocuments encontrados: 0 []
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🔍 [signatures resolver] Procesando signer: user_id=45, assigned_role_ids=[], role_names=["Negociador"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["NEGOCIADOR"]
+🔍 [signatures resolver] Procesando signer: user_id=78, assigned_role_ids=[], role_names=["Negociaciones"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["NEGOCIACIONES","RESPONSABLE_NEGOCIACIONES"]
+🔍 [signatures resolver] Procesando signer: user_id=10, assigned_role_ids=[], role_names=["Resp Ctro Cost","Resp Cta Cont"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["RESPONSABLE_CENTRO_COSTOS","RESPONSABLE_CUENTA_CONTABLE"]
+🔍 [signatures resolver] Procesando signer: user_id=null, assigned_role_ids=[], role_names=["Causación"]
+  ➡️ Fallback: usando role_names
+  ✅ role_codes obtenidos (fallback): ["CAUSACION"]
+🔍 [signatures] Usuario Juliet Acevedo: status=signed, role_names from DS=["Negociador"], role_name from DS=Negociador
+🔍 [signatures] Usuario Negociaciones: status=rejected, role_names from DS=["Negociaciones"], role_name from DS=Negociaciones
+🔍 [signatures] Usuario Marcela Arango: status=pending, role_names from DS=["Resp Ctro Cost","Resp Cta Cont"], role_name from DS=Resp Ctro Cost
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
+🌐 Apollo Context: Authorization header: Bearer eyJhbGciOiJIUzI1NiIsInR...
+🔑 getUserFromToken: Token recibido (primeros 20 chars): eyJhbGciOiJIUzI1NiIs...
+✅ getUserFromToken: Token válido para usuario: undefined
