@@ -3580,23 +3580,13 @@ function Dashboard({ user, onLogout }) {
         throw new Error(result.message || 'Error al actualizar la plantilla');
       }
 
-      // Mostrar animación de carga
-      setShowCreationLoader(true);
-
-      // Ocultar LoadingScreen después de que DocumentCreationLoader esté montado
-      setTimeout(() => {
-        setUploading(false);
-      }, 300);
-
-      // Después de 3 segundos, ocultar loader y mostrar éxito
+      // Después de 3 segundos, cerrar todo sin notificación
       setTimeout(async () => {
-        setShowCreationLoader(false);
+        setUploading(false);
         setShowFacturaTemplate(false);
         setIsEditMode(false);
         setEditingDocument(null);
         setFacturaTemplateData(null);
-
-        showNotif('Éxito', 'Planilla actualizada correctamente', 'success');
 
         // Recargar documentos
         await loadMyDocuments();
