@@ -1207,6 +1207,15 @@ html:has(.pdf-viewer-minimal-overlay) {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
 }
 
+/* Indicador visual: es mi turno de firmar */
+.my-doc-card-reference.my-turn-to-sign {
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15), 0 2px 4px rgba(16, 185, 129, 0.06) !important;
+}
+
+.my-doc-card-reference.my-turn-to-sign:hover {
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25), 0 3px 8px rgba(16, 185, 129, 0.08) !important;
+}
+
 /* Wrapper del contenido */
 .doc-content-wrapper {
   flex: 1 !important;

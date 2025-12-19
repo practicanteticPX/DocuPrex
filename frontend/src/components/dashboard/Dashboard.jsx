@@ -449,7 +449,9 @@ function Dashboard({ user, onLogout }) {
   // Cerrar dropdown al hacer scroll
   useEffect(() => {
     if (!signersDropdownPos) return;
-    const handleScroll = () => {
+    const handleScroll = (e) => {
+      // No cerrar si el scroll es dentro del dropdown mismo
+      if (e.target?.closest && e.target.closest('.signers-dropdown-fixed')) return;
       setSignersDropdownPos(null);
       setExpandedSigners({});
     };
@@ -5755,8 +5757,23 @@ function Dashboard({ user, onLogout }) {
                     const signatures = doc.signatures || [];
                     const statusConfig = getStatusConfig(doc.status, signatures);
 
+                    // Determinar si es el turno del usuario de firmar (misma lógica que botón Ver)
+                    const mySignature = signatures.find(sig =>
+                      sig.signer?.id === user?.id && sig.status === 'pending'
+                    );
+                    let isMyTurn = false;
+                    if (mySignature) {
+                      const previousSigners = signatures.filter(
+                        sig => sig.orderPosition < mySignature.orderPosition
+                      );
+                      const allPreviousSigned = previousSigners.every(
+                        sig => sig.status === 'signed'
+                      );
+                      isMyTurn = allPreviousSigned;
+                    }
+
                     return (
-                      <div key={doc.id} className="my-doc-card-reference">
+                      <div key={doc.id} className={`my-doc-card-reference ${isMyTurn ? 'my-turn-to-sign' : ''}`}>
                         <div className="doc-content-wrapper">
                           <div className="doc-header-row">
                             <h3 className="doc-title-reference">{doc.title}</h3>
