@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 import './Dashboard.css';
 import './Dashboard.overrides.css';
 import './Rejected.css';
@@ -34,7 +35,8 @@ import {
   BACKEND_HOST,
   getDocumentUrl,
   getDownloadUrl,
-  getViewUrl
+  getViewUrl,
+  getWebSocketUrl
 } from '../../config/api';
 
 // Log para debug
@@ -268,6 +270,69 @@ function Dashboard({ user, onLogout }) {
       setDocumentDescription('');
     }
   }, [activeTab]);
+
+  // WebSocket: Conexión y escucha de eventos en tiempo real
+  useEffect(() => {
+    const wsUrl = getWebSocketUrl();
+    console.log('🔌 Conectando WebSocket a:', wsUrl);
+    console.log('   - Protocolo actual:', window.location.protocol);
+    console.log('   - Hostname:', window.location.hostname);
+    console.log('   - Puerto frontend:', window.location.port || '(default)');
+
+    const socket = io(wsUrl, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+
+    socket.on('connect', () => {
+      console.log('✅ WebSocket conectado:', socket.id);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ WebSocket desconectado');
+    });
+
+    // Función para recargar todos los datos
+    const reloadAllData = () => {
+      loadPendingDocuments();
+      loadSignedDocuments();
+      loadMyDocuments();
+      loadRejectedDocuments();
+      loadRetainedDocuments();
+    };
+
+    // Escuchar evento: documento firmado
+    socket.on('document:signed', (data) => {
+      console.log('📤 Documento firmado recibido:', data);
+      reloadAllData();
+    });
+
+    // Escuchar evento: documento rechazado
+    socket.on('document:rejected', (data) => {
+      console.log('📤 Documento rechazado recibido:', data);
+      reloadAllData();
+    });
+
+    // Escuchar evento: documento eliminado
+    socket.on('document:deleted', (data) => {
+      console.log('📤 Documento eliminado recibido:', data);
+      reloadAllData();
+    });
+
+    // Escuchar evento: documento actualizado (creación, asignación de firmantes, etc.)
+    socket.on('document:updated', (data) => {
+      console.log('📤 Documento actualizado recibido:', data);
+      reloadAllData();
+    });
+
+    // Cleanup al desmontar
+    return () => {
+      console.log('🔌 Desconectando WebSocket');
+      socket.disconnect();
+    };
+  }, []); // Solo conectar una vez al montar el componente
 
   // Bloquear scroll cuando la pantalla de "Aún no es tu turno" esté activa
   useEffect(() => {

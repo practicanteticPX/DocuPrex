@@ -75,3 +75,30 @@ export const getDownloadUrl = (documentId) => {
 export const getViewUrl = (documentId) => {
   return `${BACKEND_HOST}/api/view/${documentId}`;
 };
+
+/**
+ * Obtiene la URL del WebSocket según el protocolo de acceso
+ * Funciona con HTTP, HTTPS, localhost, IP, dominio, con/sin puerto
+ * @returns {string} URL completa del WebSocket (ws:// o wss://)
+ */
+export const getWebSocketUrl = () => {
+  const protocol = window.location.protocol; // 'http:' o 'https:'
+  const hostname = window.location.hostname;
+
+  // Determinar protocolo WebSocket
+  const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+
+  // Si estamos en HTTPS, asumir que hay proxy/load balancer
+  // El WebSocket debe ir al mismo host que el frontend
+  if (protocol === 'https:') {
+    // Si hay puerto en la URL (ej: https://dominio.com:443)
+    const port = window.location.port;
+    if (port && port !== '443') {
+      return `${wsProtocol}//${hostname}:${port}`;
+    }
+    return `${wsProtocol}//${hostname}`;
+  }
+
+  // Si estamos en HTTP, conectar al puerto del backend (5001)
+  return `${wsProtocol}//${hostname}:5001`;
+};

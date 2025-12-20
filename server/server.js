@@ -4,9 +4,12 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
+const http = require('http');
+const { Server: SocketIO } = require('socket.io');
 require('dotenv').config();
 
 const serverConfig = require('./config/server');
+const websocketService = require('./services/websocket');
 const { typeDefs, resolvers } = require('./graphql');
 const uploadRoutes = require('./routes/upload');
 const logsRoutes = require('./routes/logs');
@@ -308,10 +311,26 @@ async function startServer() {
     });
   });
 
-  // Iniciar servidor
-  app.listen(PORT, () => {
+  // Crear servidor HTTP (necesario para Socket.IO)
+  const httpServer = http.createServer(app);
+
+  // Inicializar Socket.IO con CORS configurado
+  const io = new SocketIO(httpServer, {
+    cors: {
+      origin: serverConfig.corsOrigins,
+      methods: ['GET', 'POST'],
+      credentials: true
+    }
+  });
+
+  // Inicializar servicio WebSocket
+  websocketService.initialize(io);
+
+  // Iniciar servidor HTTP (en vez de app.listen)
+  httpServer.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en ${serverConfig.backendUrl}`);
     console.log(`📊 GraphQL disponible en ${serverConfig.backendUrl}${server.graphqlPath}`);
+    console.log(`🔌 WebSocket disponible en ${serverConfig.backendUrl}`);
     console.log(`🔐 Autenticación Active Directory configurada`);
     console.log(`   - Host: ${process.env.AD_HOSTNAME || 'No configurado'}`);
     console.log(`   - Protocol: ${process.env.AD_PROTOCOL || 'ldap'}`);

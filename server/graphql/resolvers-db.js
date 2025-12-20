@@ -14,6 +14,7 @@ const pdfLogger = require('../utils/pdfLogger');
 const { generateFacturaTemplatePDF } = require('../utils/pdfFacturaTemplate');
 const { mergePDFs, cleanupTempFiles } = require('../utils/pdfMerger');
 const serverConfig = require('../config/server');
+const websocketService = require('../services/websocket');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 
@@ -1697,6 +1698,12 @@ const resolvers = {
         // Solo registramos el error en los logs
       }
 
+      // Emitir evento WebSocket para notificar a todos los clientes
+      websocketService.emitDocumentUpdated(documentId, 'signers_assigned', {
+        assignedBy: user.name,
+        signerCount: signerAssignments.length
+      });
+
       return true;
     },
 
@@ -2033,6 +2040,12 @@ const resolvers = {
         console.error('❌ Error al actualizar página de portada:', coverError);
       }
 
+      // Emitir evento WebSocket para notificar a todos los clientes
+      websocketService.emitDocumentUpdated(documentId, 'signer_removed', {
+        removedBy: user.name,
+        removedUserId: userId
+      });
+
       return true;
     },
 
@@ -2342,6 +2355,11 @@ const resolvers = {
         console.error('❌ Error al actualizar página de portada:', coverError);
       }
 
+      // Emitir evento WebSocket para notificar a todos los clientes
+      websocketService.emitDocumentUpdated(documentId, 'signers_reordered', {
+        reorderedBy: user.name
+      });
+
       return true;
     },
 
@@ -2473,6 +2491,12 @@ const resolvers = {
         console.error('❌ Error al actualizar estados de factura:', facturaError);
         // No lanzamos el error para que no falle la eliminación
       }
+
+      // Emitir evento WebSocket para notificar a todos los clientes
+      websocketService.emitDocumentDeleted(id, {
+        deletedBy: user.name,
+        title: doc.title
+      });
 
       return true;
     },
@@ -3074,6 +3098,11 @@ const resolvers = {
 
         console.log('✅ Plantilla actualizada exitosamente');
 
+        // Emitir evento WebSocket para notificar a todos los clientes
+        websocketService.emitDocumentUpdated(documentId, 'template_updated', {
+          updatedBy: user.name
+        });
+
         return {
           success: true,
           message: 'Plantilla actualizada correctamente',
@@ -3542,6 +3571,13 @@ const resolvers = {
         console.error('❌ Error al regenerar plantilla con marca RECHAZADO:', regenerateError);
         // No lanzamos el error para que no falle el rechazo
       }
+
+      // Emitir evento WebSocket para notificar a todos los clientes
+      websocketService.emitDocumentRejected(documentId, {
+        rejectedBy: user.name,
+        reason: reason || 'Sin razón',
+        status: newStatus
+      });
 
       return true;
     },
@@ -4443,6 +4479,12 @@ const resolvers = {
           // No lanzamos el error para que no falle la firma
         }
       }
+
+      // Emitir evento WebSocket para notificar a todos los clientes
+      websocketService.emitDocumentSigned(documentId, {
+        signedBy: user.name,
+        status: newStatus
+      });
 
       return result.rows[0];
     },
