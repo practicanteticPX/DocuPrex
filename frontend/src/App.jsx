@@ -5,6 +5,7 @@ import Dashboard from './components/dashboard/Dashboard.jsx'
 import './App.css'
 import { API_URL } from './config/api'
 import { useServerHealth } from './hooks/useServerHealth'
+import { isTokenExpired, getTokenTimeRemaining } from './utils/tokenManager'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -80,11 +81,8 @@ function App() {
   }, [])
 
   const handleLogin = (token, userData) => {
-    // Guardar el token en localStorage
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(userData))
-    localStorage.setItem('loginTime', Date.now().toString())
-
     setIsAuthenticated(true)
     setUser(userData)
   }
@@ -92,7 +90,6 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    localStorage.removeItem('loginTime')
     setIsAuthenticated(false)
     setUser(null)
   }
@@ -105,42 +102,40 @@ function App() {
     }
   }, 30000); // Verificar cada 30 segundos
 
-  // Programar logout automático exactamente a las 8 horas
+  // Auto-logout basado en expiración del JWT (8 horas)
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const eightHours = 8 * 60 * 60 * 1000; // 8 horas en milisegundos
+    const token = localStorage.getItem('token');
+    if (!token) return;
 
-    const checkAndLogout = () => {
-      const loginTime = localStorage.getItem('loginTime');
-      if (!loginTime) return false;
+    // Verificar si ya expiró
+    if (isTokenExpired(token)) {
+      console.log('⏰ Token JWT expirado. Cerrando sesión silenciosamente...');
+      handleLogout();
+      return;
+    }
 
-      const elapsed = Date.now() - parseInt(loginTime);
-      if (elapsed >= eightHours) {
-        console.log('⏰ Sesión expirada después de 8 horas. Cerrando sesión silenciosamente...');
-        handleLogout();
-        return true;
-      }
-      return false;
-    };
+    // Obtener tiempo restante en milisegundos
+    const remainingSeconds = getTokenTimeRemaining(token);
+    const remainingMs = remainingSeconds * 1000;
 
-    // Verificar inmediatamente
-    if (checkAndLogout()) return;
+    console.log(`⏰ Sesión expirará en ${Math.floor(remainingSeconds / 60)} minutos`);
 
-    const loginTime = localStorage.getItem('loginTime');
-    if (!loginTime) return;
+    // Programar logout exacto cuando expire el JWT
+    const timeoutId = setTimeout(() => {
+      console.log('⏰ Sesión expirada (8 horas). Cerrando sesión silenciosamente...');
+      handleLogout();
+    }, remainingMs);
 
-    const elapsed = Date.now() - parseInt(loginTime);
-    const remaining = eightHours - elapsed;
-
-    // Programar logout exactamente cuando expire (hook único)
-    console.log(`⏰ Sesión expirará en ${Math.floor(remaining / 1000 / 60)} minutos`);
-    const timeoutId = setTimeout(checkAndLogout, remaining);
-
-    // Verificar solo cuando el usuario vuelve a la pestaña (event-driven)
+    // Verificar al volver a la pestaña (por si el usuario cerró el navegador)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        checkAndLogout();
+        const currentToken = localStorage.getItem('token');
+        if (currentToken && isTokenExpired(currentToken)) {
+          console.log('⏰ Token expirado detectado al regresar. Cerrando sesión...');
+          handleLogout();
+        }
       }
     };
 

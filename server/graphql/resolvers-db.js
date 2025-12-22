@@ -447,23 +447,19 @@ const resolvers = {
           u.name as uploaded_by_name,
           u.email as uploaded_by_email,
           dt.name as document_type_name,
-          dt.code as document_type_code,
-          dr.retention_percentage,
-          dr.retention_reason,
-          dr.retained_at,
-          retained_by_user.id as retained_by_id,
-          retained_by_user.name as retained_by_name,
-          retained_by_user.email as retained_by_email
+          dt.code as document_type_code
         FROM documents d
         JOIN users u ON d.uploaded_by = u.id
         LEFT JOIN document_types dt ON d.document_type_id = dt.id
-        -- Retención activa (released_at IS NULL)
-        JOIN document_retentions dr ON d.id = dr.document_id
-          AND dr.released_at IS NULL
-        -- Usuario que retuvo
-        JOIN users retained_by_user ON dr.retained_by = retained_by_user.id
-        ORDER BY dr.retained_at DESC
-      `);
+        WHERE d.retention_data IS NOT NULL
+          AND jsonb_array_length(d.retention_data) > 0
+          AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(d.retention_data) AS retention
+            WHERE (retention->>'userId')::text = $1::text
+              AND (retention->>'activa')::boolean = true
+          )
+        ORDER BY d.created_at DESC
+      `, [user.id]);
 
       return result.rows;
     },
@@ -4706,6 +4702,135 @@ const resolvers = {
 
       return true;
     },
+
+    /**
+     * Retains a document cost center
+     */
+    retainDocument: async (_, { documentId, centroCostoIndex, retentionPercentage, retentionReason }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Get document with metadata
+        const docResult = await client.query(
+          'SELECT metadata, retention_data FROM documents WHERE id = $1',
+          [documentId]
+        );
+
+        if (docResult.rows.length === 0) {
+          throw new Error('Documento no encontrado');
+        }
+
+        const metadata = docResult.rows[0].metadata;
+        const currentRetentions = docResult.rows[0].retention_data || [];
+
+        // Validate user is responsible for this cost center
+        if (!metadata || !metadata.causacionDetails || !metadata.causacionDetails[centroCostoIndex]) {
+          throw new Error('Centro de costo no encontrado');
+        }
+
+        const centroCosto = metadata.causacionDetails[centroCostoIndex];
+        const responsableId = centroCosto.responsable_centro_id;
+
+        if (responsableId !== user.id) {
+          throw new Error('No eres responsable de este centro de costo');
+        }
+
+        // Validate retention percentage doesn't exceed assigned percentage
+        const maxPercentage = parseFloat(centroCosto.porcentaje_centro || 0);
+        if (retentionPercentage > maxPercentage) {
+          throw new Error(`No puedes retener más del ${maxPercentage}% asignado`);
+        }
+
+        // Add or update retention
+        const existingIndex = currentRetentions.findIndex(
+          r => r.userId === user.id && r.centroCostoIndex === centroCostoIndex && r.activa
+        );
+
+        const retentionItem = {
+          userId: user.id,
+          userName: user.name,
+          centroCostoIndex,
+          motivo: retentionReason,
+          porcentajeRetenido: retentionPercentage,
+          fechaRetencion: new Date().toISOString(),
+          activa: true
+        };
+
+        if (existingIndex >= 0) {
+          currentRetentions[existingIndex] = retentionItem;
+        } else {
+          currentRetentions.push(retentionItem);
+        }
+
+        await client.query(
+          'UPDATE documents SET retention_data = $1 WHERE id = $2',
+          [JSON.stringify(currentRetentions), documentId]
+        );
+
+        await client.query('COMMIT');
+
+        return {
+          success: true,
+          message: 'Documento retenido exitosamente',
+          retentions: currentRetentions.filter(r => r.activa)
+        };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    /**
+     * Releases a retained document cost center
+     */
+    releaseDocument: async (_, { documentId, centroCostoIndex }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        const docResult = await client.query(
+          'SELECT retention_data FROM documents WHERE id = $1',
+          [documentId]
+        );
+
+        if (docResult.rows.length === 0) {
+          throw new Error('Documento no encontrado');
+        }
+
+        const currentRetentions = docResult.rows[0].retention_data || [];
+
+        // Find and deactivate retention
+        const retentionIndex = currentRetentions.findIndex(
+          r => r.userId === user.id && r.centroCostoIndex === centroCostoIndex && r.activa
+        );
+
+        if (retentionIndex < 0) {
+          throw new Error('No tienes retención activa para este centro de costo');
+        }
+
+        currentRetentions[retentionIndex].activa = false;
+
+        await client.query(
+          'UPDATE documents SET retention_data = $1 WHERE id = $2',
+          [JSON.stringify(currentRetentions), documentId]
+        );
+
+        await client.query('COMMIT');
+        return true;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
   },
 
   // Resolvers para campos anidados
@@ -4737,6 +4862,24 @@ const resolvers = {
 
       // Si por alguna razón es string, devolverlo tal cual
       return parent.metadata;
+    },
+
+    // Retenciones activas del documento
+    retentionData: (parent) => {
+      if (!parent.retention_data) return [];
+
+      // Si es un objeto JSONB, devolverlo directamente
+      if (typeof parent.retention_data === 'object') {
+        return parent.retention_data.filter(r => r.activa);
+      }
+
+      // Si es string, parsearlo
+      try {
+        const data = JSON.parse(parent.retention_data);
+        return data.filter(r => r.activa);
+      } catch {
+        return [];
+      }
     },
 
     documentType: async (parent) => {
@@ -4933,37 +5076,6 @@ const resolvers = {
     totalSigners: (parent) => parent.total_signers || 0,
     signedCount: (parent) => parent.signed_count || 0,
     pendingCount: (parent) => parent.pending_count || 0,
-
-    retention: async (parent) => {
-      // Buscar retención activa para este documento
-      const result = await query(
-        `SELECT dr.*, u.name as retained_by_name, u.email as retained_by_email
-         FROM document_retentions dr
-         JOIN users u ON dr.retained_by = u.id
-         WHERE dr.document_id = $1 AND dr.released_at IS NULL
-         LIMIT 1`,
-        [parent.id]
-      );
-
-      if (result.rows.length === 0) {
-        return null;
-      }
-
-      const retention = result.rows[0];
-      return {
-        id: retention.id,
-        document_id: retention.document_id,
-        retained_by: retention.retained_by,
-        retention_percentage: retention.retention_percentage,
-        retention_reason: retention.retention_reason,
-        retained_at: retention.retained_at,
-        released_at: retention.released_at,
-        released_by: retention.released_by,
-        // Datos precargados para el resolver
-        _retained_by_name: retention.retained_by_name,
-        _retained_by_email: retention.retained_by_email
-      };
-    },
   },
 
   Signature: {
@@ -5135,47 +5247,6 @@ const resolvers = {
 
     user: async (parent) => {
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.user_id]);
-      return result.rows[0];
-    },
-  },
-
-  DocumentRetention: {
-    // Mapeo de snake_case (BD) a camelCase (GraphQL)
-    documentId: (parent) => parent.document_id,
-    retainedById: (parent) => parent.retained_by,
-    retentionPercentage: (parent) => parent.retention_percentage,
-    retentionReason: (parent) => parent.retention_reason,
-    retainedAt: (parent) => parent.retained_at,
-    releasedAt: (parent) => parent.released_at,
-    releasedById: (parent) => parent.released_by,
-
-    retainedBy: async (parent) => {
-      // Si ya tenemos los datos precargados, usarlos
-      if (parent._retained_by_name || parent._retained_by_email) {
-        return {
-          id: parent.retained_by,
-          name: parent._retained_by_name,
-          email: parent._retained_by_email
-        };
-      }
-      // Si no, hacer la consulta
-      const result = await query('SELECT * FROM users WHERE id = $1', [parent.retained_by]);
-      return result.rows[0];
-    },
-
-    releasedBy: async (parent) => {
-      if (!parent.released_by) return null;
-
-      // Si ya tenemos los datos precargados, usarlos
-      if (parent._released_by_name || parent._released_by_email) {
-        return {
-          id: parent.released_by,
-          name: parent._released_by_name,
-          email: parent._released_by_email
-        };
-      }
-      // Si no, hacer la consulta
-      const result = await query('SELECT * FROM users WHERE id = $1', [parent.released_by]);
       return result.rows[0];
     },
   },

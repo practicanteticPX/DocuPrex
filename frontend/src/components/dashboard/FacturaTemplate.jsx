@@ -81,10 +81,15 @@ const getCompanyLogo = (ciaCode) => {
  * @param {Function} onBack - Callback al volver al paso anterior (buscar factura)
  * @param {Function} onSave - Callback al guardar los datos
  */
-const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSave }) => {
+const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user, onClose, onBack, onSave }) => {
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
   const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
   const { negociadores, loading: loadingNegociadores } = useNegociadores();
+
+  // Estados para retenciones por centro de costo
+  const [retenciones, setRetenciones] = useState({});
+  const [showRetentionModal, setShowRetentionModal] = useState(false);
+  const [selectedCentroForRetention, setSelectedCentroForRetention] = useState(null);
 
   // Estados para roles dinámicos desde la BD
   const [fvRoles, setFvRoles] = useState(null);
@@ -361,6 +366,23 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
       console.log('✅ Datos de plantilla restaurados correctamente');
     }
   }, [savedData]);
+
+  // Cargar retenciones activas del documento
+  useEffect(() => {
+    if (currentDocument && currentDocument.retentionData) {
+      const retentionsMap = {};
+      currentDocument.retentionData.forEach(retention => {
+        retentionsMap[retention.centroCostoIndex] = {
+          motivo: retention.motivo,
+          porcentajeRetenido: retention.porcentajeRetenido,
+          userId: retention.userId,
+          userName: retention.userName,
+          activa: retention.activa
+        };
+      });
+      setRetenciones(retentionsMap);
+    }
+  }, [currentDocument]);
 
   const handleAddFila = () => {
     const newId = Math.max(...filasControl.map(f => f.id), 0) + 1;
@@ -717,7 +739,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
 
     const filtroUpper = filtro.toUpperCase();
     return centros.filter(centro =>
-      centro.codigo.toString().toUpperCase().startsWith(filtroUpper)
+      centro.codigo.toString().toUpperCase().includes(filtroUpper)
     );
   };
 
@@ -1547,11 +1569,17 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
                     <th>Resp. C.Co</th>
                     <th>Cargo Resp. C.Co</th>
                     <th>% C.Co</th>
+                    {Object.keys(retenciones).length > 0 && (
+                      <>
+                        <th>Motivo</th>
+                        <th>%Ret</th>
+                      </>
+                    )}
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filasControl.map((fila) => (
+                  {filasControl.map((fila, filaIndex) => (
                     <tr key={fila.id}>
                       <td>
                         <div
@@ -1690,6 +1718,31 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
                           onKeyDown={(e) => handlePorcentajeKeyDown(e, fila.id)}
                         />
                       </td>
+                      {Object.keys(retenciones).length > 0 && (
+                        <>
+                          <td>
+                            {retenciones[filaIndex] ? (
+                              <Input
+                                type="text"
+                                value={retenciones[filaIndex].motivo}
+                                disabled
+                                className="factura-table-input factura-input-disabled"
+                                title={retenciones[filaIndex].motivo}
+                              />
+                            ) : '-'}
+                          </td>
+                          <td>
+                            {retenciones[filaIndex] ? (
+                              <Input
+                                type="text"
+                                value={`${retenciones[filaIndex].porcentajeRetenido}%`}
+                                disabled
+                                className="factura-table-input factura-input-disabled"
+                              />
+                            ) : '-'}
+                          </td>
+                        </>
+                      )}
                       <td>
                         {filasControl.length > 1 && (
                           <button
@@ -1714,6 +1767,12 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, onClose, onBack, onSa
                         {calcularTotalPorcentaje().toFixed(2)}%
                       </div>
                     </td>
+                    {Object.keys(retenciones).length > 0 && (
+                      <>
+                        <td></td>
+                        <td></td>
+                      </>
+                    )}
                     <td></td>
                   </tr>
                 </tfoot>

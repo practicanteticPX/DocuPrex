@@ -275,23 +275,13 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     const wsUrl = getWebSocketUrl();
     console.log('🔌 Conectando WebSocket a:', wsUrl);
-    console.log('   - Protocolo actual:', window.location.protocol);
-    console.log('   - Hostname:', window.location.hostname);
-    console.log('   - Puerto frontend:', window.location.port || '(default)');
 
     const socket = io(wsUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5
-    });
-
-    socket.on('connect', () => {
-      console.log('✅ WebSocket conectado:', socket.id);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('❌ WebSocket desconectado');
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: Infinity
     });
 
     // Función para recargar todos los datos
@@ -303,36 +293,52 @@ function Dashboard({ user, onLogout }) {
       loadRetainedDocuments();
     };
 
-    // Escuchar evento: documento firmado
+    socket.on('connect', () => {
+      console.log('✅ WebSocket conectado:', socket.id);
+      reloadAllData(); // Recargar datos al reconectar
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('❌ WebSocket desconectado:', reason);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('⚠️ Error de conexión WebSocket:', error.message);
+    });
+
+    socket.on('reconnect_attempt', (attempt) => {
+      console.log(`🔄 Reintentando conexión WebSocket (intento ${attempt})...`);
+    });
+
+    socket.on('reconnect', (attempt) => {
+      console.log(`✅ WebSocket reconectado después de ${attempt} intentos`);
+    });
+
     socket.on('document:signed', (data) => {
       console.log('📤 Documento firmado recibido:', data);
       reloadAllData();
     });
 
-    // Escuchar evento: documento rechazado
     socket.on('document:rejected', (data) => {
       console.log('📤 Documento rechazado recibido:', data);
       reloadAllData();
     });
 
-    // Escuchar evento: documento eliminado
     socket.on('document:deleted', (data) => {
       console.log('📤 Documento eliminado recibido:', data);
       reloadAllData();
     });
 
-    // Escuchar evento: documento actualizado (creación, asignación de firmantes, etc.)
     socket.on('document:updated', (data) => {
       console.log('📤 Documento actualizado recibido:', data);
       reloadAllData();
     });
 
-    // Cleanup al desmontar
     return () => {
       console.log('🔌 Desconectando WebSocket');
       socket.disconnect();
     };
-  }, []); // Solo conectar una vez al montar el componente
+  }, []);
 
   // Bloquear scroll cuando la pantalla de "Aún no es tu turno" esté activa
   useEffect(() => {
@@ -1614,16 +1620,14 @@ function Dashboard({ user, onLogout }) {
                   name
                   email
                 }
-                retention {
-                  id
-                  retentionPercentage
-                  retentionReason
-                  retainedAt
-                  retainedBy {
-                    id
-                    name
-                    email
-                  }
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
                 }
                 signatures {
                   id
@@ -2980,70 +2984,6 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
-   * Libera un documento retenido
-   */
-  const handleReleaseDocument = async (documentId) => {
-    if (!confirm('¿Estás seguro de que deseas liberar esta factura retenida?')) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-
-      const response = await axios.post(
-        API_URL,
-        {
-          query: `
-            mutation ReleaseDocument($documentId: Int!) {
-              releaseDocument(documentId: $documentId)
-            }
-          `,
-          variables: {
-            documentId: documentId
-          }
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
-
-      if (response.data.errors) {
-        throw new Error(response.data.errors[0].message);
-      }
-
-      // Recargar documentos retenidos y firmados
-      await loadRetainedDocuments();
-      await loadSignedDocuments();
-
-      // Mostrar notificación de éxito
-      setNotificationData({
-        title: 'Factura Liberada',
-        message: 'La factura ha sido liberada exitosamente',
-        type: 'success'
-      });
-      setShowNotification(true);
-
-      setTimeout(() => {
-        setShowNotification(false);
-      }, 3000);
-    } catch (err) {
-      console.error('Error al liberar documento:', err);
-      setNotificationData({
-        title: 'Error',
-        message: err.message || 'No se pudo liberar la factura',
-        type: 'error'
-      });
-      setShowNotification(true);
-
-      setTimeout(() => {
-        setShowNotification(false);
-      }, 3000);
-    }
-  };
-
-  /**
    * Rechazar documento con razón (función interna, llamada después del modal si es necesario)
    */
   const handleRejectDocument = async (docId, reason, realSigner = null) => {
@@ -3121,6 +3061,132 @@ function Dashboard({ user, onLogout }) {
     } finally {
       setRejecting(false);
       setShowRejectingLoader(false);
+    }
+  };
+
+  /**
+   * Retiene un centro de costo del documento
+   */
+  const handleRetainDocument = async (documentId, centroCostoIndex, percentage, reason) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation RetainDocument($documentId: Int!, $centroCostoIndex: Int!, $retentionPercentage: Int!, $retentionReason: String!) {
+              retainDocument(
+                documentId: $documentId
+                centroCostoIndex: $centroCostoIndex
+                retentionPercentage: $retentionPercentage
+                retentionReason: $retentionReason
+              ) {
+                success
+                message
+                retentions {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
+              }
+            }
+          `,
+          variables: {
+            documentId: parseInt(documentId),
+            centroCostoIndex: parseInt(centroCostoIndex),
+            retentionPercentage: parseInt(percentage),
+            retentionReason: reason
+          }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const result = response.data.data.retainDocument;
+      setNotificationData({
+        title: 'Documento Retenido',
+        message: result.message || 'El documento ha sido retenido exitosamente',
+        type: 'success'
+      });
+      setShowNotification(true);
+
+      // Recargar documentos
+      await loadRetainedDocuments();
+      if (selectedDocument && selectedDocument.id === documentId) {
+        // Reload current document
+        loadDocumentDetails(documentId);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error al retener documento:', error);
+      setNotificationData({
+        title: 'Error al Retener',
+        message: error.message || 'No se pudo retener el documento',
+        type: 'error'
+      });
+      setShowNotification(true);
+      return false;
+    }
+  };
+
+  /**
+   * Libera un documento retenido
+   */
+  const handleReleaseDocument = async (documentId, centroCostoIndex) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation ReleaseDocument($documentId: Int!, $centroCostoIndex: Int!) {
+              releaseDocument(documentId: $documentId, centroCostoIndex: $centroCostoIndex)
+            }
+          `,
+          variables: {
+            documentId: parseInt(documentId),
+            centroCostoIndex: parseInt(centroCostoIndex)
+          }
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      setNotificationData({
+        title: 'Documento Liberado',
+        message: 'El documento ha sido liberado exitosamente',
+        type: 'success'
+      });
+      setShowNotification(true);
+
+      // Recargar documentos
+      await loadRetainedDocuments();
+      await loadSignedDocuments();
+      if (selectedDocument && selectedDocument.id === documentId) {
+        loadDocumentDetails(documentId);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error al liberar documento:', error);
+      setNotificationData({
+        title: 'Error al Liberar',
+        message: error.message || 'No se pudo liberar el documento',
+        type: 'error'
+      });
+      setShowNotification(true);
+      return false;
     }
   };
 
@@ -8938,6 +9004,8 @@ function Dashboard({ user, onLogout }) {
           factura={isEditMode ? editingDocument : selectedFactura}
           savedData={facturaTemplateData}
           isEditMode={isEditMode}
+          currentDocument={isEditMode ? editingDocument : selectedDocument}
+          user={user}
           onClose={() => {
             setShowFacturaTemplate(false);
             setSelectedFactura(null);

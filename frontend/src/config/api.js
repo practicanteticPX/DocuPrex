@@ -14,16 +14,20 @@
  * @returns {string} URL base del backend (vacío para HTTPS, 'http://hostname:5001' para HTTP)
  */
 export const getBackendUrl = () => {
-  const protocol = window.location.protocol; // 'http:' o 'https:'
+  const protocol = window.location.protocol;
   const hostname = window.location.hostname;
 
-  // Si estamos en HTTPS, usar rutas relativas para aprovechar el proxy de Vite
-  // Esto evita problemas de mixed content (HTTPS -> HTTP)
+  // HTTPS: Usar mismo dominio (proxy reverso maneja el routing)
   if (protocol === 'https:') {
-    return ''; // Ruta relativa, el proxy de Vite redirigirá a http://192.168.0.30:5001
+    return `https://${hostname}`;
   }
 
-  // Si estamos en HTTP, usar URL absoluta con el puerto del backend
+  // HTTP con dominio (no IP): Asumir proxy en puerto 80
+  if (hostname !== 'localhost' && !hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+    return `http://${hostname}`;
+  }
+
+  // HTTP con IP o localhost: Usar puerto 5001 directo
   return `http://${hostname}:5001`;
 };
 
@@ -82,23 +86,20 @@ export const getViewUrl = (documentId) => {
  * @returns {string} URL completa del WebSocket (ws:// o wss://)
  */
 export const getWebSocketUrl = () => {
-  const protocol = window.location.protocol; // 'http:' o 'https:'
+  const protocol = window.location.protocol;
   const hostname = window.location.hostname;
-
-  // Determinar protocolo WebSocket
   const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
 
-  // Si estamos en HTTPS, asumir que hay proxy/load balancer
-  // El WebSocket debe ir al mismo host que el frontend
+  // HTTPS: Usar proxy reverso en el mismo dominio
   if (protocol === 'https:') {
-    // Si hay puerto en la URL (ej: https://dominio.com:443)
-    const port = window.location.port;
-    if (port && port !== '443') {
-      return `${wsProtocol}//${hostname}:${port}`;
-    }
     return `${wsProtocol}//${hostname}`;
   }
 
-  // Si estamos en HTTP, conectar al puerto del backend (5001)
+  // HTTP con dominio (no IP): Usar puerto 5001
+  if (hostname !== 'localhost' && !hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+    return `${wsProtocol}//${hostname}:5001`;
+  }
+
+  // HTTP con IP o localhost: Usar puerto 5001
   return `${wsProtocol}//${hostname}:5001`;
 };

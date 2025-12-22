@@ -317,10 +317,11 @@ async function startServer() {
   // Inicializar Socket.IO con CORS configurado
   const io = new SocketIO(httpServer, {
     cors: {
-      origin: serverConfig.corsOrigins,
+      origin: "*",
       methods: ['GET', 'POST'],
-      credentials: true
-    }
+      credentials: false
+    },
+    transports: ['websocket', 'polling']
   });
 
   // Inicializar servicio WebSocket

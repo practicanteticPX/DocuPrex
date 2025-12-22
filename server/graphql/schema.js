@@ -46,8 +46,8 @@ const typeDefs = gql`
     # Campos de firma (solo disponibles en signedDocuments)
     signedAt: String
     signatureType: String
-    # Retención
-    retention: DocumentRetention
+    # Retenciones (array de retenciones por centro de costo)
+    retentionData: [DocumentRetentionItem!]
   }
 
   type Signature {
@@ -185,17 +185,20 @@ const typeDefs = gql`
     activo: Boolean!
   }
 
+  type DocumentRetentionItem {
+    userId: String!
+    userName: String!
+    centroCostoIndex: Int!
+    motivo: String!
+    porcentajeRetenido: Int!
+    fechaRetencion: String!
+    activa: Boolean!
+  }
+
   type DocumentRetention {
-    id: Int!
-    documentId: Int!
-    retainedBy: User!
-    retainedById: Int!
-    retentionPercentage: Int!
-    retentionReason: String!
-    retainedAt: String!
-    releasedAt: String
-    releasedBy: User
-    releasedById: Int
+    success: Boolean!
+    message: String
+    retentions: [DocumentRetentionItem!]!
   }
 
   type Query {
@@ -263,8 +266,8 @@ const typeDefs = gql`
     rejectDocument(documentId: Int!, reason: String, realSignerName: String): Boolean!
 
     # Retenciones
-    retainDocument(documentId: Int!, retentionPercentage: Int!, retentionReason: String!): DocumentRetention!
-    releaseDocument(documentId: Int!): Boolean!
+    retainDocument(documentId: Int!, centroCostoIndex: Int!, retentionPercentage: Int!, retentionReason: String!): DocumentRetention!
+    releaseDocument(documentId: Int!, centroCostoIndex: Int!): Boolean!
 
     # Notificaciones
     markNotificationAsRead(notificationId: Int!): Notification!
