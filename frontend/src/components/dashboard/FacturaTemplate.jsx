@@ -1571,8 +1571,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                     <th>% C.Co</th>
                     {Object.keys(retenciones).length > 0 && (
                       <>
-                        <th>Motivo</th>
                         <th>%Ret</th>
+                        <th>Motivo</th>
                       </>
                     )}
                     <th></th>
@@ -1724,10 +1724,9 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                             {retenciones[filaIndex] ? (
                               <Input
                                 type="text"
-                                value={retenciones[filaIndex].motivo}
+                                value={`${retenciones[filaIndex].porcentajeRetenido}%`}
                                 disabled
                                 className="factura-table-input factura-input-disabled"
-                                title={retenciones[filaIndex].motivo}
                               />
                             ) : '-'}
                           </td>
@@ -1735,9 +1734,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                             {retenciones[filaIndex] ? (
                               <Input
                                 type="text"
-                                value={`${retenciones[filaIndex].porcentajeRetenido}%`}
+                                value={retenciones[filaIndex].motivo}
                                 disabled
                                 className="factura-table-input factura-input-disabled"
+                                title={retenciones[filaIndex].motivo}
                               />
                             ) : '-'}
                           </td>

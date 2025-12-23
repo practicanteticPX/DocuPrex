@@ -367,6 +367,12 @@ const resolvers = {
         WHERE s.signer_id = $1
           AND s.status = 'signed'
           AND d.uploaded_by != $1
+          -- Excluir documentos que el usuario tiene retenidos activamente
+          AND NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements(d.retention_data) AS retention
+            WHERE (retention->>'userId')::text = $1::text
+              AND (retention->>'activa')::boolean = true
+          )
         ORDER BY s.signed_at DESC
       `, [user.id]);
 
@@ -4440,30 +4446,103 @@ const resolvers = {
                 }
 
                 console.log(`  - hasRespCtroCost:`, hasRespCtroCost);
+                console.log(`  - retentionPercentage:`, retentionPercentage);
+                console.log(`  - retentionReason:`, retentionReason);
 
-                if (hasRespCtroCost) {
-                  // Verificar que no haya una retención activa
-                  const activeRetention = await query(
-                    `SELECT id
-                     FROM document_retentions
-                     WHERE document_id = $1 AND released_at IS NULL`,
+                if (hasRespCtroCost && retentionPercentage && retentionReason) {
+                  // Obtener nombre del usuario desde la BD
+                  const userDataResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
+                  const userName = userDataResult.rows.length > 0 ? userDataResult.rows[0].name : 'Usuario desconocido';
+
+                  console.log(`🔄 [RETENCIÓN] Iniciando proceso de retención para usuario ${userName} (ID: ${user.id})`);
+
+                  // Obtener metadata del documento para encontrar el centro de costo
+                  const metadataResult = await query(
+                    'SELECT metadata, retention_data FROM documents WHERE id = $1',
                     [documentId]
                   );
 
-                  if (activeRetention.rows.length === 0) {
-                    // Crear la retención
-                    await query(
-                      `INSERT INTO document_retentions (document_id, retained_by, retention_percentage, retention_reason)
-                       VALUES ($1, $2, $3, $4)`,
-                      [documentId, user.id, retentionPercentage, retentionReason]
-                    );
+                  if (metadataResult.rows.length > 0) {
+                    const metadata = metadataResult.rows[0].metadata;
+                    const currentRetentions = metadataResult.rows[0].retention_data || [];
 
-                    console.log(`✅ Documento ${documentId} retenido por ${user.name} (${retentionPercentage}%): ${retentionReason}`);
-                  } else {
-                    console.warn(`⚠️ Documento ${documentId} ya tiene una retención activa`);
+                    console.log(`📋 metadata.causacionDetails:`, metadata?.causacionDetails);
+                    console.log(`🔍 Buscando centro de costo donde responsable_centro_id = ${user.id}`);
+
+                    // Buscar el índice del centro de costo donde el usuario es responsable
+                    let centroCostoIndex = -1;
+                    let maxPercentage = 100; // Por defecto 100% si no hay causacionDetails
+
+                    if (metadata && metadata.causacionDetails && metadata.causacionDetails.length > 0) {
+                      // Documento CON plantilla: buscar centro de costo específico
+                      centroCostoIndex = metadata.causacionDetails.findIndex(
+                        detail => {
+                          console.log(`   Comparando: detail.responsable_centro_id (${detail.responsable_centro_id}) === user.id (${user.id})`);
+                          return detail.responsable_centro_id === user.id;
+                        }
+                      );
+
+                      if (centroCostoIndex >= 0) {
+                        const centroCosto = metadata.causacionDetails[centroCostoIndex];
+                        maxPercentage = parseFloat(centroCosto.porcentaje_centro || 100);
+                        console.log(`✅ Centro de costo encontrado: ${centroCosto.centro_costo}, max: ${maxPercentage}%`);
+                      } else {
+                        console.warn(`⚠️ Usuario ${userName} (ID: ${user.id}) no es responsable de ningún centro de costo en metadata`);
+                        // Asignar índice 0 por defecto para documentos sin plantilla
+                        centroCostoIndex = 0;
+                        console.log(`ℹ️  Usando centroCostoIndex = 0 por defecto (documento sin plantilla completa)`);
+                      }
+                    } else {
+                      // Documento SIN plantilla: usar índice 0 por defecto
+                      centroCostoIndex = 0;
+                      console.log(`ℹ️  Documento sin causacionDetails. Usando centroCostoIndex = 0, maxPercentage = 100%`);
+                    }
+
+                    console.log(`📍 centroCostoIndex final: ${centroCostoIndex}`);
+
+                    // Validar que no exceda el porcentaje asignado
+                    if (retentionPercentage <= maxPercentage) {
+                      // Verificar si ya existe una retención activa para este centro de costo
+                      const existingIndex = currentRetentions.findIndex(
+                        r => String(r.userId) === String(user.id) && r.centroCostoIndex === centroCostoIndex && r.activa
+                      );
+
+                      const retentionItem = {
+                        userId: String(user.id),
+                        userName: userName,
+                        centroCostoIndex,
+                        motivo: retentionReason,
+                        porcentajeRetenido: retentionPercentage,
+                        fechaRetencion: new Date().toISOString(),
+                        activa: true
+                      };
+
+                      if (existingIndex >= 0) {
+                        currentRetentions[existingIndex] = retentionItem;
+                        console.log(`✅ Retención actualizada para centro de costo ${centroCostoIndex}`);
+                      } else {
+                        currentRetentions.push(retentionItem);
+                        console.log(`✅ Nueva retención creada para centro de costo ${centroCostoIndex}`);
+                      }
+
+                      // Guardar en retention_data
+                      await query(
+                        'UPDATE documents SET retention_data = $1 WHERE id = $2',
+                        [JSON.stringify(currentRetentions), documentId]
+                      );
+
+                      console.log(`✅ Documento ${documentId} retenido por ${userName} (${retentionPercentage}%): ${retentionReason}`);
+                      console.log(`📊 retention_data guardado:`, JSON.stringify(currentRetentions, null, 2));
+                    } else {
+                      console.warn(`⚠️ Porcentaje de retención (${retentionPercentage}%) excede el asignado (${maxPercentage}%)`);
+                    }
                   }
+                } else if (hasRespCtroCost) {
+                  console.log(`ℹ️ Usuario no quiere retener (retentionPercentage: ${retentionPercentage}, retentionReason: ${retentionReason})`);
                 } else {
-                  console.warn(`⚠️ Usuario ${user.name} no tiene rol RESP_CTRO_COST, no puede retener`);
+                  const userDataResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
+                  const userName = userDataResult.rows.length > 0 ? userDataResult.rows[0].name : 'Usuario desconocido';
+                  console.warn(`⚠️ Usuario ${userName} (ID: ${user.id}) no tiene rol RESP_CTRO_COST, no puede retener`);
                 }
               }
             } else {
@@ -5004,7 +5083,16 @@ const resolvers = {
             });
           } else {
             // Grupo pendiente - crear entrada virtual
-            results.push({
+            // Obtener miembros activos del grupo
+            const membersResult = await query(`
+              SELECT ci.user_id, ci.activo, u.name as user_name
+              FROM causacion_integrantes ci
+              JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+              JOIN users u ON ci.user_id = u.id
+              WHERE cg.codigo = $1
+            `, [signer.grupo_codigo]);
+
+            const virtualGroupSignature = {
               id: `group_${signer.ds_id}`,
               document_id: parent.id,
               signer_id: null,
@@ -5019,13 +5107,28 @@ const resolvers = {
               role_names: signer.role_names,
               role_codes: signer.role_codes,
               is_causacion_group: true,
+              isCausacionGroup: true, // camelCase para frontend
               grupo_codigo: signer.grupo_codigo,
               grupo_nombre: signer.grupo_nombre,
+              members: membersResult.rows.map(m => ({
+                userId: m.user_id,
+                activo: m.activo,
+                userName: m.user_name
+              })),
               // Para el resolver Signature.signer - nombre del grupo
               _signer_name: signer.grupo_nombre,
               _signer_email: null,
               _is_group_pending: true
+            };
+
+            console.log(`📦 [signatures] Grupo pendiente creado:`, {
+              grupo_codigo: virtualGroupSignature.grupo_codigo,
+              grupo_nombre: virtualGroupSignature.grupo_nombre,
+              members: virtualGroupSignature.members,
+              order_position: virtualGroupSignature.order_position
             });
+
+            results.push(virtualGroupSignature);
           }
         } else {
           // Firmante normal - buscar su firma
@@ -5070,6 +5173,12 @@ const resolvers = {
           }
         }
       }
+
+      console.log(`📊 [signatures] Total de firmas devueltas: ${results.length}`);
+      console.log(`📋 [signatures] Grupos de causación pendientes:`, results.filter(r => r.isCausacionGroup && r.status === 'pending').map(r => ({
+        grupo: r.grupo_codigo,
+        members: r.members
+      })));
 
       return results;
     },
@@ -5163,10 +5272,15 @@ const resolvers = {
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.signer_id]);
       return result.rows[0];
     },
-    // Nuevos campos para grupos de causación
-    isCausacionGroup: (parent) => parent.is_causacion_group || false,
-    grupoCodigo: (parent) => parent.grupo_codigo || null,
-    grupoNombre: (parent) => parent.grupo_nombre || null,
+    // Campo members para grupos de causación
+    members: (parent) => {
+      // Si es un grupo de causación pendiente, devolver los miembros
+      if (parent.members && Array.isArray(parent.members)) {
+        console.log(`🔍 [Signature.members resolver] Devolviendo ${parent.members.length} miembros para grupo ${parent.grupo_codigo}`);
+        return parent.members;
+      }
+      return null;
+    },
   },
 
   User: {

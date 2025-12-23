@@ -79,6 +79,7 @@ function Dashboard({ user, onLogout }) {
   const [viewingDocument, setViewingDocument] = useState(null);
   const [isViewingPending, setIsViewingPending] = useState(false);
   const [isWaitingTurn, setIsWaitingTurn] = useState(false);
+  const [hasUserRetention, setHasUserRetention] = useState(false);
   const [isDownloadBtnHovered, setIsDownloadBtnHovered] = useState(false);
   const [isCloseBtnHovered, setIsCloseBtnHovered] = useState(false);
   const [isSettingsBtnHovered, setIsSettingsBtnHovered] = useState(false);
@@ -166,6 +167,8 @@ function Dashboard({ user, onLogout }) {
 
   // Estados para filtros de "Documentos retenidos"
   const [retainedDocsSearchTerm, setRetainedDocsSearchTerm] = useState('');
+  const [retainedDocsStatusFilter, setRetainedDocsStatusFilter] = useState('all'); // all, completed, pending
+  const [retainedDocsTypeFilter, setRetainedDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
 
   // Estados para filtros de tipo de documento
   const [pendingDocsTypeFilter, setPendingDocsTypeFilter] = useState([]); // ['SA', 'FV', 'NONE']
@@ -184,6 +187,10 @@ function Dashboard({ user, onLogout }) {
   const [showRetentionModal, setShowRetentionModal] = useState(false);
   const [retentionData, setRetentionData] = useState({ percentage: '', reason: '', wantsRetention: null });
   const [pendingSignWithRetention, setPendingSignWithRetention] = useState(null); // { docId, realSigner }
+
+  // Estados para modal de liberación de facturas retenidas
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
+  const [pendingReleaseDocument, setPendingReleaseDocument] = useState(null); // { docId, centroCostoIndex }
 
   // Estados para configuración
   const [showSettings, setShowSettings] = useState(false);
@@ -725,6 +732,12 @@ function Dashboard({ user, onLogout }) {
     setViewingDocument(doc);
     setIsViewingPending(isPending);
     setIsWaitingTurn(isWaiting);
+
+    // Verificar si el usuario tiene una retención activa en este documento
+    const hasRetention = doc.retentionData && doc.retentionData.some(
+      retention => String(retention.userId) === String(user.id) && retention.activa
+    );
+    setHasUserRetention(hasRetention);
   };
 
   /**
@@ -756,6 +769,15 @@ function Dashboard({ user, onLogout }) {
                 totalSigners
                 signedCount
                 pendingCount
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
                 signatures {
                   id
                   signer {
@@ -1156,6 +1178,15 @@ function Dashboard({ user, onLogout }) {
                 }
                 createdAt
                 status
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
                 signatures {
                   id
                   status
@@ -1168,6 +1199,14 @@ function Dashboard({ user, onLogout }) {
                   roleCodes
                   orderPosition
                   realSignerName
+                  isCausacionGroup
+                  grupoCodigo
+                  grupoNombre
+                  members {
+                    userId
+                    activo
+                    userName
+                  }
                   signer {
                     id
                     name
@@ -1232,6 +1271,15 @@ function Dashboard({ user, onLogout }) {
                 status
                 signedAt
                 signatureType
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
                 signatures {
                   id
                   status
@@ -1244,6 +1292,14 @@ function Dashboard({ user, onLogout }) {
                   roleCodes
                   orderPosition
                   realSignerName
+                  isCausacionGroup
+                  grupoCodigo
+                  grupoNombre
+                  members {
+                    userId
+                    activo
+                    userName
+                  }
                   signer {
                     id
                     name
@@ -1306,6 +1362,15 @@ function Dashboard({ user, onLogout }) {
                   email
                 }
                 templateData
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
                 documentType {
                   id
                   code
@@ -1516,6 +1581,15 @@ function Dashboard({ user, onLogout }) {
                   name
                   email
                 }
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
                 signatures {
                   id
                   status
@@ -1550,6 +1624,15 @@ function Dashboard({ user, onLogout }) {
                   id
                   name
                   email
+                }
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
                 }
                 signatures {
                   id
@@ -2900,9 +2983,10 @@ function Dashboard({ user, onLogout }) {
       // Limpiar consecutivo después de firmar
       setConsecutivo('');
 
-      // Recargar ambas listas: pendientes y firmados
+      // Recargar todas las listas: pendientes, firmados y retenidos
       await loadPendingDocuments();
       await loadSignedDocuments();
+      await loadRetainedDocuments();
     } catch (err) {
       console.error('Error al firmar:', err);
       setShowSigningLoader(false);
@@ -4938,7 +5022,8 @@ function Dashboard({ user, onLogout }) {
                 onClick={() => setActiveTab('retained')}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 15V3M12 15L8 11M12 15L16 11M2 17L2.621 19.485C2.72915 19.9177 2.97882 20.3018 3.33033 20.5763C3.68184 20.8508 4.11501 21.0001 4.561 21H19.439C19.885 21.0001 20.3182 20.8508 20.6697 20.5763C21.0212 20.3018 21.2708 19.9177 21.379 19.485L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Retenidos
                 {!loadingRetained && retainedDocuments.length > 0 && (
@@ -5888,10 +5973,50 @@ function Dashboard({ user, onLogout }) {
                     const signatures = doc.signatures || [];
                     const statusConfig = getStatusConfig(doc.status, signatures);
 
-                    // Determinar si es el turno del usuario de firmar (misma lógica que botón Ver)
-                    const mySignature = signatures.find(sig =>
-                      sig.signer?.id === user?.id && sig.status === 'pending'
-                    );
+                    // Debug: Ver datos crudos
+                    console.log(`📄 Documento: ${doc.title}`);
+                    console.log(`📊 Total signatures: ${signatures.length}`);
+
+                    // Verificar cada signature
+                    signatures.forEach((sig, idx) => {
+                      console.log(`  Sig ${idx}:`, {
+                        id: sig.id,
+                        status: sig.status,
+                        signerName: sig.signer?.name,
+                        isCausacionGroup: sig.isCausacionGroup,
+                        grupoCodigo: sig.grupoCodigo,
+                        hasMembers: !!sig.members,
+                        membersCount: sig.members?.length || 0,
+                        members: sig.members
+                      });
+                    });
+
+                    console.log(`👤 Usuario actual: ${user?.name} (ID: ${user?.id})`);
+
+                    // Determinar si es el turno del usuario de firmar (incluye grupos de causación)
+                    const mySignature = signatures.find(sig => {
+                      // Usuario directo pendiente
+                      if (sig.signer?.id === user?.id && sig.status === 'pending') {
+                        console.log(`✅ Usuario directo encontrado pendiente`);
+                        return true;
+                      }
+                      // Usuario miembro de un grupo de causación pendiente
+                      if (sig.isCausacionGroup && sig.status === 'pending' && sig.members) {
+                        console.log(`🔍 Grupo de causación pendiente:`, sig.members);
+                        const isMember = sig.members.some(member => {
+                          console.log(`  Comparando: ${member.userId} === ${user?.id} && activo=${member.activo}`);
+                          return member.userId === user?.id && member.activo;
+                        });
+                        if (isMember) {
+                          console.log(`✅ Usuario es miembro activo del grupo!`);
+                        }
+                        return isMember;
+                      }
+                      return false;
+                    });
+
+                    console.log(`📝 mySignature:`, mySignature ? 'Encontrado' : 'No encontrado');
+
                     let isMyTurn = false;
                     if (mySignature) {
                       const previousSigners = signatures.filter(
@@ -5901,6 +6026,7 @@ function Dashboard({ user, onLogout }) {
                         sig => sig.status === 'signed'
                       );
                       isMyTurn = allPreviousSigned;
+                      console.log(`🎯 isMyTurn: ${isMyTurn} (previousSigners: ${previousSigners.length}, allSigned: ${allPreviousSigned})`);
                     }
 
                     return (
@@ -7083,16 +7209,23 @@ function Dashboard({ user, onLogout }) {
                   <h2 className="section-title-minimal">Documentos Retenidos</h2>
                   <p className="section-subtitle-minimal">
                     {(() => {
-                      const filteredCount = retainedDocuments.filter(doc =>
-                        doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase())
-                      ).length;
-                      return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} retenido${filteredCount !== 1 ? 's' : ''}`;
+                      const filteredCount = retainedDocuments.filter(doc => {
+                        const matchesSearch = doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase());
+                        const matchesStatus = retainedDocsStatusFilter === 'all' ||
+                                             (retainedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
+                                             doc.status === retainedDocsStatusFilter;
+                        const matchesType = retainedDocsTypeFilter.length === 0 ||
+                          retainedDocsTypeFilter.includes(doc.documentType?.code) ||
+                          (retainedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                        return matchesSearch && matchesStatus && matchesType;
+                      }).length;
+                      return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''}`;
                     })()}
                   </p>
                 </div>
               </div>
 
-              {/* Buscador */}
+              {/* Filtros */}
               {retainedDocuments.length > 0 && (
                 <div className="my-docs-filters">
                   <div className="filter-search">
@@ -7118,6 +7251,92 @@ function Dashboard({ user, onLogout }) {
                       </button>
                     )}
                   </div>
+
+                  <div className="filter-status-group">
+                    <button
+                      className={`filter-status-btn ${retainedDocsStatusFilter === 'all' ? 'active' : ''}`}
+                      onClick={() => setRetainedDocsStatusFilter('all')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Todos
+                    </button>
+                    <button
+                      className={`filter-status-btn filter-status-btn-completed ${retainedDocsStatusFilter === 'completed' ? 'active' : ''}`}
+                      onClick={() => setRetainedDocsStatusFilter('completed')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Firmados
+                    </button>
+                    <button
+                      className={`filter-status-btn filter-status-btn-pending ${retainedDocsStatusFilter === 'pending' ? 'active' : ''}`}
+                      onClick={() => setRetainedDocsStatusFilter('pending')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 8V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      En curso
+                    </button>
+
+                    {/* Botón de filtro por tipo de documento */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        className={`filter-type-btn ${retainedDocsTypeFilter.length > 0 ? 'active' : ''}`}
+                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'retained' ? null : 'retained')}
+                        title="Filtrar por tipo de documento"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+
+                      {/* Dropdown de filtros */}
+                      {showTypeFilterDropdown === 'retained' && (
+                        <div className="type-filter-dropdown">
+                          <div className="type-filter-header">
+                            <span>Tipo de documento</span>
+                            {retainedDocsTypeFilter.length > 0 && (
+                              <button
+                                className="clear-all-filters-btn"
+                                onClick={() => setRetainedDocsTypeFilter([])}
+                              >
+                                Limpiar
+                              </button>
+                            )}
+                          </div>
+                          <div className="type-filter-options">
+                            <label className="type-filter-option">
+                              <input
+                                type="checkbox"
+                                checked={retainedDocsTypeFilter.includes('NONE')}
+                                onChange={() => toggleDocTypeFilter('retained', 'NONE')}
+                              />
+                              <span>Sin tipo específico</span>
+                            </label>
+                            <label className="type-filter-option">
+                              <input
+                                type="checkbox"
+                                checked={retainedDocsTypeFilter.includes('SA')}
+                                onChange={() => toggleDocTypeFilter('retained', 'SA')}
+                              />
+                              <span>Solicitudes de Anticipo</span>
+                            </label>
+                            <label className="type-filter-option">
+                              <input
+                                type="checkbox"
+                                checked={retainedDocsTypeFilter.includes('FV')}
+                                onChange={() => toggleDocTypeFilter('retained', 'FV')}
+                              />
+                              <span>Legalización de Facturas</span>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -7139,9 +7358,16 @@ function Dashboard({ user, onLogout }) {
                 </div>
               ) : (
                 (() => {
-                  const filteredDocs = retainedDocuments.filter(doc =>
-                    doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase())
-                  );
+                  const filteredDocs = retainedDocuments.filter(doc => {
+                    const matchesSearch = doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase());
+                    const matchesStatus = retainedDocsStatusFilter === 'all' ||
+                                         (retainedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
+                                         doc.status === retainedDocsStatusFilter;
+                    const matchesType = retainedDocsTypeFilter.length === 0 ||
+                      retainedDocsTypeFilter.includes(doc.documentType?.code) ||
+                      (retainedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                    return matchesSearch && matchesStatus && matchesType;
+                  });
 
                   return filteredDocs.length === 0 ? (
                     <div className="empty-state-minimal">
@@ -7151,84 +7377,127 @@ function Dashboard({ user, onLogout }) {
                         </svg>
                       </div>
                       <h3 className="empty-title-minimal">No se encontraron resultados</h3>
-                      <p className="empty-text-minimal">Intenta con otros términos de búsqueda</p>
+                      <p className="empty-text-minimal">Intenta con otros términos de búsqueda o filtros</p>
                     </div>
                   ) : (
-                    <div className="documents-grid-clean">
+                    <div className="my-docs-grid-clean">
                       {filteredDocs.map((doc) => {
-                        const retention = doc.retention;
-                        const canRelease = retention && retention.retainedBy.id === user.id;
+                      const getStatusConfig = (status) => {
+                        const statusMap = {
+                          pending: { label: 'En curso', color: '#92400E', bg: '#FEF3C7' },
+                          in_progress: { label: 'En curso', color: '#92400E', bg: '#FEF3C7' },
+                          completed: { label: 'Firmado', color: '#065F46', bg: '#D1FAE5'},
+                          rejected: { label: 'Rechazado', color: '#991B1B', bg: '#FEE2E2' },
+                          archived: { label: 'Archivado', color: '#374151', bg: '#F3F4F6' }
+                        };
+                        return statusMap[status] || statusMap.pending;
+                      };
 
-                        return (
-                          <div key={doc.id} className="doc-card-clean">
-                            <div className="doc-card-header-clean">
-                              <div className="doc-card-title-clean">{doc.title}</div>
-                              <div className="doc-card-badges-clean">
-                                <span className="status-badge-clean status-warning">
-                                  Retenido {retention?.retentionPercentage}%
-                                </span>
-                              </div>
-                            </div>
+                      const statusConfig = getStatusConfig(doc.status);
+                      const signatures = doc.signatures || [];
 
-                            {retention && (
-                              <div className="doc-card-info-clean" style={{ marginTop: '12px', padding: '12px', backgroundColor: '#FFF9E6', borderRadius: '8px', border: '1px solid #F59E0B' }}>
-                                <div style={{ fontSize: '13px', color: '#92400E', marginBottom: '6px' }}>
-                                  <strong>Retenido por:</strong> {retention.retainedBy.name}
-                                </div>
-                                <div style={{ fontSize: '12px', color: '#78350F' }}>
-                                  <strong>Razón:</strong> {retention.retentionReason}
-                                </div>
-                              </div>
-                            )}
+                      return (
+                        <div key={doc.id} className="my-doc-card-reference">
+                          {/* Layout completo: título arriba, fecha abajo, firmantes horizontales */}
+                          <div className="doc-content-wrapper">
+                            <div className="doc-header-row">
+                              <h3 className="doc-title-reference">{doc.title}</h3>
 
-                            <div className="doc-card-info-clean">
-                              <div className="doc-card-meta-clean">
-                                <span className="doc-card-meta-item-clean">
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M8 7V3M16 7V3M7 11H17M5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                  {new Date(doc.createdAt).toLocaleDateString('es-ES', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })}
-                                </span>
-                                <span className="doc-card-meta-item-clean">
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21M16 7C16 9.20914 14.2091 11 12 11C9.79086 11 8 9.20914 8 7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                  {doc.uploadedBy?.name || 'Desconocido'}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="doc-card-actions-clean">
-                              <button
-                                className="doc-action-btn-clean secondary"
-                                onClick={() => handleDocumentClick(doc, false)}
+                              <div
+                                className="status-badge-clean"
+                                style={{
+                                  color: statusConfig.color,
+                                  backgroundColor: statusConfig.bg,
+                                  cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onClick={() => {
+                                  if (statusConfig.label === 'Rechazado') {
+                                    const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                    if (rejectedSignature) {
+                                      setRejectionReasonPopup({
+                                        title: doc.title,
+                                        rejectedBy: rejectedSignature.realSignerName || rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                        reason: rejectedSignature.rejectionReason,
+                                        rejectedAt: rejectedSignature.rejectedAt
+                                      });
+                                    }
+                                  }
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason)) {
+                                    e.target.style.opacity = '0.8';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (statusConfig.label === 'Rechazado') {
+                                    e.target.style.opacity = '1';
+                                  }
+                                }}
+                                title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z" stroke="currentColor" strokeWidth="2"/>
-                                  <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2"/>
-                                </svg>
-                                Ver
-                              </button>
-                              {canRelease && (
+                                {statusConfig.label}
+                              </div>
+                            </div>
+
+                            <div className="doc-meta-row">
+                              <span className="doc-created-text">Creado el {formatDateTime(doc.createdAt)}</span>
+                            </div>
+
+                            <div className="doc-signers-row">
+                              {signatures.slice(0, 3).map((sig) => {
+                                const getSignerStatusColor = (status) => {
+                                  if (status === 'signed') return '#10B981';
+                                  if (status === 'rejected') return '#EF4444';
+                                  return '#F59E0B';
+                                };
+
+                                const getSignerStatusText = (status) => {
+                                  if (status === 'signed') return 'Firmado';
+                                  if (status === 'rejected') return 'Rechazado';
+                                  return 'Pendiente';
+                                };
+
+                                return (
+                                  <div key={sig.id} className="signer-item-horizontal" title={getSignerStatusText(sig.status)}>
+                                    <span
+                                      className="signer-dot"
+                                      style={{ backgroundColor: getSignerStatusColor(sig.status) }}
+                                    ></span>
+                                    <span className="signer-name">
+                                      {((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                              {signatures.length > 3 && (
                                 <button
-                                  className="doc-action-btn-clean primary"
-                                  onClick={() => handleReleaseDocument(doc.id)}
-                                  style={{ backgroundColor: '#10B981', borderColor: '#10B981' }}
+                                  className="btn-ver-todos"
+                                  onClick={(e) => handleToggleSignersDropdown(e, doc.id, signatures)}
                                 >
-                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M9 11L12 14L22 4M21 12V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V5C3 3.89543 3.89543 3 5 3H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                  Liberar factura
+                                  {signersDropdownPos?.docId === doc.id ? '- ver menos' : '+ ver todos'}
                                 </button>
                               )}
                             </div>
                           </div>
-                        );
-                      })}
+
+                          {/* Botones de acción */}
+                          <div className="doc-actions-clean">
+                            <button
+                              className="btn-action-clean"
+                              onClick={() => handleViewDocument(doc)}
+                              title="Ver documento"
+                              style={{marginTop: '-1.5vw'}}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                    );
+                        })}
                     </div>
                   );
                 })()
@@ -7307,6 +7576,29 @@ function Dashboard({ user, onLogout }) {
                   </svg>
                   <span>Aún no es tu turno de firmar. Hay otras personas que deben firmarlo antes que tú.</span>
                 </div>
+              )}
+              {hasUserRetention && (
+                <button
+                  className="pdf-viewer-action-btn pdf-release-btn"
+                  onClick={() => {
+                    const retention = viewingDocument.retentionData.find(
+                      r => String(r.userId) === String(user.id) && r.activa
+                    );
+                    if (retention) {
+                      setPendingReleaseDocument({
+                        docId: viewingDocument.id,
+                        centroCostoIndex: retention.centroCostoIndex
+                      });
+                      setShowReleaseModal(true);
+                    }
+                  }}
+                  title="Liberar documento retenido"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V8M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Liberar
+                </button>
               )}
               <a
                 href={getDownloadUrl(viewingDocument.id)}
@@ -8998,13 +9290,68 @@ function Dashboard({ user, onLogout }) {
         </div>
       )}
 
+      {/* Modal de confirmación de liberación */}
+      {showReleaseModal && (
+        <div className="sign-confirm-overlay" onClick={() => {
+          setShowReleaseModal(false);
+          setPendingReleaseDocument(null);
+        }}>
+          <div className="release-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="release-confirm-icon">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V8M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h3 className="release-confirm-title">Liberar Factura Retenida</h3>
+            <p className="release-confirm-message">
+              ¿Estás seguro de que deseas liberar esta factura retenida?
+            </p>
+            <p className="release-confirm-message release-confirm-submessage">
+              La factura volverá a aparecer en la sección de documentos firmados.
+            </p>
+
+            <div className="release-confirm-actions">
+              <button
+                className="release-confirm-btn release-cancel"
+                onClick={() => {
+                  setShowReleaseModal(false);
+                  setPendingReleaseDocument(null);
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="release-confirm-btn release-confirm"
+                onClick={async () => {
+                  if (pendingReleaseDocument) {
+                    const success = await handleReleaseDocument(
+                      pendingReleaseDocument.docId,
+                      pendingReleaseDocument.centroCostoIndex
+                    );
+                    if (success) {
+                      setShowReleaseModal(false);
+                      setPendingReleaseDocument(null);
+                      handleCloseViewer();
+                      await loadRetainedDocuments();
+                      await loadSignedDocuments();
+                    }
+                  }
+                }}
+              >
+                Sí, liberar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de plantilla de factura */}
       {showFacturaTemplate && (selectedFactura || editingDocument) && (
         <FacturaTemplate
           factura={isEditMode ? editingDocument : selectedFactura}
           savedData={facturaTemplateData}
           isEditMode={isEditMode}
-          currentDocument={isEditMode ? editingDocument : selectedDocument}
+          currentDocument={isEditMode ? editingDocument : selectedFactura}
           user={user}
           onClose={() => {
             setShowFacturaTemplate(false);

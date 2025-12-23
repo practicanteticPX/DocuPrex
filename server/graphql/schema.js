@@ -77,6 +77,13 @@ const typeDefs = gql`
     isCausacionGroup: Boolean
     grupoCodigo: String
     grupoNombre: String
+    members: [GroupMember!]
+  }
+
+  type GroupMember {
+    userId: Int!
+    activo: Boolean!
+    userName: String!
   }
 
   type DocumentSigner {

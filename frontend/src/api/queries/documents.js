@@ -74,6 +74,14 @@ export const GET_PENDING_DOCUMENTS = `
         roleName
         roleNames
         roleCodes
+        isCausacionGroup
+        grupoCodigo
+        grupoNombre
+        members {
+          userId
+          activo
+          userName
+        }
       }
     }
   }
@@ -106,6 +114,14 @@ export const GET_SIGNED_DOCUMENTS = `
         role_name
         role_names
         consecutivo
+        isCausacionGroup
+        grupoCodigo
+        grupoNombre
+        members {
+          userId
+          activo
+          userName
+        }
       }
     }
   }
@@ -139,6 +155,14 @@ export const GET_MY_DOCUMENTS = `
         role_name
         role_names
         consecutivo
+        isCausacionGroup
+        grupoCodigo
+        grupoNombre
+        members {
+          userId
+          activo
+          userName
+        }
       }
     }
   }
@@ -203,6 +227,14 @@ export const GET_REJECTED_BY_OTHERS_DOCUMENTS = `
         role_code
         role_name
         role_names
+        isCausacionGroup
+        grupoCodigo
+        grupoNombre
+        members {
+          userId
+          activo
+          userName
+        }
       }
     }
   }
@@ -239,6 +271,14 @@ export const GET_DOCUMENT_BY_ID = `
         role_name
         role_names
         consecutivo
+        isCausacionGroup
+        grupoCodigo
+        grupoNombre
+        members {
+          userId
+          activo
+          userName
+        }
       }
     }
   }
@@ -270,6 +310,14 @@ export const GET_ALL_DOCUMENTS = `
         role_code
         role_name
         role_names
+        isCausacionGroup
+        grupoCodigo
+        grupoNombre
+        members {
+          userId
+          activo
+          userName
+        }
       }
     }
   }
