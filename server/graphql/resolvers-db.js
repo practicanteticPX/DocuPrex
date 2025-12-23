@@ -141,6 +141,36 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
       }
     });
 
+    // ========== BUSCAR FIRMAS DE GRUPOS DE CAUSACIÓN ==========
+    // Los grupos de causación se manejan aparte porque cualquier miembro puede firmar
+    const causacionGroupResult = await query(
+      `SELECT
+        s.real_signer_name,
+        u.name as signer_name,
+        ds.grupo_codigo,
+        cg.nombre as grupo_nombre
+       FROM document_signers ds
+       JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+       JOIN causacion_integrantes ci ON ci.grupo_id = cg.id
+       JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ci.user_id
+       JOIN users u ON u.id = s.signer_id
+       WHERE ds.document_id = $1
+         AND ds.is_causacion_group = TRUE
+         AND s.status = 'signed'
+         AND ci.activo = true
+       LIMIT 1`,
+      [documentId]
+    );
+
+    // Si encontramos una firma de un miembro del grupo de causación
+    if (causacionGroupResult.rows.length > 0) {
+      const causacionRow = causacionGroupResult.rows[0];
+      // Usar el nombre del usuario que firmó (siempre estará en real_signer_name para grupos)
+      const nombreFirmanteCausacion = causacionRow.real_signer_name || causacionRow.signer_name;
+      firmaCausacion = nombreFirmanteCausacion;
+      console.log(`✅ Firma de causación encontrada: ${nombreFirmanteCausacion} (grupo: ${causacionRow.grupo_nombre})`);
+    }
+
     // Agregar firmas especiales al objeto de firmas
     if (firmaNegociaciones) {
       firmas['_NEGOCIACIONES'] = firmaNegociaciones;
@@ -151,6 +181,9 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
 
     console.log(`📝 Firmas encontradas para documento ${documentId}:`, Object.keys(firmas).length);
     console.log(`📋 Keys de firmas:`, Object.keys(firmas));
+    if (firmas['_CAUSACION']) {
+      console.log(`📋 Firma _CAUSACION:`, firmas['_CAUSACION']);
+    }
     return firmas;
   } catch (error) {
     console.error('❌ Error al obtener firmas:', error);
