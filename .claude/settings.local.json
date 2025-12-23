@@ -55,7 +55,8 @@
       "Bash(git commit:*)",
       "Bash(git restore:*)",
       "Bash(grep:*)",
-      "Bash(docker ps:*)"
+      "Bash(docker ps:*)",
+      "Bash(docker restart:*)"
     ],
     "deny": [],
     "ask": []

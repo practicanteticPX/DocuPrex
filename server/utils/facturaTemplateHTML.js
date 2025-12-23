@@ -50,6 +50,7 @@ function generateFacturaHTML(data) {
     totalPorcentaje = 0,
     observaciones = '',
     firmas = {}, // Objeto con las firmas: { 'nombre_persona': 'nombre_firmante' }
+    retentionData = [], // Array con las retenciones activas del documento
     isRejected = false // Si el documento fue rechazado
   } = data;
 
@@ -81,9 +82,41 @@ function generateFacturaHTML(data) {
   const total = calcularTotal();
   const totalOk = Math.abs(total - 100) < 0.01;
 
-  const filasHTML = filasControl.map(fila => {
+  // Verificar si hay retenciones activas
+  const hasRetentions = retentionData && Array.isArray(retentionData) && retentionData.length > 0;
+  console.log(`🎨 [HTML] ============== RETENCIONES DEBUG ==============`);
+  console.log(`🎨 [HTML] retentionData recibido:`, JSON.stringify(retentionData, null, 2));
+  console.log(`🎨 [HTML] hasRetentions:`, hasRetentions);
+  console.log(`🎨 [HTML] retentionData es Array:`, Array.isArray(retentionData));
+  console.log(`🎨 [HTML] retentionData.length:`, retentionData?.length);
+
+  // Crear un mapa de retenciones por índice de centro de costo
+  const retentionMap = {};
+  if (hasRetentions) {
+    retentionData.forEach((retention, idx) => {
+      console.log(`🔍 [HTML] Procesando retención ${idx}:`, retention);
+      console.log(`🔍 [HTML] retention.activa:`, retention.activa, typeof retention.activa);
+      console.log(`🔍 [HTML] retention.centroCostoIndex:`, retention.centroCostoIndex, typeof retention.centroCostoIndex);
+
+      if (retention.activa) {
+        retentionMap[retention.centroCostoIndex] = retention;
+        console.log(`✅ [HTML] Mapeando retención para índice ${retention.centroCostoIndex}:`, retention);
+      } else {
+        console.log(`⏭️ [HTML] Retención ${idx} NO está activa (activa=${retention.activa})`);
+      }
+    });
+  }
+  console.log(`🗺️ [HTML] retentionMap final:`, JSON.stringify(retentionMap, null, 2));
+  console.log(`🗺️ [HTML] Cantidad de retenciones en mapa:`, Object.keys(retentionMap).length);
+  console.log(`🎨 [HTML] ============================================`);
+
+  const filasHTML = filasControl.map((fila, index) => {
     const firmaCuentaContable = firmas[fila.respCuentaContable] || '';
     const firmaCentroCostos = firmas[fila.respCentroCostos] || '';
+
+    // Obtener retención para esta fila (si existe)
+    const retention = retentionMap[index];
+    console.log(`📋 [HTML] Fila ${index}: Centro=${fila.centroCostos}, retention=`, retention ? `SÍ (${retention.porcentajeRetenido}%, ${retention.motivo})` : 'NO');
 
     return `
     <tr>
@@ -117,6 +150,14 @@ function generateFacturaHTML(data) {
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content">${fila.porcentaje || ''}</div>
       </td>
+      ${hasRetentions ? `
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7; color: #92400E; font-weight: 600;' : ''}">${retention ? retention.porcentajeRetenido + '%' : '-'}</div>
+      </td>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7; color: #92400E;' : ''}">${retention ? retention.motivo : '-'}</div>
+      </td>
+      ` : ''}
     </tr>
   `;
   }).join('');
@@ -591,6 +632,10 @@ function generateFacturaHTML(data) {
               <th>Cargo Resp.<br/>C.Co</th>
               <th>Firma</th>
               <th>% C.Co</th>
+              ${hasRetentions ? `
+              <th style="background: #FEF3C7;">% Ret</th>
+              <th style="background: #FEF3C7;">Motivo</th>
+              ` : ''}
             </tr>
           </thead>
           <tbody>

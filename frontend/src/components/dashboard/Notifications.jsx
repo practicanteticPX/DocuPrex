@@ -113,13 +113,29 @@ const getNotificationType = (type) => {
   }
 };
 
-const Notifications = ({ onNotificationClick }) => {
+const Notifications = ({ onNotificationClick, socket }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isBellHovered, setIsBellHovered] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Obtener el ID del usuario actual desde el token
+  const getCurrentUserId = () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+
+      // Decodificar el token JWT (payload es la segunda parte)
+      const payload = token.split('.')[1];
+      const decoded = JSON.parse(atob(payload));
+      return decoded.id || decoded.userId;
+    } catch (err) {
+      console.error('Error al decodificar token:', err);
+      return null;
+    }
+  };
 
   // Cargar notificaciones
   const loadNotifications = async () => {
@@ -250,15 +266,162 @@ const Notifications = ({ onNotificationClick }) => {
     }
   };
 
-  // Cargar notificaciones al montar el componente
+  // Cargar notificaciones al montar el componente (solo una vez)
   useEffect(() => {
     loadNotifications();
-
-    // Recargar notificaciones cada 30 segundos
-    const interval = setInterval(loadNotifications, 30000);
-
-    return () => clearInterval(interval);
   }, []);
+
+  // Escuchar eventos de WebSocket para notificaciones en tiempo real
+  useEffect(() => {
+    if (!socket) return;
+
+    // Nueva notificación creada
+    const handleNotificationCreated = (data) => {
+      console.log('🔔 Nueva notificación recibida por WebSocket:', data);
+
+      // IMPORTANTE: Verificar que la notificación sea para el usuario actual
+      const currentUserId = getCurrentUserId();
+      if (!currentUserId) {
+        console.warn('⚠️ No se pudo obtener el ID del usuario actual');
+        return;
+      }
+
+      // Filtrar: Solo agregar si la notificación es para este usuario
+      if (data.userId !== currentUserId) {
+        console.log(`⏭️ Notificación ignorada (destinatario: ${data.userId}, usuario actual: ${currentUserId})`);
+        return;
+      }
+
+      // Si el evento incluye información completa de la notificación, agregarla directamente
+      // De lo contrario, recargar para obtener información completa
+      if (data.notification && data.notification.id) {
+        // Agregar la nueva notificación al inicio de la lista
+        setNotifications(prev => {
+          // Evitar duplicados
+          const exists = prev.find(n => n.id === data.notification.id);
+          if (exists) return prev;
+
+          // Construir notificación completa
+          const newNotification = {
+            id: data.notification.id,
+            type: data.notification.type,
+            documentId: data.notification.document_id || data.notification.documentId,
+            documentTitle: data.notification.document_title || data.notification.documentTitle,
+            isRead: false,
+            createdAt: Date.now(),
+            actor: data.notification.actor || {
+              id: data.notification.actor_id,
+              name: null,
+              email: null
+            }
+          };
+
+          return [newNotification, ...prev];
+        });
+
+        // Incrementar contador de no leídas
+        setUnreadCount(prev => prev + 1);
+      } else {
+        // Fallback: recargar si no hay información completa
+        console.log('⚠️ Notificación sin información completa, recargando lista...');
+        loadNotifications();
+      }
+    };
+
+    // Notificación eliminada (por ejemplo, cuando se elimina el documento)
+    const handleNotificationDeleted = (data) => {
+      console.log('🗑️ Notificación eliminada por WebSocket:', data);
+
+      // Verificar si es para el usuario actual
+      const currentUserId = getCurrentUserId();
+
+      // Caso 1: Eliminación específica por userId y tipo (ej: al firmar)
+      if (data.documentId && data.userId && data.type) {
+        // Solo eliminar si es para este usuario
+        if (data.userId === currentUserId) {
+          console.log(`🗑️ Eliminando notificaciones de tipo "${data.type}" para documento ${data.documentId}`);
+          setNotifications(prev => {
+            const filtered = prev.filter(n =>
+              !(n.documentId === data.documentId && n.type === data.type)
+            );
+            // Recalcular no leídas
+            const deletedUnread = prev.filter(n =>
+              n.documentId === data.documentId && n.type === data.type && !n.isRead
+            ).length;
+            setUnreadCount(prevCount => Math.max(0, prevCount - deletedUnread));
+            return filtered;
+          });
+        } else {
+          console.log(`⏭️ Eliminación ignorada (es para usuario ${data.userId}, actual: ${currentUserId})`);
+        }
+      }
+      // Caso 2: Remover todas las notificaciones del documento (ej: documento eliminado)
+      else if (data.documentId) {
+        setNotifications(prev => prev.filter(n => n.documentId !== data.documentId));
+        // Recalcular contador de no leídas
+        setUnreadCount(prev => {
+          const deletedUnread = notifications.filter(n =>
+            n.documentId === data.documentId && !n.isRead
+          ).length;
+          return Math.max(0, prev - deletedUnread);
+        });
+      }
+      // Caso 3: Eliminar una notificación específica por ID
+      else if (data.notificationId) {
+        const notification = notifications.find(n => n.id === data.notificationId);
+        setNotifications(prev => prev.filter(n => n.id !== data.notificationId));
+        if (notification && !notification.isRead) {
+          setUnreadCount(prev => Math.max(0, prev - 1));
+        }
+      }
+    };
+
+    // Notificación marcada como leída
+    const handleNotificationRead = (data) => {
+      console.log('✅ Notificación marcada como leída por WebSocket:', data);
+
+      // Filtrar: Solo actualizar si es del usuario actual
+      const currentUserId = getCurrentUserId();
+      if (data.userId && data.userId !== currentUserId) {
+        console.log(`⏭️ Evento notification:read ignorado (no es para este usuario)`);
+        return;
+      }
+
+      if (data.notificationId) {
+        setNotifications(prev => prev.map(n =>
+          n.id === data.notificationId ? { ...n, isRead: true } : n
+        ));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    };
+
+    // Todas las notificaciones marcadas como leídas
+    const handleAllNotificationsRead = (data) => {
+      console.log('✅ Todas las notificaciones marcadas como leídas por WebSocket', data);
+
+      // Filtrar: Solo actualizar si es del usuario actual
+      const currentUserId = getCurrentUserId();
+      if (data.userId && data.userId !== currentUserId) {
+        console.log(`⏭️ Evento notification:all_read ignorado (no es para este usuario)`);
+        return;
+      }
+
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    };
+
+    socket.on('notification:created', handleNotificationCreated);
+    socket.on('notification:deleted', handleNotificationDeleted);
+    socket.on('notification:read', handleNotificationRead);
+    socket.on('notification:all_read', handleAllNotificationsRead);
+
+    return () => {
+      socket.off('notification:created', handleNotificationCreated);
+      socket.off('notification:deleted', handleNotificationDeleted);
+      socket.off('notification:read', handleNotificationRead);
+      socket.off('notification:all_read', handleAllNotificationsRead);
+    };
+  }, [socket, notifications]);
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {

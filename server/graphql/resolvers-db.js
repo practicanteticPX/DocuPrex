@@ -1461,6 +1461,20 @@ const resolvers = {
                 if (insertResult.rows.length > 0) {
                   console.log(`✅ Notificación creada para miembro del grupo: ${member.name}`);
 
+                  // Emitir evento WebSocket con información completa del actor
+                  websocketService.emitNotificationCreated(member.id, {
+                    id: insertResult.rows[0].id,
+                    type: 'signature_request',
+                    document_id: documentId,
+                    actor_id: user.id,
+                    document_title: docTitle,
+                    actor: {
+                      id: user.id,
+                      name: user.name,
+                      email: user.email
+                    }
+                  });
+
                   // Enviar email solo si tiene notificaciones activadas
                   if (member.email_notifications) {
                     try {
@@ -1498,6 +1512,20 @@ const resolvers = {
 
                 if (insertResult.rows.length > 0) {
                   console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
+
+                  // Emitir evento WebSocket con información completa del actor
+                  websocketService.emitNotificationCreated(firstSignerId, {
+                    id: insertResult.rows[0].id,
+                    type: 'signature_request',
+                    document_id: documentId,
+                    actor_id: user.id,
+                    document_title: docTitle,
+                    actor: {
+                      id: user.id,
+                      name: user.name,
+                      email: user.email
+                    }
+                  });
 
                   try {
                     const signerResult = await query('SELECT name, email, email_notifications FROM users WHERE id = $1', [firstSignerId]);
@@ -1661,7 +1689,12 @@ const resolvers = {
               ? JSON.parse(docInfo.metadata)
               : docInfo.metadata;
 
-            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData);
+            // Obtener retenciones activas del documento
+            const retentionData = docInfo.retention_data
+              ? (typeof docInfo.retention_data === 'string' ? JSON.parse(docInfo.retention_data) : docInfo.retention_data).filter(r => r.activa)
+              : [];
+
+            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, {}, false, retentionData);
 
             const templatePdfPath = pdfPath.replace('.pdf', '_template.pdf');
             await fs.writeFile(templatePdfPath, templatePdfBuffer);
@@ -1944,11 +1977,28 @@ const resolvers = {
 
               if (existingNotif.rows.length === 0) {
                 const docTitle = doc.title;
-                await query(
+                const insertResult = await query(
                   `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-                   VALUES ($1, $2, $3, $4, $5)`,
+                   VALUES ($1, $2, $3, $4, $5)
+                   RETURNING id`,
                   [nextSigner.id, 'signature_request', documentId, user.id, docTitle]
                 );
+
+                // Emitir evento WebSocket con información completa del actor
+                if (insertResult.rows.length > 0) {
+                  websocketService.emitNotificationCreated(nextSigner.id, {
+                    id: insertResult.rows[0].id,
+                    type: 'signature_request',
+                    document_id: documentId,
+                    actor_id: user.id,
+                    document_title: docTitle,
+                    actor: {
+                      id: user.id,
+                      name: user.name,
+                      email: user.email
+                    }
+                  });
+                }
 
                 if (nextSigner.email_notifications) {
                   try {
@@ -2281,11 +2331,32 @@ const resolvers = {
         );
 
         if (existingNotif.rows.length === 0) {
-          await query(
+          const insertResult = await query(
             `INSERT INTO notifications (user_id, document_id, type, actor_id, document_title, created_at)
-             VALUES ($1, $2, 'signature_request', $3, $4, NOW())`,
+             VALUES ($1, $2, 'signature_request', $3, $4, NOW())
+             RETURNING id`,
             [userId, documentId, docCreatorId, docTitle]
           );
+
+          // Emitir evento WebSocket con información completa del actor
+          if (insertResult.rows.length > 0) {
+            // Obtener información del creador del documento para incluir en el evento
+            const creatorInfo = await query('SELECT id, name, email FROM users WHERE id = $1', [docCreatorId]);
+            const actorData = creatorInfo.rows.length > 0 ? {
+              id: creatorInfo.rows[0].id,
+              name: creatorInfo.rows[0].name,
+              email: creatorInfo.rows[0].email
+            } : { id: docCreatorId, name: null, email: null };
+
+            websocketService.emitNotificationCreated(userId, {
+              id: insertResult.rows[0].id,
+              type: 'signature_request',
+              document_id: documentId,
+              actor_id: docCreatorId,
+              document_title: docTitle,
+              actor: actorData
+            });
+          }
 
           const signerName = signerInfo ? signerInfo.name : userId;
           console.log(`✅ Notificación creada para ${signerName} (posición ${signerInfo ? signerInfo.order_position : '?'}) - ahora está en turno`);
@@ -2432,6 +2503,9 @@ const resolvers = {
         );
 
         console.log(`🗑️ Todas las notificaciones del documento eliminadas`);
+
+        // Emitir evento WebSocket para eliminar notificaciones en frontend
+        websocketService.emitNotificationDeleted(id, null);
       } catch (notifError) {
         console.error('Error al eliminar notificaciones:', notifError);
         // No lanzamos el error para que no falle la eliminación
@@ -2597,9 +2671,14 @@ const resolvers = {
         // Obtener firmas actuales del documento
         const firmasActuales = await obtenerFirmasDocumento(documentId, parsedTemplateData);
 
+        // Obtener retenciones activas del documento
+        const retentionData = doc.retention_data
+          ? (typeof doc.retention_data === 'string' ? JSON.parse(doc.retention_data) : doc.retention_data).filter(r => r.activa)
+          : [];
+
         // Regenerar PDF con Puppeteer
         console.log('🔄 Regenerando PDF con nueva plantilla...');
-        const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales);
+        const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, false, retentionData);
 
         // Guardar planilla en archivo temporal
         const fs = require('fs').promises;
@@ -2977,15 +3056,32 @@ const resolvers = {
             );
 
             // Crear notificación (solo para firmantes NUEVOS)
-            await client.query(
+            const notifResult = await client.query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
                SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
                WHERE NOT EXISTS (
                  SELECT 1 FROM notifications
                  WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
-               )`,
+               )
+               RETURNING id`,
               [userId, 'signature_request', documentId, user.id, doc.title]
             );
+
+            // Emitir evento WebSocket si se creó la notificación
+            if (notifResult.rows.length > 0) {
+              websocketService.emitNotificationCreated(userId, {
+                id: notifResult.rows[0].id,
+                type: 'signature_request',
+                document_id: documentId,
+                actor_id: user.id,
+                document_title: doc.title,
+                actor: {
+                  id: user.id,
+                  name: user.name,
+                  email: user.email
+                }
+              });
+            }
 
             // Enviar correo SOLO si tiene email_notifications = true
             try {
@@ -3290,11 +3386,28 @@ const resolvers = {
 
           // 2. Crear notificación interna para el creador (si no es quien rechazó)
           if (doc.uploaded_by !== user.id) {
-            await query(
+            const insertResult = await query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-               VALUES ($1, $2, $3, $4, $5)`,
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id`,
               [doc.uploaded_by, 'document_rejected', documentId, user.id, doc.title]
             );
+
+            // Emitir evento WebSocket con información completa del actor
+            if (insertResult.rows.length > 0) {
+              websocketService.emitNotificationCreated(doc.uploaded_by, {
+                id: insertResult.rows[0].id,
+                type: 'document_rejected',
+                document_id: documentId,
+                actor_id: user.id,
+                document_title: doc.title,
+                actor: {
+                  id: user.id,
+                  name: user.name,
+                  email: user.email
+                }
+              });
+            }
           }
 
           // 3. Enviar correo de rechazo SOLO al creador del documento (si no es quien rechazó)
@@ -3531,8 +3644,13 @@ const resolvers = {
 
             const firmasActuales = await obtenerFirmasDocumento(documentId, parsedTemplateData);
 
+            // Obtener retenciones activas del documento
+            const retentionData = doc.retention_data
+              ? (typeof doc.retention_data === 'string' ? JSON.parse(doc.retention_data) : doc.retention_data).filter(r => r.activa)
+              : [];
+
             // Regenerar PDF con marca de agua RECHAZADO
-            const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, true);
+            const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, true, retentionData);
 
             // Guardar planilla en archivo temporal
             const fs = require('fs').promises;
@@ -3647,7 +3765,7 @@ const resolvers = {
      * @returns {Promise<Object>} Signature record
      * @throws {Error} When unauthorized, not in sequence (non-owner), or not assigned to document
      */
-    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentionPercentage, retentionReason }, { user }) => {
+    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentionPercentage, retentionReason, centroCostoIndex }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
       const docOwnerCheck = await query(
@@ -3889,7 +4007,7 @@ const resolvers = {
       // ========== REGENERAR PLANTILLA FV CON FIRMAS ACTUALIZADAS ==========
       try {
         const docInfoResult = await query(
-          `SELECT d.id, d.title, d.metadata, d.file_path, d.file_name, d.created_at, d.original_pdf_backup, dt.code as document_type_code
+          `SELECT d.id, d.title, d.metadata, d.file_path, d.file_name, d.created_at, d.original_pdf_backup, d.retention_data, dt.code as document_type_code
            FROM documents d
            LEFT JOIN document_types dt ON d.document_type_id = dt.id
            WHERE d.id = $1`,
@@ -3911,8 +4029,16 @@ const resolvers = {
             // Obtener firmas actuales
             const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
 
+            // Obtener retenciones activas del documento
+            console.log(`🔍 docInfo.retention_data RAW:`, docInfo.retention_data);
+            const retentionData = docInfo.retention_data
+              ? (typeof docInfo.retention_data === 'string' ? JSON.parse(docInfo.retention_data) : docInfo.retention_data).filter(r => r.activa)
+              : [];
+            console.log(`📦 Retenciones activas a pasar al PDF:`, retentionData);
+            console.log(`📊 Cantidad de retenciones activas:`, retentionData.length);
+
             // Regenerar plantilla con firmas
-            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales);
+            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, retentionData);
 
             // Guardar en archivo temporal
             const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
@@ -4075,13 +4201,33 @@ const resolvers = {
             [documentId, user.id]
           );
 
+          // Emitir evento WebSocket para que la notificación desaparezca en tiempo real
+          websocketService.emitNotificationDeleted(documentId, null, user.id, 'signature_request');
+
           // 2. Notificar al creador del documento que alguien firmó (si no es quien firmó)
           if (doc.uploaded_by !== user.id) {
-            await query(
+            const insertResult = await query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-               VALUES ($1, $2, $3, $4, $5)`,
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id`,
               [doc.uploaded_by, 'document_signed', documentId, user.id, doc.title]
             );
+
+            // Emitir evento WebSocket con información completa del actor
+            if (insertResult.rows.length > 0) {
+              websocketService.emitNotificationCreated(doc.uploaded_by, {
+                id: insertResult.rows[0].id,
+                type: 'document_signed',
+                document_id: documentId,
+                actor_id: user.id,
+                document_title: doc.title,
+                actor: {
+                  id: user.id,
+                  name: user.name,
+                  email: user.email
+                }
+              });
+            }
           }
 
           // 3. Si el documento NO está completado, notificar al siguiente firmante en la fila
@@ -4103,6 +4249,14 @@ const resolvers = {
                 // ========== SIGUIENTE ES GRUPO DE CAUSACIÓN: Notificar a TODOS ==========
                 console.log(`📋 Siguiente firmante es grupo de causación: ${nextInfo.grupo_codigo}`);
 
+                // Obtener información del creador del documento para incluir en eventos
+                const creatorInfo = await query('SELECT id, name, email FROM users WHERE id = $1', [doc.uploaded_by]);
+                const actorData = creatorInfo.rows.length > 0 ? {
+                  id: creatorInfo.rows[0].id,
+                  name: creatorInfo.rows[0].name,
+                  email: creatorInfo.rows[0].email
+                } : { id: doc.uploaded_by, name: null, email: null };
+
                 const membersResult = await query(`
                   SELECT u.id, u.name, u.email, u.email_notifications
                   FROM causacion_integrantes ci
@@ -4122,6 +4276,18 @@ const resolvers = {
                      RETURNING id`,
                     [member.id, 'signature_request', documentId, doc.uploaded_by, doc.title]
                   );
+
+                  // Emitir evento WebSocket si se creó la notificación
+                  if (insertResult.rows.length > 0) {
+                    websocketService.emitNotificationCreated(member.id, {
+                      id: insertResult.rows[0].id,
+                      type: 'signature_request',
+                      document_id: documentId,
+                      actor_id: doc.uploaded_by,
+                      document_title: doc.title,
+                      actor: actorData
+                    });
+                  }
 
                   if (insertResult.rows.length > 0 && member.email_notifications) {
                     try {
@@ -4162,6 +4328,24 @@ const resolvers = {
 
                   if (insertResult.rows.length > 0) {
                     console.log(`✅ Notificación creada para siguiente firmante: ${nextSigner.name}`);
+
+                    // Obtener información del creador del documento para el evento
+                    const creatorInfo2 = await query('SELECT id, name, email FROM users WHERE id = $1', [doc.uploaded_by]);
+                    const actorData2 = creatorInfo2.rows.length > 0 ? {
+                      id: creatorInfo2.rows[0].id,
+                      name: creatorInfo2.rows[0].name,
+                      email: creatorInfo2.rows[0].email
+                    } : { id: doc.uploaded_by, name: null, email: null };
+
+                    // Emitir evento WebSocket
+                    websocketService.emitNotificationCreated(nextSigner.id, {
+                      id: insertResult.rows[0].id,
+                      type: 'signature_request',
+                      document_id: documentId,
+                      actor_id: doc.uploaded_by,
+                      document_title: doc.title,
+                      actor: actorData2
+                    });
 
                     if (nextSigner.email_notifications) {
                       try {
@@ -4500,50 +4684,72 @@ const resolvers = {
                     const currentRetentions = metadataResult.rows[0].retention_data || [];
 
                     console.log(`📋 metadata.causacionDetails:`, metadata?.causacionDetails);
-                    console.log(`🔍 Buscando centro de costo donde responsable_centro_id = ${user.id}`);
 
-                    // Buscar el índice del centro de costo donde el usuario es responsable
-                    let centroCostoIndex = -1;
+                    // Determinar centroCostoIndex: usar el pasado como parámetro, o auto-detectar
+                    let finalCentroCostoIndex = -1;
                     let maxPercentage = 100; // Por defecto 100% si no hay causacionDetails
 
-                    if (metadata && metadata.causacionDetails && metadata.causacionDetails.length > 0) {
-                      // Documento CON plantilla: buscar centro de costo específico
-                      centroCostoIndex = metadata.causacionDetails.findIndex(
-                        detail => {
-                          console.log(`   Comparando: detail.responsable_centro_id (${detail.responsable_centro_id}) === user.id (${user.id})`);
-                          return detail.responsable_centro_id === user.id;
-                        }
-                      );
+                    if (centroCostoIndex !== undefined && centroCostoIndex !== null) {
+                      // Usar el centroCostoIndex pasado como parámetro desde el frontend
+                      finalCentroCostoIndex = parseInt(centroCostoIndex);
+                      console.log(`📍 Usando centroCostoIndex del parámetro: ${finalCentroCostoIndex}`);
 
-                      if (centroCostoIndex >= 0) {
-                        const centroCosto = metadata.causacionDetails[centroCostoIndex];
-                        maxPercentage = parseFloat(centroCosto.porcentaje_centro || 100);
-                        console.log(`✅ Centro de costo encontrado: ${centroCosto.centro_costo}, max: ${maxPercentage}%`);
+                      // Validar que el usuario sea responsable de este centro
+                      if (metadata && metadata.causacionDetails && metadata.causacionDetails[finalCentroCostoIndex]) {
+                        const centroCosto = metadata.causacionDetails[finalCentroCostoIndex];
+                        if (centroCosto.responsable_centro_id === user.id) {
+                          maxPercentage = parseFloat(centroCosto.porcentaje_centro || 100);
+                          console.log(`✅ Centro de costo validado: ${centroCosto.centro_costo}, max: ${maxPercentage}%`);
+                        } else {
+                          console.error(`❌ Usuario ${userName} (ID: ${user.id}) NO es responsable del centro de costo ${finalCentroCostoIndex}`);
+                          throw new Error('No eres responsable del centro de costo seleccionado');
+                        }
                       } else {
-                        console.warn(`⚠️ Usuario ${userName} (ID: ${user.id}) no es responsable de ningún centro de costo en metadata`);
-                        // Asignar índice 0 por defecto para documentos sin plantilla
-                        centroCostoIndex = 0;
-                        console.log(`ℹ️  Usando centroCostoIndex = 0 por defecto (documento sin plantilla completa)`);
+                        console.warn(`⚠️ centroCostoIndex ${finalCentroCostoIndex} no encontrado en metadata`);
                       }
                     } else {
-                      // Documento SIN plantilla: usar índice 0 por defecto
-                      centroCostoIndex = 0;
-                      console.log(`ℹ️  Documento sin causacionDetails. Usando centroCostoIndex = 0, maxPercentage = 100%`);
+                      // Auto-detectar el centroCostoIndex (fallback para compatibilidad con flujos antiguos)
+                      console.log(`🔍 Auto-detectando centro de costo donde responsable_centro_id = ${user.id}`);
+
+                      if (metadata && metadata.causacionDetails && metadata.causacionDetails.length > 0) {
+                        // Documento CON plantilla: buscar centro de costo específico
+                        finalCentroCostoIndex = metadata.causacionDetails.findIndex(
+                          detail => {
+                            console.log(`   Comparando: detail.responsable_centro_id (${detail.responsable_centro_id}) === user.id (${user.id})`);
+                            return detail.responsable_centro_id === user.id;
+                          }
+                        );
+
+                        if (finalCentroCostoIndex >= 0) {
+                          const centroCosto = metadata.causacionDetails[finalCentroCostoIndex];
+                          maxPercentage = parseFloat(centroCosto.porcentaje_centro || 100);
+                          console.log(`✅ Centro de costo encontrado: ${centroCosto.centro_costo}, max: ${maxPercentage}%`);
+                        } else {
+                          console.warn(`⚠️ Usuario ${userName} (ID: ${user.id}) no es responsable de ningún centro de costo en metadata`);
+                          // Asignar índice 0 por defecto para documentos sin plantilla
+                          finalCentroCostoIndex = 0;
+                          console.log(`ℹ️  Usando centroCostoIndex = 0 por defecto (documento sin plantilla completa)`);
+                        }
+                      } else {
+                        // Documento SIN plantilla: usar índice 0 por defecto
+                        finalCentroCostoIndex = 0;
+                        console.log(`ℹ️  Documento sin causacionDetails. Usando centroCostoIndex = 0, maxPercentage = 100%`);
+                      }
                     }
 
-                    console.log(`📍 centroCostoIndex final: ${centroCostoIndex}`);
+                    console.log(`📍 centroCostoIndex final: ${finalCentroCostoIndex}`);
 
                     // Validar que no exceda el porcentaje asignado
                     if (retentionPercentage <= maxPercentage) {
                       // Verificar si ya existe una retención activa para este centro de costo
                       const existingIndex = currentRetentions.findIndex(
-                        r => String(r.userId) === String(user.id) && r.centroCostoIndex === centroCostoIndex && r.activa
+                        r => String(r.userId) === String(user.id) && r.centroCostoIndex === finalCentroCostoIndex && r.activa
                       );
 
                       const retentionItem = {
                         userId: String(user.id),
                         userName: userName,
-                        centroCostoIndex,
+                        centroCostoIndex: finalCentroCostoIndex,
                         motivo: retentionReason,
                         porcentajeRetenido: retentionPercentage,
                         fechaRetencion: new Date().toISOString(),
@@ -4552,10 +4758,10 @@ const resolvers = {
 
                       if (existingIndex >= 0) {
                         currentRetentions[existingIndex] = retentionItem;
-                        console.log(`✅ Retención actualizada para centro de costo ${centroCostoIndex}`);
+                        console.log(`✅ Retención actualizada para centro de costo ${finalCentroCostoIndex}`);
                       } else {
                         currentRetentions.push(retentionItem);
-                        console.log(`✅ Nueva retención creada para centro de costo ${centroCostoIndex}`);
+                        console.log(`✅ Nueva retención creada para centro de costo ${finalCentroCostoIndex}`);
                       }
 
                       // Guardar en retention_data
@@ -4566,6 +4772,79 @@ const resolvers = {
 
                       console.log(`✅ Documento ${documentId} retenido por ${userName} (${retentionPercentage}%): ${retentionReason}`);
                       console.log(`📊 retention_data guardado:`, JSON.stringify(currentRetentions, null, 2));
+
+                      // ========== REGENERAR PDF CON RETENCIONES ==========
+                      if (metadata && Object.keys(metadata).length > 0) {
+                        console.log('📋 Regenerando PDF FV después de firmar con retención...');
+
+                        try {
+                          const fs = require('fs').promises;
+                          const path = require('path');
+
+                          const templateData = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+
+                          // Obtener firmas actuales
+                          const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
+
+                          // Usar las retenciones que acabamos de guardar
+                          const activeRetentions = currentRetentions.filter(r => r.activa);
+                          console.log(`📦 Retenciones activas después de retener:`, activeRetentions);
+
+                          // Regenerar PDF con retenciones
+                          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
+
+                          // Guardar PDF en archivo temporal
+                          const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
+                          await fs.mkdir(tempDir, { recursive: true });
+                          const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
+                          await fs.writeFile(tempPlanillaPath, templatePdfBuffer);
+
+                          // Obtener info del documento para backups
+                          const docBackupInfo = await query(
+                            'SELECT file_path, original_pdf_backup FROM documents WHERE id = $1',
+                            [documentId]
+                          );
+
+                          if (docBackupInfo.rows.length > 0) {
+                            const relativePath = docBackupInfo.rows[0].file_path.replace(/^uploads\//, '');
+                            const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
+
+                            // Cargar backups
+                            let backupFilePaths = [];
+                            if (docBackupInfo.rows[0].original_pdf_backup) {
+                              const backupPathsArray = JSON.parse(docBackupInfo.rows[0].original_pdf_backup);
+                              for (const relPath of backupPathsArray) {
+                                const backupRelativePath = relPath.replace(/^uploads\//, '');
+                                const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+                                try {
+                                  await fs.access(backupFullPath);
+                                  backupFilePaths.push(backupFullPath);
+                                } catch (e) {
+                                  console.warn(`⚠️ Backup no encontrado: ${backupFullPath}`);
+                                }
+                              }
+                            }
+
+                            // Fusionar PDFs
+                            const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
+                            const filesToMerge = [tempPlanillaPath, ...backupFilePaths];
+                            await mergePDFs(filesToMerge, tempMergedPath);
+
+                            // Copiar merged PDF sobre el PDF actual
+                            await fs.copyFile(tempMergedPath, currentPdfPath);
+
+                            // Limpiar archivos temporales
+                            await cleanupTempFiles([tempPlanillaPath, tempMergedPath]);
+
+                            console.log('✅ PDF regenerado exitosamente después de firmar con retención');
+                          }
+                        } catch (pdfError) {
+                          console.error('❌ Error al regenerar PDF con retención:', pdfError);
+                          // No lanzar error para no fallar la firma
+                        }
+                      } else {
+                        console.log('ℹ️ Documento sin metadata, PDF no se regenerará');
+                      }
                     } else {
                       console.warn(`⚠️ Porcentaje de retención (${retentionPercentage}%) excede el asignado (${maxPercentage}%)`);
                     }
@@ -4714,56 +4993,6 @@ const resolvers = {
     },
 
     /**
-     * Releases a retained FV document
-     *
-     * BUSINESS RULE: Only the same user who retained can release
-     * BUSINESS RULE: Can only release actively retained documents
-     *
-     * @param {Object} _ - Parent (unused)
-     * @param {Object} args - Arguments object
-     * @param {number} args.documentId - ID of the document
-     * @param {Object} context - GraphQL context
-     * @param {Object} context.user - Authenticated user
-     * @returns {Promise<Boolean>} Success status
-     * @throws {Error} When unauthorized or document not retained
-     */
-    releaseDocument: async (_, { documentId }, { user }) => {
-      if (!user) throw new Error('No autenticado');
-
-      // Buscar retención activa
-      const retentionCheck = await query(
-        `SELECT id, retained_by
-         FROM document_retentions
-         WHERE document_id = $1 AND released_at IS NULL`,
-        [documentId]
-      );
-
-      if (retentionCheck.rows.length === 0) {
-        throw new Error('Este documento no tiene una retención activa');
-      }
-
-      const retention = retentionCheck.rows[0];
-
-      // Verificar que el usuario es quien retuvo
-      if (retention.retained_by !== user.id) {
-        throw new Error('Solo quien retuvo el documento puede liberarlo');
-      }
-
-      // Liberar la retención
-      const now = new Date().toISOString();
-      await query(
-        `UPDATE document_retentions
-         SET released_at = $1, released_by = $2
-         WHERE id = $3`,
-        [now, user.id, retention.id]
-      );
-
-      console.log(`✅ Documento ${documentId} liberado por ${user.name}`);
-
-      return true;
-    },
-
-    /**
      * Marks a single notification as read
      *
      * BUSINESS RULE: Users can only mark their own notifications as read.
@@ -4788,6 +5017,9 @@ const resolvers = {
         throw new Error('Notificación no encontrada');
       }
 
+      // Emitir evento WebSocket
+      websocketService.emitNotificationRead(notificationId, user.id);
+
       return result.rows[0];
     },
 
@@ -4811,6 +5043,9 @@ const resolvers = {
         'UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE',
         [user.id]
       );
+
+      // Emitir evento WebSocket
+      websocketService.emitAllNotificationsRead(user.id);
 
       return true;
     },
@@ -4884,6 +5119,84 @@ const resolvers = {
 
         await client.query('COMMIT');
 
+        // ========== REGENERAR PDF FV SI ES NECESARIO ==========
+        // Usar query global en lugar de client después del COMMIT
+        const docTypeResult = await query(
+          'SELECT dt.code FROM documents d LEFT JOIN document_types dt ON d.document_type_id = dt.id WHERE d.id = $1',
+          [documentId]
+        );
+
+        const isFVDocument = docTypeResult.rows.length > 0 && docTypeResult.rows[0].code === 'FV';
+        const hasMetadata = metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0;
+
+        if (isFVDocument && hasMetadata) {
+          console.log('📋 Regenerando PDF FV después de retener...');
+
+          const templateData = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+
+          // Obtener firmas actuales
+          const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
+
+          // Obtener retenciones activas actualizadas (después de retener)
+          const activeRetentions = currentRetentions.filter(r => r.activa);
+          console.log(`📦 Retenciones activas después de retener:`, activeRetentions);
+
+          // Regenerar PDF con retenciones
+          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
+
+          // Guardar PDF en archivo temporal
+          const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
+          await fs.mkdir(tempDir, { recursive: true });
+          const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
+          await fs.writeFile(tempPlanillaPath, templatePdfBuffer);
+
+          // Obtener ruta del PDF actual
+          const docPathResult = await query(
+            'SELECT file_path, original_pdf_backup FROM documents WHERE id = $1',
+            [documentId]
+          );
+          const relativePath = docPathResult.rows[0].file_path.replace(/^uploads\//, '');
+          const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
+
+          // Cargar backup del PDF original (sin firmas)
+          let backupFilePaths = [];
+          if (docPathResult.rows[0].original_pdf_backup) {
+            try {
+              const backupPathsArray = JSON.parse(docPathResult.rows[0].original_pdf_backup);
+              for (let i = 0; i < backupPathsArray.length; i++) {
+                const relPath = backupPathsArray[i];
+                const backupRelativePath = relPath.replace(/^uploads\//, '');
+                const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+                const backupContent = await fs.readFile(fullBackupPath);
+                backupFilePaths.push(backupContent);
+              }
+            } catch (err) {
+              console.warn('⚠️ No se pudieron cargar los backups, solo se usará la plantilla:', err.message);
+            }
+          }
+
+          // Combinar PDFs
+          const PDFDocument = require('pdf-lib').PDFDocument;
+          const mergedPdf = await PDFDocument.create();
+
+          // Agregar plantilla
+          const templatePdfDoc = await PDFDocument.load(templatePdfBuffer);
+          const templatePages = await mergedPdf.copyPages(templatePdfDoc, templatePdfDoc.getPageIndices());
+          templatePages.forEach(page => mergedPdf.addPage(page));
+
+          // Agregar backups
+          for (const backupBuffer of backupFilePaths) {
+            const backupPdfDoc = await PDFDocument.load(backupBuffer);
+            const backupPages = await mergedPdf.copyPages(backupPdfDoc, backupPdfDoc.getPageIndices());
+            backupPages.forEach(page => mergedPdf.addPage(page));
+          }
+
+          const finalPdfBytes = await mergedPdf.save();
+          await fs.writeFile(currentPdfPath, finalPdfBytes);
+
+          console.log('✅ PDF regenerado exitosamente después de retener');
+        }
+
         return {
           success: true,
           message: 'Documento retenido exitosamente',
@@ -4908,7 +5221,7 @@ const resolvers = {
         await client.query('BEGIN');
 
         const docResult = await client.query(
-          'SELECT retention_data FROM documents WHERE id = $1',
+          'SELECT d.id, d.metadata, d.retention_data, d.file_path, dt.code as document_type_code FROM documents d LEFT JOIN document_types dt ON d.document_type_id = dt.id WHERE d.id = $1',
           [documentId]
         );
 
@@ -4916,16 +5229,37 @@ const resolvers = {
           throw new Error('Documento no encontrado');
         }
 
-        const currentRetentions = docResult.rows[0].retention_data || [];
+        const docInfo = docResult.rows[0];
+        const currentRetentions = docInfo.retention_data || [];
 
-        // Find and deactivate retention
-        const retentionIndex = currentRetentions.findIndex(
-          r => r.userId === user.id && r.centroCostoIndex === centroCostoIndex && r.activa
-        );
+        console.log('🔍 [RELEASE] Buscando retención para liberar...');
+        console.log('🔍 [RELEASE] Usuario actual:', { id: user.id, name: user.name });
+        console.log('🔍 [RELEASE] Centro de costo índice recibido:', centroCostoIndex, typeof centroCostoIndex);
+        console.log('🔍 [RELEASE] Retenciones actuales:', JSON.stringify(currentRetentions, null, 2));
+
+        // Find and deactivate retention - usando comparaciones robustas con conversión de tipos
+        const retentionIndex = currentRetentions.findIndex(r => {
+          const userIdMatch = parseInt(r.userId) === parseInt(user.id);
+          const indexMatch = parseInt(r.centroCostoIndex) === parseInt(centroCostoIndex);
+          const isActive = r.activa === true;
+
+          console.log(`🔍 [RELEASE] Evaluando retención:`, {
+            retention: r,
+            userIdMatch,
+            indexMatch,
+            isActive,
+            matches: userIdMatch && indexMatch && isActive
+          });
+
+          return userIdMatch && indexMatch && isActive;
+        });
 
         if (retentionIndex < 0) {
+          console.error('❌ [RELEASE] No se encontró retención activa');
           throw new Error('No tienes retención activa para este centro de costo');
         }
+
+        console.log('✅ [RELEASE] Retención encontrada en índice:', retentionIndex);
 
         currentRetentions[retentionIndex].activa = false;
 
@@ -4935,6 +5269,82 @@ const resolvers = {
         );
 
         await client.query('COMMIT');
+
+        // ========== REGENERAR PDF FV SI ES NECESARIO ==========
+        const isFVDocument = docInfo.document_type_code === 'FV';
+        const hasMetadata = docInfo.metadata && typeof docInfo.metadata === 'object' && Object.keys(docInfo.metadata).length > 0;
+
+        if (isFVDocument && hasMetadata) {
+          console.log('📋 Regenerando PDF FV después de liberar retención...');
+
+          const templateData = typeof docInfo.metadata === 'string'
+            ? JSON.parse(docInfo.metadata)
+            : docInfo.metadata;
+
+          // Obtener firmas actuales
+          const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
+
+          // Obtener retenciones activas actualizadas (después de liberar)
+          const activeRetentions = currentRetentions.filter(r => r.activa);
+          console.log(`📦 Retenciones activas después de liberar:`, activeRetentions);
+
+          // Regenerar PDF con retenciones actualizadas
+          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
+
+          // Guardar PDF en archivo temporal
+          const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
+          await fs.mkdir(tempDir, { recursive: true });
+          const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
+          await fs.writeFile(tempPlanillaPath, templatePdfBuffer);
+
+          // Obtener ruta del PDF actual
+          const relativePath = docInfo.file_path.replace(/^uploads\//, '');
+          const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
+
+          // Cargar backup del PDF original (sin firmas)
+          const backupResult = await query(
+            'SELECT original_pdf_backup FROM documents WHERE id = $1',
+            [documentId]
+          );
+
+          let backupFilePaths = [];
+          if (backupResult.rows[0].original_pdf_backup) {
+            try {
+              const backupPathsArray = JSON.parse(backupResult.rows[0].original_pdf_backup);
+              for (let i = 0; i < backupPathsArray.length; i++) {
+                const relPath = backupPathsArray[i];
+                const backupRelativePath = relPath.replace(/^uploads\//, '');
+                const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+                const backupContent = await fs.readFile(fullBackupPath);
+                backupFilePaths.push(backupContent);
+              }
+            } catch (err) {
+              console.warn('⚠️ No se pudieron cargar los backups, solo se usará la plantilla:', err.message);
+            }
+          }
+
+          // Combinar PDFs
+          const PDFDocument = require('pdf-lib').PDFDocument;
+          const mergedPdf = await PDFDocument.create();
+
+          // Agregar plantilla
+          const templatePdfDoc = await PDFDocument.load(templatePdfBuffer);
+          const templatePages = await mergedPdf.copyPages(templatePdfDoc, templatePdfDoc.getPageIndices());
+          templatePages.forEach(page => mergedPdf.addPage(page));
+
+          // Agregar backups
+          for (const backupBuffer of backupFilePaths) {
+            const backupPdfDoc = await PDFDocument.load(backupBuffer);
+            const backupPages = await mergedPdf.copyPages(backupPdfDoc, backupPdfDoc.getPageIndices());
+            backupPages.forEach(page => mergedPdf.addPage(page));
+          }
+
+          const finalPdfBytes = await mergedPdf.save();
+          await fs.writeFile(currentPdfPath, finalPdfBytes);
+
+          console.log('✅ PDF regenerado exitosamente después de liberar retención');
+        }
+
         return true;
       } catch (error) {
         await client.query('ROLLBACK');

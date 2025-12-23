@@ -8,13 +8,15 @@ const { generateFacturaHTML } = require('./facturaTemplateHTML');
  * @param {Object} templateData - Datos del template de factura
  * @param {Object} firmas - Objeto con firmas: { 'nombre_persona': 'nombre_firmante' }
  * @param {boolean} isRejected - Si el documento fue rechazado (muestra marca de agua)
+ * @param {Array} retentionData - Array con las retenciones activas del documento
  * @returns {Promise<Buffer>} PDF generado con el template
  */
-async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected = false) {
+async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected = false, retentionData = []) {
   let browser = null;
 
   try {
     console.log('📋 Generando PDF de plantilla de factura (HTML → PDF)...');
+    console.log('🔍 Retenciones a incluir en PDF:', retentionData);
 
     const htmlContent = generateFacturaHTML({
       consecutivo: templateData.consecutivo || '',
@@ -31,6 +33,7 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
       totalPorcentaje: templateData.totalPorcentaje || 0,
       observaciones: templateData.observaciones || '',
       firmas: firmas,
+      retentionData: retentionData,
       isRejected: isRejected
     });
 

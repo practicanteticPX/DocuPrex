@@ -148,6 +148,9 @@ function Dashboard({ user, onLogout }) {
   const [searchTermUpload, setSearchTermUpload] = useState('');
   const [searchTermModal, setSearchTermModal] = useState('');
 
+  // Estado para WebSocket
+  const [socket, setSocket] = useState(null);
+
   // Estado para checkbox "Yo voy a firmar este documento"
   const [willSignDocument, setWillSignDocument] = useState(false);
 
@@ -185,12 +188,14 @@ function Dashboard({ user, onLogout }) {
 
   // Estados para modal de retención de facturas (usuario con rol RESP_CTRO_COST)
   const [showRetentionModal, setShowRetentionModal] = useState(false);
-  const [retentionData, setRetentionData] = useState({ percentage: '', reason: '', wantsRetention: null });
+  const [retentionData, setRetentionData] = useState({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
   const [pendingSignWithRetention, setPendingSignWithRetention] = useState(null); // { docId, realSigner }
+  const [availableCostCenters, setAvailableCostCenters] = useState([]); // Centros de costo disponibles para el usuario
 
   // Estados para modal de liberación de facturas retenidas
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [pendingReleaseDocument, setPendingReleaseDocument] = useState(null); // { docId, centroCostoIndex }
+  const [releasingDocument, setReleasingDocument] = useState(false);
 
   // Estados para configuración
   const [showSettings, setShowSettings] = useState(false);
@@ -283,13 +288,16 @@ function Dashboard({ user, onLogout }) {
     const wsUrl = getWebSocketUrl();
     console.log('🔌 Conectando WebSocket a:', wsUrl);
 
-    const socket = io(wsUrl, {
+    const newSocket = io(wsUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: Infinity
     });
+
+    // Guardar socket en el estado para pasarlo a componentes hijos
+    setSocket(newSocket);
 
     // Función para recargar todos los datos
     const reloadAllData = () => {
@@ -300,50 +308,51 @@ function Dashboard({ user, onLogout }) {
       loadRetainedDocuments();
     };
 
-    socket.on('connect', () => {
-      console.log('✅ WebSocket conectado:', socket.id);
+    newSocket.on('connect', () => {
+      console.log('✅ WebSocket conectado:', newSocket.id);
       reloadAllData(); // Recargar datos al reconectar
     });
 
-    socket.on('disconnect', (reason) => {
+    newSocket.on('disconnect', (reason) => {
       console.log('❌ WebSocket desconectado:', reason);
     });
 
-    socket.on('connect_error', (error) => {
+    newSocket.on('connect_error', (error) => {
       console.error('⚠️ Error de conexión WebSocket:', error.message);
     });
 
-    socket.on('reconnect_attempt', (attempt) => {
+    newSocket.on('reconnect_attempt', (attempt) => {
       console.log(`🔄 Reintentando conexión WebSocket (intento ${attempt})...`);
     });
 
-    socket.on('reconnect', (attempt) => {
+    newSocket.on('reconnect', (attempt) => {
       console.log(`✅ WebSocket reconectado después de ${attempt} intentos`);
     });
 
-    socket.on('document:signed', (data) => {
+    newSocket.on('document:signed', (data) => {
       console.log('📤 Documento firmado recibido:', data);
       reloadAllData();
     });
 
-    socket.on('document:rejected', (data) => {
+    newSocket.on('document:rejected', (data) => {
       console.log('📤 Documento rechazado recibido:', data);
       reloadAllData();
     });
 
-    socket.on('document:deleted', (data) => {
+    newSocket.on('document:deleted', (data) => {
       console.log('📤 Documento eliminado recibido:', data);
       reloadAllData();
     });
 
-    socket.on('document:updated', (data) => {
+    newSocket.on('document:updated', (data) => {
       console.log('📤 Documento actualizado recibido:', data);
       reloadAllData();
     });
 
     return () => {
       console.log('🔌 Desconectando WebSocket');
-      socket.disconnect();
+      newSocket.disconnect();
+      setSocket(null);
     };
   }, []);
 
@@ -2162,7 +2171,8 @@ function Dashboard({ user, onLogout }) {
       'pending': setPendingDocsTypeFilter,
       'my': setMyDocsTypeFilter,
       'signed': setSignedDocsTypeFilter,
-      'rejected': setRejectedDocsTypeFilter
+      'rejected': setRejectedDocsTypeFilter,
+      'retained': setRetainedDocsTypeFilter
     };
 
     const setter = setters[section];
@@ -2834,9 +2844,35 @@ function Dashboard({ user, onLogout }) {
 
       if (isFV && isRespCtroCost) {
         console.log('✅ Mostrar modal de retención');
+
+        // Detectar centros de costo donde el usuario es responsable
+        const userCostCenters = [];
+        if (doc.metadata && doc.metadata.causacionDetails && Array.isArray(doc.metadata.causacionDetails)) {
+          doc.metadata.causacionDetails.forEach((centro, index) => {
+            if (String(centro.responsable_centro_id) === String(user.id)) {
+              userCostCenters.push({
+                index: index,
+                nombre: centro.centro_costo_nombre || `Centro ${index + 1}`,
+                porcentaje: parseFloat(centro.porcentaje_centro || 0)
+              });
+            }
+          });
+        }
+        console.log('🏢 Centros de costo del usuario:', userCostCenters);
+
+        setAvailableCostCenters(userCostCenters);
+
+        // Si solo hay un centro, pre-seleccionarlo
+        const preselectedIndex = userCostCenters.length === 1 ? userCostCenters[0].index : null;
+
         // Mostrar modal de retención
         setPendingSignWithRetention({ docId, realSigner: null });
-        setRetentionData({ percentage: '', reason: '', wantsRetention: null });
+        setRetentionData({
+          percentage: '',
+          reason: '',
+          wantsRetention: null,
+          selectedCentroIndex: preselectedIndex
+        });
         setShowRetentionModal(true);
       } else {
         console.log('⏭️ Firmar directamente sin retención');
@@ -2879,7 +2915,8 @@ function Dashboard({ user, onLogout }) {
               $consecutivo: String,
               $realSignerName: String,
               $retentionPercentage: Int,
-              $retentionReason: String
+              $retentionReason: String,
+              $centroCostoIndex: Int
             ) {
               signDocument(
                 documentId: $documentId,
@@ -2887,7 +2924,8 @@ function Dashboard({ user, onLogout }) {
                 consecutivo: $consecutivo,
                 realSignerName: $realSignerName,
                 retentionPercentage: $retentionPercentage,
-                retentionReason: $retentionReason
+                retentionReason: $retentionReason,
+                centroCostoIndex: $centroCostoIndex
               ) {
                 id
                 status
@@ -2903,7 +2941,8 @@ function Dashboard({ user, onLogout }) {
             consecutivo: consecutivo || null,
             realSignerName: realSigner || null,
             retentionPercentage: retention?.percentage || null,
-            retentionReason: retention?.reason || null
+            retentionReason: retention?.reason || null,
+            centroCostoIndex: retention?.centroCostoIndex !== undefined ? retention.centroCostoIndex : null
           }
         },
         {
@@ -3028,9 +3067,31 @@ function Dashboard({ user, onLogout }) {
         const isRespCtroCost = doc && hasRespCtroCostRole(doc);
 
         if (isFV && isRespCtroCost) {
+          // Detectar centros de costo donde el usuario es responsable
+          const userCostCenters = [];
+          if (doc.metadata && doc.metadata.causacionDetails && Array.isArray(doc.metadata.causacionDetails)) {
+            doc.metadata.causacionDetails.forEach((centro, index) => {
+              if (String(centro.responsable_centro_id) === String(user.id)) {
+                userCostCenters.push({
+                  index: index,
+                  nombre: centro.centro_costo_nombre || `Centro ${index + 1}`,
+                  porcentaje: parseFloat(centro.porcentaje_centro || 0)
+                });
+              }
+            });
+          }
+
+          setAvailableCostCenters(userCostCenters);
+          const preselectedIndex = userCostCenters.length === 1 ? userCostCenters[0].index : null;
+
           // Guardar el nombre del firmante real y mostrar modal de retención
           setPendingSignWithRetention({ docId: pendingDocumentAction.docId, realSigner: signerName });
-          setRetentionData({ percentage: '', reason: '', wantsRetention: null });
+          setRetentionData({
+            percentage: '',
+            reason: '',
+            wantsRetention: null,
+            selectedCentroIndex: preselectedIndex
+          });
           setShowRetentionModal(true);
         } else {
           // Ejecutar firma directamente con el nombre real, sin retención
@@ -3048,22 +3109,27 @@ function Dashboard({ user, onLogout }) {
   /**
    * Maneja la confirmación del modal de retención
    */
-  const handleRetentionConfirm = (wantsRetention, percentage = null, reason = null) => {
+  const handleRetentionConfirm = (wantsRetention, percentage = null, reason = null, centroCostoIndex = null) => {
     setShowRetentionModal(false);
 
     if (pendingSignWithRetention) {
       const { docId, realSigner } = pendingSignWithRetention;
 
-      if (wantsRetention && percentage && reason) {
+      if (wantsRetention && percentage && reason && centroCostoIndex !== null) {
         // Firmar con retención
-        handleSignDocument(docId, realSigner, { percentage: parseInt(percentage), reason });
+        handleSignDocument(docId, realSigner, {
+          percentage: parseInt(percentage),
+          reason,
+          centroCostoIndex: parseInt(centroCostoIndex)
+        });
       } else {
         // Firmar sin retención
         handleSignDocument(docId, realSigner);
       }
 
       setPendingSignWithRetention(null);
-      setRetentionData({ percentage: '', reason: '', wantsRetention: null });
+      setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
+      setAvailableCostCenters([]);
     }
   };
 
@@ -3203,7 +3269,7 @@ function Dashboard({ user, onLogout }) {
 
       // Recargar documentos
       await loadRetainedDocuments();
-      if (selectedDocument && selectedDocument.id === documentId) {
+      if (viewingDocument && viewingDocument.id === documentId) {
         // Reload current document
         loadDocumentDetails(documentId);
       }
@@ -3257,7 +3323,7 @@ function Dashboard({ user, onLogout }) {
       // Recargar documentos
       await loadRetainedDocuments();
       await loadSignedDocuments();
-      if (selectedDocument && selectedDocument.id === documentId) {
+      if (viewingDocument && viewingDocument.id === documentId) {
         loadDocumentDetails(documentId);
       }
 
@@ -4646,7 +4712,9 @@ function Dashboard({ user, onLogout }) {
               {retainedDocuments.length > 0 && (
                 <button className={`ds-nav-item ${activeTab === 'retained' ? 'active' : ''}`} onClick={() => setActiveTab('retained')}>
                   <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 15V3M12 15L8 11M12 15L16 11M2 17L2.621 19.485C2.72915 19.9177 2.97882 20.3018 3.33033 20.5763C3.68184 20.8508 4.11501 21.0001 4.561 21H19.439C19.885 21.0001 20.3182 20.8508 20.6697 20.5763C21.0212 20.3018 21.2708 19.9177 21.379 19.485L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V11M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+                    <path d="M12 16.5V18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   Retenidos
 
@@ -4659,7 +4727,7 @@ function Dashboard({ user, onLogout }) {
         {/* Header */}
         <header className="dashboard-header">
           <div className="header-right">
-            <Notifications onNotificationClick={handleNotificationClick} />
+            <Notifications onNotificationClick={handleNotificationClick} socket={socket} />
 
             <div style={{ position: 'relative' }}>
               <button
@@ -5022,8 +5090,9 @@ function Dashboard({ user, onLogout }) {
                 onClick={() => setActiveTab('retained')}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V11M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+                  <path d="M12 16.5V18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
                 Retenidos
                 {!loadingRetained && retainedDocuments.length > 0 && (
@@ -7214,10 +7283,7 @@ function Dashboard({ user, onLogout }) {
                         const matchesStatus = retainedDocsStatusFilter === 'all' ||
                                              (retainedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                              doc.status === retainedDocsStatusFilter;
-                        const matchesType = retainedDocsTypeFilter.length === 0 ||
-                          retainedDocsTypeFilter.includes(doc.documentType?.code) ||
-                          (retainedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
-                        return matchesSearch && matchesStatus && matchesType;
+                        return matchesSearch && matchesStatus;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''}`;
                     })()}
@@ -7280,62 +7346,6 @@ function Dashboard({ user, onLogout }) {
                       </svg>
                       En curso
                     </button>
-
-                    {/* Botón de filtro por tipo de documento */}
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        className={`filter-type-btn ${retainedDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'retained' ? null : 'retained')}
-                        title="Filtrar por tipo de documento"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-
-                      {/* Dropdown de filtros */}
-                      {showTypeFilterDropdown === 'retained' && (
-                        <div className="type-filter-dropdown">
-                          <div className="type-filter-header">
-                            <span>Tipo de documento</span>
-                            {retainedDocsTypeFilter.length > 0 && (
-                              <button
-                                className="clear-all-filters-btn"
-                                onClick={() => setRetainedDocsTypeFilter([])}
-                              >
-                                Limpiar
-                              </button>
-                            )}
-                          </div>
-                          <div className="type-filter-options">
-                            <label className="type-filter-option">
-                              <input
-                                type="checkbox"
-                                checked={retainedDocsTypeFilter.includes('NONE')}
-                                onChange={() => toggleDocTypeFilter('retained', 'NONE')}
-                              />
-                              <span>Sin tipo específico</span>
-                            </label>
-                            <label className="type-filter-option">
-                              <input
-                                type="checkbox"
-                                checked={retainedDocsTypeFilter.includes('SA')}
-                                onChange={() => toggleDocTypeFilter('retained', 'SA')}
-                              />
-                              <span>Solicitudes de Anticipo</span>
-                            </label>
-                            <label className="type-filter-option">
-                              <input
-                                type="checkbox"
-                                checked={retainedDocsTypeFilter.includes('FV')}
-                                onChange={() => toggleDocTypeFilter('retained', 'FV')}
-                              />
-                              <span>Legalización de Facturas</span>
-                            </label>
-                          </div>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               )}
@@ -7363,10 +7373,7 @@ function Dashboard({ user, onLogout }) {
                     const matchesStatus = retainedDocsStatusFilter === 'all' ||
                                          (retainedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                          doc.status === retainedDocsStatusFilter;
-                    const matchesType = retainedDocsTypeFilter.length === 0 ||
-                      retainedDocsTypeFilter.includes(doc.documentType?.code) ||
-                      (retainedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
-                    return matchesSearch && matchesStatus && matchesType;
+                    return matchesSearch && matchesStatus;
                   });
 
                   return filteredDocs.length === 0 ? (
@@ -7581,21 +7588,25 @@ function Dashboard({ user, onLogout }) {
                 <button
                   className="pdf-viewer-action-btn pdf-release-btn"
                   onClick={() => {
-                    const retention = viewingDocument.retentionData.find(
-                      r => String(r.userId) === String(user.id) && r.activa
-                    );
-                    if (retention) {
-                      setPendingReleaseDocument({
-                        docId: viewingDocument.id,
-                        centroCostoIndex: retention.centroCostoIndex
-                      });
-                      setShowReleaseModal(true);
+                    if (viewingDocument && viewingDocument.retentionData && Array.isArray(viewingDocument.retentionData)) {
+                      const retention = viewingDocument.retentionData.find(
+                        r => String(r.userId) === String(user.id) && r.activa
+                      );
+                      if (retention) {
+                        setPendingReleaseDocument({
+                          docId: viewingDocument.id,
+                          centroCostoIndex: retention.centroCostoIndex
+                        });
+                        setShowReleaseModal(true);
+                      }
                     }
                   }}
                   title="Liberar documento retenido"
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V8M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+                    <path d="M12 16.5V18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   Liberar
                 </button>
@@ -9183,7 +9194,8 @@ function Dashboard({ user, onLogout }) {
         <div className="sign-confirm-overlay" onClick={() => {
           setShowRetentionModal(false);
           setPendingSignWithRetention(null);
-          setRetentionData({ percentage: '', reason: '', wantsRetention: null });
+          setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
+          setAvailableCostCenters([]);
         }}>
           <div className="reject-confirm-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
             <div className="reject-confirm-icon" style={{ backgroundColor: '#FEF3C7', color: '#F59E0B' }}>
@@ -9219,14 +9231,73 @@ function Dashboard({ user, onLogout }) {
 
             {retentionData.wantsRetention === true && (
               <div className="reject-reason-container">
+                {/* Selector de centro de costo si hay múltiples */}
+                {availableCostCenters.length > 1 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <label
+                      htmlFor="centro-costo-select"
+                      style={{
+                        display: 'block',
+                        marginBottom: '8px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: '#374151'
+                      }}
+                    >
+                      Centro de Costo:
+                    </label>
+                    <select
+                      id="centro-costo-select"
+                      value={retentionData.selectedCentroIndex !== null ? retentionData.selectedCentroIndex : ''}
+                      onChange={(e) => {
+                        const selectedIndex = e.target.value !== '' ? parseInt(e.target.value) : null;
+                        setRetentionData({
+                          ...retentionData,
+                          selectedCentroIndex: selectedIndex,
+                          percentage: '' // Reset percentage when changing center
+                        });
+                      }}
+                      className="reject-reason-input"
+                      style={{ height: '48px', fontSize: '14px', padding: '12px 15px' }}
+                    >
+                      <option value="">-- Selecciona un centro de costo --</option>
+                      {availableCostCenters.map((centro) => (
+                        <option key={centro.index} value={centro.index}>
+                          {centro.nombre} (Máx: {centro.porcentaje}%)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Información del centro cuando solo hay uno */}
+                {availableCostCenters.length === 1 && (
+                  <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#F3F4F6', borderRadius: '6px' }}>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#6B7280' }}>
+                      Centro de Costo: <strong>{availableCostCenters[0].nombre}</strong>
+                    </p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#9CA3AF' }}>
+                      Porcentaje máximo: {availableCostCenters[0].porcentaje}%
+                    </p>
+                  </div>
+                )}
+
                 <input
                   id="retention-percentage"
                   type="number"
                   min="1"
-                  max="100"
+                  max={
+                    retentionData.selectedCentroIndex !== null
+                      ? availableCostCenters.find(c => c.index === retentionData.selectedCentroIndex)?.porcentaje || 100
+                      : 100
+                  }
                   value={retentionData.percentage}
                   onChange={(e) => setRetentionData({ ...retentionData, percentage: e.target.value })}
-                  placeholder="Porcentaje de retención (1-100%)"
+                  placeholder={
+                    retentionData.selectedCentroIndex !== null
+                      ? `Porcentaje de retención (1-${availableCostCenters.find(c => c.index === retentionData.selectedCentroIndex)?.porcentaje || 100}%)`
+                      : "Porcentaje de retención (1-100%)"
+                  }
                   className="reject-reason-input"
                   style={{ height: '48px', fontSize: '14px', marginBottom: '16px', minHeight: 'auto', padding: '12px 15px' }}
                 />
@@ -9247,7 +9318,8 @@ function Dashboard({ user, onLogout }) {
                 onClick={() => {
                   setShowRetentionModal(false);
                   setPendingSignWithRetention(null);
-                  setRetentionData({ percentage: '', reason: '', wantsRetention: null });
+                  setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
+                  setAvailableCostCenters([]);
                 }}
               >
                 Cancelar
@@ -9265,18 +9337,37 @@ function Dashboard({ user, onLogout }) {
                 <button
                   className="reject-confirm-btn confirm"
                   onClick={() => {
+                    // Validar que si hay múltiples centros, se haya seleccionado uno
+                    if (availableCostCenters.length > 1 && retentionData.selectedCentroIndex === null) {
+                      alert('Debes seleccionar un centro de costo');
+                      return;
+                    }
+
+                    // Validar que se hayan ingresado datos
                     if (!retentionData.percentage || !retentionData.reason) {
                       alert('Debes ingresar el porcentaje y la razón de la retención');
                       return;
                     }
+
                     const percentage = parseInt(retentionData.percentage);
-                    if (percentage < 1 || percentage > 100) {
-                      alert('El porcentaje debe estar entre 1 y 100');
+
+                    // Obtener el centro seleccionado
+                    const selectedCentro = availableCostCenters.find(c => c.index === retentionData.selectedCentroIndex);
+                    const maxPercentage = selectedCentro ? selectedCentro.porcentaje : 100;
+
+                    // Validar rango de porcentaje
+                    if (percentage < 1 || percentage > maxPercentage) {
+                      alert(`El porcentaje debe estar entre 1 y ${maxPercentage}% (máximo asignado a este centro de costo)`);
                       return;
                     }
-                    handleRetentionConfirm(true, percentage, retentionData.reason);
+
+                    handleRetentionConfirm(true, percentage, retentionData.reason, retentionData.selectedCentroIndex);
                   }}
-                  disabled={!retentionData.percentage || !retentionData.reason}
+                  disabled={
+                    !retentionData.percentage ||
+                    !retentionData.reason ||
+                    (availableCostCenters.length > 1 && retentionData.selectedCentroIndex === null)
+                  }
                   style={{
                     backgroundColor: (!retentionData.percentage || !retentionData.reason) ? '#9CA3AF' : '#EF4444',
                     cursor: (!retentionData.percentage || !retentionData.reason) ? 'not-allowed' : 'pointer'
@@ -9300,14 +9391,13 @@ function Dashboard({ user, onLogout }) {
             <div className="release-confirm-icon">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V8M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+                <path d="M12 16.5V18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </div>
             <h3 className="release-confirm-title">Liberar Factura Retenida</h3>
             <p className="release-confirm-message">
               ¿Estás seguro de que deseas liberar esta factura retenida?
-            </p>
-            <p className="release-confirm-message release-confirm-submessage">
-              La factura volverá a aparecer en la sección de documentos firmados.
             </p>
 
             <div className="release-confirm-actions">
@@ -9322,23 +9412,39 @@ function Dashboard({ user, onLogout }) {
               </button>
               <button
                 className="release-confirm-btn release-confirm"
+                disabled={releasingDocument}
                 onClick={async () => {
-                  if (pendingReleaseDocument) {
-                    const success = await handleReleaseDocument(
-                      pendingReleaseDocument.docId,
-                      pendingReleaseDocument.centroCostoIndex
-                    );
-                    if (success) {
-                      setShowReleaseModal(false);
-                      setPendingReleaseDocument(null);
-                      handleCloseViewer();
+                  if (pendingReleaseDocument && !releasingDocument) {
+                    try {
+                      setReleasingDocument(true);
+
+                      const success = await handleReleaseDocument(
+                        pendingReleaseDocument.docId,
+                        pendingReleaseDocument.centroCostoIndex
+                      );
+
+                      if (success) {
+                        handleCloseViewer();
+                      }
+
+                      // Recargar listas y documento actual (incluso si falló, para reflejar estado real)
                       await loadRetainedDocuments();
                       await loadSignedDocuments();
+                      if (viewingDocument) {
+                        await loadDocumentDetails(viewingDocument.id);
+                      }
+                    } catch (error) {
+                      console.error('Error en proceso de liberación:', error);
+                    } finally {
+                      // Siempre cerrar modal y resetear estados
+                      setReleasingDocument(false);
+                      setShowReleaseModal(false);
+                      setPendingReleaseDocument(null);
                     }
                   }
                 }}
               >
-                Sí, liberar
+                {releasingDocument ? 'Liberando...' : 'Sí, liberar'}
               </button>
             </div>
           </div>

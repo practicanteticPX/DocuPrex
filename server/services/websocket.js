@@ -111,10 +111,92 @@ function emitDocumentUpdated(documentId, action, data = {}) {
   });
 }
 
+/**
+ * Emite un evento cuando se crea una notificación
+ * @param {number} userId - ID del usuario destinatario
+ * @param {object} notification - Datos de la notificación creada
+ */
+function emitNotificationCreated(userId, notification = {}) {
+  if (!io) {
+    console.error('❌ WebSocket Service no inicializado');
+    return;
+  }
+
+  console.log('📤 Emitiendo evento: notification:created para usuario', userId);
+  io.emit('notification:created', {
+    userId,
+    notification,
+    timestamp: Date.now()
+  });
+}
+
+/**
+ * Emite un evento cuando se elimina una notificación o todas las notificaciones de un documento
+ * @param {number} documentId - ID del documento (si se eliminan por documento)
+ * @param {number} notificationId - ID de la notificación específica (si se elimina una sola)
+ * @param {number} userId - ID del usuario afectado (opcional, para filtrar en frontend)
+ * @param {string} type - Tipo de notificación eliminada (opcional, para filtrar en frontend)
+ */
+function emitNotificationDeleted(documentId = null, notificationId = null, userId = null, type = null) {
+  if (!io) {
+    console.error('❌ WebSocket Service no inicializado');
+    return;
+  }
+
+  console.log('📤 Emitiendo evento: notification:deleted', { documentId, notificationId, userId, type });
+  io.emit('notification:deleted', {
+    documentId,
+    notificationId,
+    userId,
+    type,
+    timestamp: Date.now()
+  });
+}
+
+/**
+ * Emite un evento cuando se marca una notificación como leída
+ * @param {number} notificationId - ID de la notificación marcada como leída
+ * @param {number} userId - ID del usuario que marcó como leída
+ */
+function emitNotificationRead(notificationId, userId) {
+  if (!io) {
+    console.error('❌ WebSocket Service no inicializado');
+    return;
+  }
+
+  console.log('📤 Emitiendo evento: notification:read', { notificationId, userId });
+  io.emit('notification:read', {
+    notificationId,
+    userId,
+    timestamp: Date.now()
+  });
+}
+
+/**
+ * Emite un evento cuando se marcan todas las notificaciones de un usuario como leídas
+ * @param {number} userId - ID del usuario que marcó todas como leídas
+ */
+function emitAllNotificationsRead(userId) {
+  if (!io) {
+    console.error('❌ WebSocket Service no inicializado');
+    return;
+  }
+
+  console.log('📤 Emitiendo evento: notification:all_read para usuario', userId);
+  io.emit('notification:all_read', {
+    userId,
+    timestamp: Date.now()
+  });
+}
+
 module.exports = {
   initialize,
   emitDocumentSigned,
   emitDocumentRejected,
   emitDocumentDeleted,
-  emitDocumentUpdated
+  emitDocumentUpdated,
+  emitNotificationCreated,
+  emitNotificationDeleted,
+  emitNotificationRead,
+  emitAllNotificationsRead
 };
