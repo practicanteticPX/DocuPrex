@@ -983,8 +983,13 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
           } else {
             // Convertir a array si es string
             const rolAnterior = firmante.role;
-            firmante.role = [rolAnterior, rol];
-            console.log(`✅ Convertido a múltiples roles para ${nombre.trim()}: [${rolAnterior}, ${rol}]`);
+            // Solo agregar si el rol es diferente al anterior
+            if (rolAnterior !== rol) {
+              firmante.role = [rolAnterior, rol];
+              console.log(`✅ Convertido a múltiples roles para ${nombre.trim()}: [${rolAnterior}, ${rol}]`);
+            } else {
+              console.log(`ℹ️  Rol duplicado ignorado para ${nombre.trim()}: ${rol}`);
+            }
           }
         } else {
           // Nueva persona, crear entrada

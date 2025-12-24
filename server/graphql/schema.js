@@ -271,7 +271,7 @@ const typeDefs = gql`
     updateFacturaTemplate(documentId: Int!, templateData: String!): UpdateFacturaTemplateResponse!
 
     # Firmas
-    signDocument(documentId: Int!, signatureData: String!, consecutivo: String, realSignerName: String, retentionPercentage: Int, retentionReason: String, centroCostoIndex: Int): Signature!
+    signDocument(documentId: Int!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String): Signature!
     rejectDocument(documentId: Int!, reason: String, realSignerName: String): Boolean!
 
     # Retenciones

@@ -2708,7 +2708,7 @@ const resolvers = {
         console.error('Error al registrar log de eliminación:', logError);
       }
 
-      // ========== DESMARCAR FACTURA SI ES TIPO FV ==========
+      // ========== GESTIONAR ESTADO DE FACTURA SI ES TIPO FV ==========
       try {
         const docTypeResult = await query(
           `SELECT dt.code
@@ -2725,15 +2725,42 @@ const resolvers = {
             const axios = require('axios');
             const backendHost = serverConfig.backendUrl;
 
-            try {
-              await axios.post(
-                `${backendHost}/api/facturas/desmarcar-en-proceso/${doc.consecutivo}`,
-                {},
-                { headers: { 'Content-Type': 'application/json' } }
-              );
-              console.log(`✅ Factura ${doc.consecutivo} desmarcada (documento eliminado)`);
-            } catch (desmarcarError) {
-              console.error(`❌ Error al desmarcar factura:`, desmarcarError.message);
+            // Verificar si alguien del grupo de causación ya firmó (documento causado)
+            const causacionSignedResult = await query(
+              `SELECT COUNT(*) as causacion_signed
+               FROM document_signers ds
+               JOIN signatures s ON s.document_id = ds.document_id AND s.status = 'signed'
+               WHERE ds.document_id = $1
+                 AND ds.is_causacion_group = true
+                 AND s.signer_id IN (
+                   SELECT ci.user_id
+                   FROM causacion_integrantes ci
+                   JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                   WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+                 )`,
+              [id]
+            );
+            const causacionSigned = parseInt(causacionSignedResult.rows[0].causacion_signed || 0);
+
+            console.log(`🔍 [DELETE] Estado de causación:`);
+            console.log(`   - Firmantes del grupo de causación: ${causacionSigned}`);
+
+            // Si alguien del grupo de causación firmó, el documento ya está CAUSADO
+            // No hacemos nada - la factura permanece causada
+            if (causacionSigned > 0) {
+              console.log(`ℹ️  Factura ${doc.consecutivo} ya está CAUSADA (grupo de causación firmó). No se modifica estado.`);
+            } else {
+              // Si nadie del grupo de causación firmó, desmarcar en-proceso
+              try {
+                await axios.post(
+                  `${backendHost}/api/facturas/desmarcar-en-proceso/${doc.consecutivo}`,
+                  {},
+                  { headers: { 'Content-Type': 'application/json' } }
+                );
+                console.log(`✅ Factura ${doc.consecutivo} desmarcada EN-PROCESO (documento eliminado antes de causación)`);
+              } catch (desmarcarError) {
+                console.error(`❌ Error al desmarcar factura:`, desmarcarError.message);
+              }
             }
           }
         }
@@ -3906,7 +3933,7 @@ const resolvers = {
      * @returns {Promise<Object>} Signature record
      * @throws {Error} When unauthorized, not in sequence (non-owner), or not assigned to document
      */
-    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentionPercentage, retentionReason, centroCostoIndex }, { user }) => {
+    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentions }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
       const docOwnerCheck = await query(
@@ -4753,189 +4780,192 @@ const resolvers = {
         // No lanzamos el error para que no falle la firma
       }
 
-      // ========== PROCESAR RETENCIÓN SI SE PROPORCIONÓ ==========
-      console.log(`🔍 [DEBUG] Parámetros de retención recibidos:`, { retentionPercentage, retentionReason, centroCostoIndex });
-      if (retentionPercentage && retentionReason) {
-        try {
-          console.log(`📋 ✅ INICIANDO Procesamiento de retención para documento ${documentId}...`);
+      // ========== PROCESAR RETENCIONES MÚLTIPLES SI SE PROPORCIONARON ==========
+      console.log(`🔍 [DEBUG] Parámetros de retención recibidos (JSON):`, retentions);
 
-          // Validar que el porcentaje esté en el rango correcto
-          if (retentionPercentage < 1 || retentionPercentage > 100) {
-            console.warn(`⚠️ Porcentaje de retención inválido: ${retentionPercentage}`);
-          } else {
-            // Verificar que es documento FV
-            const docTypeCheck = await query(
-              `SELECT dt.code
-               FROM documents d
-               LEFT JOIN document_types dt ON d.document_type_id = dt.id
-               WHERE d.id = $1`,
-              [documentId]
+      // Parsear retenciones desde JSON
+      let parsedRetentions = null;
+      if (retentions) {
+        try {
+          parsedRetentions = JSON.parse(retentions);
+          console.log(`🔍 [DEBUG] Retenciones parseadas:`, parsedRetentions);
+        } catch (parseError) {
+          console.error('❌ Error al parsear retenciones:', parseError);
+        }
+      }
+
+      if (parsedRetentions && Array.isArray(parsedRetentions) && parsedRetentions.length > 0) {
+        try {
+          console.log(`📋 ✅ INICIANDO Procesamiento de ${parsedRetentions.length} retenciones para documento ${documentId}...`);
+
+          // Verificar que es documento FV
+          const docTypeCheck = await query(
+            `SELECT dt.code
+             FROM documents d
+             LEFT JOIN document_types dt ON d.document_type_id = dt.id
+             WHERE d.id = $1`,
+            [documentId]
+          );
+
+          if (docTypeCheck.rows.length > 0 && docTypeCheck.rows[0].code === 'FV') {
+            // Verificar que el usuario tiene el rol RESPONSABLE_CENTRO_COSTOS
+            const signerCheck = await query(
+              `SELECT ds.assigned_role_ids, ds.role_names
+               FROM document_signers ds
+               WHERE ds.document_id = $1 AND ds.user_id = $2`,
+              [documentId, user.id]
             );
 
-            if (docTypeCheck.rows.length > 0 && docTypeCheck.rows[0].code === 'FV') {
-              // Verificar que el usuario tiene el rol RESPONSABLE_CENTRO_COSTOS
-              const signerCheck = await query(
-                `SELECT ds.assigned_role_ids, ds.role_names
-                 FROM document_signers ds
-                 WHERE ds.document_id = $1 AND ds.user_id = $2`,
-                [documentId, user.id]
-              );
+            if (signerCheck.rows.length > 0) {
+              const signer = signerCheck.rows[0];
+              let hasRespCtroCost = false;
 
-              if (signerCheck.rows.length > 0) {
-                const signer = signerCheck.rows[0];
-                let hasRespCtroCost = false;
+              console.log(`🔍 [RETENCIÓN] Verificando rol para usuario ${user.name}:`);
+              console.log(`  - assigned_role_ids:`, signer.assigned_role_ids);
+              console.log(`  - role_names:`, signer.role_names);
 
-                console.log(`🔍 [RETENCIÓN] Verificando rol para usuario ${user.name}:`);
-                console.log(`  - assigned_role_ids:`, signer.assigned_role_ids);
-                console.log(`  - role_names:`, signer.role_names);
+              // Buscar el código de rol en la base de datos
+              if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
+                const roleCodesResult = await query(
+                  `SELECT role_code FROM document_type_roles WHERE id = ANY($1)`,
+                  [signer.assigned_role_ids]
+                );
+                const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+                console.log(`  - role_codes encontrados:`, roleCodes);
+                hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
+              } else if (signer.role_names && signer.role_names.length > 0) {
+                // Fallback: buscar por role_name
+                const roleCodesResult = await query(
+                  `SELECT role_code FROM document_type_roles WHERE role_name = ANY($1)`,
+                  [signer.role_names]
+                );
+                const roleCodes = roleCodesResult.rows.map(r => r.role_code);
+                console.log(`  - role_codes encontrados (fallback):`, roleCodes);
+                hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
+              }
 
-                // Buscar el código de rol en la base de datos
-                if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
-                  const roleCodesResult = await query(
-                    `SELECT role_code FROM document_type_roles WHERE id = ANY($1)`,
-                    [signer.assigned_role_ids]
-                  );
-                  const roleCodes = roleCodesResult.rows.map(r => r.role_code);
-                  console.log(`  - role_codes encontrados:`, roleCodes);
-                  hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
-                } else if (signer.role_names && signer.role_names.length > 0) {
-                  // Fallback: buscar por role_name
-                  const roleCodesResult = await query(
-                    `SELECT role_code FROM document_type_roles WHERE role_name = ANY($1)`,
-                    [signer.role_names]
-                  );
-                  const roleCodes = roleCodesResult.rows.map(r => r.role_code);
-                  console.log(`  - role_codes encontrados (fallback):`, roleCodes);
-                  hasRespCtroCost = roleCodes.includes('RESPONSABLE_CENTRO_COSTOS');
-                }
+              console.log(`  - hasRespCtroCost:`, hasRespCtroCost);
+              console.log(`  - Número de retenciones a procesar:`, parsedRetentions.length);
 
-                console.log(`  - hasRespCtroCost:`, hasRespCtroCost);
-                console.log(`  - retentionPercentage:`, retentionPercentage);
-                console.log(`  - retentionReason:`, retentionReason);
+              if (hasRespCtroCost) {
+                // Obtener nombre del usuario desde la BD
+                const userDataResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
+                const userName = userDataResult.rows.length > 0 ? userDataResult.rows[0].name : 'Usuario desconocido';
 
-                if (hasRespCtroCost && retentionPercentage && retentionReason) {
-                  // Obtener nombre del usuario desde la BD
-                  const userDataResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
-                  const userName = userDataResult.rows.length > 0 ? userDataResult.rows[0].name : 'Usuario desconocido';
+                console.log(`🔄 [RETENCIÓN MÚLTIPLE] Iniciando proceso de ${parsedRetentions.length} retenciones para usuario ${userName} (ID: ${user.id})`);
 
-                  console.log(`🔄 [RETENCIÓN] Iniciando proceso de retención para usuario ${userName} (ID: ${user.id})`);
+                // Obtener metadata del documento para encontrar los centros de costo
+                const metadataResult = await query(
+                  'SELECT metadata, retention_data FROM documents WHERE id = $1',
+                  [documentId]
+                );
 
-                  // Obtener metadata del documento para encontrar el centro de costo
-                  const metadataResult = await query(
-                    'SELECT metadata, retention_data FROM documents WHERE id = $1',
-                    [documentId]
-                  );
+                if (metadataResult.rows.length > 0) {
+                  const metadata = metadataResult.rows[0].metadata;
+                  const currentRetentions = metadataResult.rows[0].retention_data || [];
 
-                  if (metadataResult.rows.length > 0) {
-                    const metadata = metadataResult.rows[0].metadata;
-                    const currentRetentions = metadataResult.rows[0].retention_data || [];
+                  console.log(`📋 metadata.causacionDetails:`, metadata?.causacionDetails);
 
-                    console.log(`📋 metadata.causacionDetails:`, metadata?.causacionDetails);
+                  // Procesar cada retención en el array
+                  let successfulRetentions = 0;
+                  for (const retention of parsedRetentions) {
+                    const { centroCostoIndex, percentage, reason } = retention;
 
-                    // Determinar centroCostoIndex: usar el pasado como parámetro, o auto-detectar
-                    let finalCentroCostoIndex = -1;
-                    let maxPercentage = 100; // Por defecto 100% si no hay causacionDetails
+                    console.log(`\n🔍 Procesando retención ${successfulRetentions + 1}/${parsedRetentions.length}:`, {
+                      centroCostoIndex,
+                      percentage,
+                      reason: reason ? reason.substring(0, 50) + '...' : 'Sin motivo'
+                    });
 
-                    if (centroCostoIndex !== undefined && centroCostoIndex !== null) {
-                      // Usar el centroCostoIndex pasado como parámetro desde el frontend
-                      finalCentroCostoIndex = parseInt(centroCostoIndex);
-                      console.log(`📍 Usando centroCostoIndex del parámetro: ${finalCentroCostoIndex}`);
-
-                      // Validar que el usuario sea responsable de este centro
-                      if (metadata && metadata.causacionDetails && metadata.causacionDetails[finalCentroCostoIndex]) {
-                        const centroCosto = metadata.causacionDetails[finalCentroCostoIndex];
-                        if (centroCosto.responsable_centro_id === user.id) {
-                          maxPercentage = parseFloat(centroCosto.porcentaje_centro || 100);
-                          console.log(`✅ Centro de costo validado: ${centroCosto.centro_costo}, max: ${maxPercentage}%`);
-                        } else {
-                          console.error(`❌ Usuario ${userName} (ID: ${user.id}) NO es responsable del centro de costo ${finalCentroCostoIndex}`);
-                          throw new Error('No eres responsable del centro de costo seleccionado');
-                        }
-                      } else {
-                        console.warn(`⚠️ centroCostoIndex ${finalCentroCostoIndex} no encontrado en metadata`);
-                      }
-                    } else {
-                      // Auto-detectar el centroCostoIndex (fallback para compatibilidad con flujos antiguos)
-                      console.log(`🔍 Auto-detectando centro de costo donde responsable_centro_id = ${user.id}`);
-
-                      if (metadata && metadata.causacionDetails && metadata.causacionDetails.length > 0) {
-                        // Documento CON plantilla: buscar centro de costo específico
-                        finalCentroCostoIndex = metadata.causacionDetails.findIndex(
-                          detail => {
-                            console.log(`   Comparando: detail.responsable_centro_id (${detail.responsable_centro_id}) === user.id (${user.id})`);
-                            return detail.responsable_centro_id === user.id;
-                          }
-                        );
-
-                        if (finalCentroCostoIndex >= 0) {
-                          const centroCosto = metadata.causacionDetails[finalCentroCostoIndex];
-                          maxPercentage = parseFloat(centroCosto.porcentaje_centro || 100);
-                          console.log(`✅ Centro de costo encontrado: ${centroCosto.centro_costo}, max: ${maxPercentage}%`);
-                        } else {
-                          console.warn(`⚠️ Usuario ${userName} (ID: ${user.id}) no es responsable de ningún centro de costo en metadata`);
-                          // Asignar índice 0 por defecto para documentos sin plantilla
-                          finalCentroCostoIndex = 0;
-                          console.log(`ℹ️  Usando centroCostoIndex = 0 por defecto (documento sin plantilla completa)`);
-                        }
-                      } else {
-                        // Documento SIN plantilla: usar índice 0 por defecto
-                        finalCentroCostoIndex = 0;
-                        console.log(`ℹ️  Documento sin causacionDetails. Usando centroCostoIndex = 0, maxPercentage = 100%`);
-                      }
+                    // Validar porcentaje
+                    if (percentage < 1 || percentage > 100) {
+                      console.warn(`⚠️ Porcentaje inválido (${percentage}%), saltando esta retención`);
+                      continue;
                     }
 
-                    console.log(`📍 centroCostoIndex final: ${finalCentroCostoIndex}`);
+                    // Validar centro de costo y obtener porcentaje máximo
+                    // Los centros de costos están en metadata.filasControl (NO en causacionDetails)
+                    let maxPercentage = 100;
+                    if (metadata && metadata.filasControl && metadata.filasControl[centroCostoIndex]) {
+                      const fila = metadata.filasControl[centroCostoIndex];
 
-                    // Validar que no exceda el porcentaje asignado
-                    if (retentionPercentage <= maxPercentage) {
-                      // Verificar si ya existe una retención activa para este centro de costo
-                      const existingIndex = currentRetentions.findIndex(
-                        r => String(r.userId) === String(user.id) && r.centroCostoIndex === finalCentroCostoIndex && r.activa
-                      );
-
-                      const retentionItem = {
-                        userId: String(user.id),
-                        userName: userName,
-                        centroCostoIndex: finalCentroCostoIndex,
-                        motivo: retentionReason,
-                        porcentajeRetenido: retentionPercentage,
-                        fechaRetencion: new Date().toISOString(),
-                        activa: true
-                      };
-
-                      if (existingIndex >= 0) {
-                        currentRetentions[existingIndex] = retentionItem;
-                        console.log(`✅ Retención actualizada para centro de costo ${finalCentroCostoIndex}`);
-                      } else {
-                        currentRetentions.push(retentionItem);
-                        console.log(`✅ Nueva retención creada para centro de costo ${finalCentroCostoIndex}`);
+                      // Validar que el usuario es responsable de este centro comparando nombres
+                      if (fila.respCentroCostos !== userName) {
+                        console.error(`❌ Usuario ${userName} NO es responsable del centro ${fila.centroCostos}, saltando`);
+                        continue;
                       }
 
-                      // Guardar en retention_data
-                      await query(
-                        'UPDATE documents SET retention_data = $1 WHERE id = $2',
-                        [JSON.stringify(currentRetentions), documentId]
-                      );
+                      maxPercentage = parseFloat(fila.porcentaje || 100);
+                      console.log(`✅ Centro validado: ${fila.centroCostos}, max: ${maxPercentage}%`);
+                    } else {
+                      console.warn(`⚠️ centroCostoIndex ${centroCostoIndex} no encontrado en metadata.filasControl, usando max 100%`);
+                    }
 
-                      console.log(`✅ Documento ${documentId} retenido por ${userName} (${retentionPercentage}%): ${retentionReason}`);
-                      console.log(`📊 retention_data guardado:`, JSON.stringify(currentRetentions, null, 2));
+                    // Validar que no exceda el porcentaje asignado
+                    if (percentage > maxPercentage) {
+                      console.warn(`⚠️ Porcentaje ${percentage}% excede el asignado (${maxPercentage}%), saltando`);
+                      continue;
+                    }
 
-                      // Emitir evento WebSocket de retención
+                    // Verificar si ya existe una retención activa para este centro
+                    const existingIndex = currentRetentions.findIndex(
+                      r => String(r.userId) === String(user.id) &&
+                           r.centroCostoIndex === centroCostoIndex &&
+                           r.activa
+                    );
+
+                    const retentionItem = {
+                      userId: String(user.id),
+                      userName: userName,
+                      centroCostoIndex: centroCostoIndex,
+                      motivo: reason,
+                      porcentajeRetenido: percentage,
+                      fechaRetencion: new Date().toISOString(),
+                      activa: true
+                    };
+
+                    if (existingIndex >= 0) {
+                      currentRetentions[existingIndex] = retentionItem;
+                      console.log(`✅ Retención actualizada para centro ${centroCostoIndex}`);
+                    } else {
+                      currentRetentions.push(retentionItem);
+                      console.log(`✅ Nueva retención creada para centro ${centroCostoIndex}`);
+                    }
+
+                    successfulRetentions++;
+                  }
+
+                  console.log(`\n📊 Retenciones procesadas: ${successfulRetentions}/${parsedRetentions.length}`);
+
+                  // Guardar todas las retenciones en retention_data
+                  if (successfulRetentions > 0) {
+                    await query(
+                      'UPDATE documents SET retention_data = $1 WHERE id = $2',
+                      [JSON.stringify(currentRetentions), documentId]
+                    );
+
+                    console.log(`✅ ${successfulRetentions} retenciones guardadas en documento ${documentId}`);
+                    console.log(`📊 retention_data actualizado:`, JSON.stringify(currentRetentions, null, 2));
+
+                    // Emitir evento WebSocket de retención (notificar con el primer centro de costo)
+                    if (parsedRetentions.length > 0) {
                       websocketService.emitDocumentRetained(documentId, {
                         retainedBy: userName,
                         userId: user.id,
-                        percentage: retentionPercentage,
-                        reason: retentionReason,
-                        centroCostoIndex: finalCentroCostoIndex
+                        percentage: parsedRetentions[0].percentage,
+                        reason: parsedRetentions[0].reason,
+                        centroCostoIndex: parsedRetentions[0].centroCostoIndex,
+                        totalRetentions: successfulRetentions
                       });
-                      console.log(`🔔 [WEBSOCKET] Emitido evento de retención para documento ${documentId}`);
+                      console.log(`🔔 [WEBSOCKET] Emitido evento de retención múltiple para documento ${documentId}`);
+                    }
 
-                      // ========== REGENERAR PDF CON RETENCIONES ==========
-                      console.log(`🔍 [DEBUG] Verificando metadata:`, { hasMetadata: !!metadata, keysLength: metadata ? Object.keys(metadata).length : 0 });
-                      if (metadata && Object.keys(metadata).length > 0) {
-                        console.log('📋 ✅✅✅ REGENERANDO PDF FV después de firmar con retención...');
+                    // ========== REGENERAR PDF CON RETENCIONES ==========
+                    console.log(`🔍 [DEBUG] Verificando metadata:`, { hasMetadata: !!metadata, keysLength: metadata ? Object.keys(metadata).length : 0 });
+                    if (metadata && Object.keys(metadata).length > 0) {
+                      console.log('📋 ✅✅✅ REGENERANDO PDF FV después de firmar con retenciones múltiples...');
 
-                        try {
+                      try {
                           const fs = require('fs').promises;
                           const path = require('path');
 
@@ -4992,12 +5022,90 @@ const resolvers = {
                             }
                             console.log(`📦 Total backups cargados: ${backupFilePaths.length}`);
 
-                            // Fusionar PDFs
+                            // Fusionar PDFs (plantilla + backups)
                             const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
                             const filesToMerge = [tempPlanillaPath, ...backupFilePaths];
                             console.log(`🔗 Fusionando ${filesToMerge.length} PDFs...`);
                             await mergePDFs(filesToMerge, tempMergedPath);
                             console.log(`✅ PDFs fusionados en: ${tempMergedPath}`);
+
+                            // Agregar informe de firmantes
+                            console.log(`📄 Generando informe de firmantes...`);
+                            const signersForCover = await query(
+                              `SELECT
+                                ds.user_id,
+                                ds.order_position,
+                                ds.role_name,
+                                ds.role_names,
+                                ds.is_causacion_group,
+                                ds.grupo_codigo,
+                                u.name as user_name,
+                                cg.nombre as grupo_nombre,
+                                u.email,
+                                COALESCE(s.status, 'pending') as status,
+                                s.signed_at,
+                                s.rejected_at,
+                                s.rejection_reason,
+                                s.consecutivo,
+                                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                                signer_user.email as signer_email
+                               FROM document_signers ds
+                               LEFT JOIN users u ON ds.user_id = u.id
+                               LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+                               LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+                                 (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+                                 (ds.is_causacion_group = true AND s.signer_id IN (
+                                   SELECT ci.user_id
+                                   FROM causacion_integrantes ci
+                                   JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                                   WHERE cg.codigo = ds.grupo_codigo
+                                 ))
+                               )
+                               LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+                               WHERE ds.document_id = $1
+                               ORDER BY ds.order_position ASC`,
+                              [documentId]
+                            );
+
+                            const signers = signersForCover.rows.map(row => {
+                              const name = row.is_causacion_group
+                                ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
+                                : (row.user_name || 'Sin nombre');
+
+                              return {
+                                name: name,
+                                email: row.signer_email || row.email,
+                                order_position: row.order_position,
+                                role_name: row.role_name,
+                                role_names: row.role_names,
+                                status: row.status,
+                                signed_at: row.signed_at,
+                                rejected_at: row.rejected_at,
+                                rejection_reason: row.rejection_reason,
+                                consecutivo: row.consecutivo,
+                                is_causacion_group: row.is_causacion_group,
+                                grupo_codigo: row.grupo_codigo,
+                                real_signer_name: row.real_signer_name
+                              };
+                            });
+
+                            // Obtener información del documento para la portada
+                            const docInfoForCover = await query(
+                              'SELECT title, file_name, created_at FROM documents WHERE id = $1',
+                              [documentId]
+                            );
+                            const docData = docInfoForCover.rows[0];
+
+                            const documentInfoForCover = {
+                              title: docData.title || 'Factura',
+                              fileName: docData.file_name || '',
+                              createdAt: docData.created_at,
+                              uploadedBy: 'Sistema',
+                              documentTypeName: 'Factura'
+                            };
+
+                            await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
+                            console.log(`✅ Informe de firmantes agregado`);
 
                             // Copiar merged PDF sobre el PDF actual
                             console.log(`📋 Copiando PDF fusionado a: ${currentPdfPath}`);
@@ -5007,7 +5115,7 @@ const resolvers = {
                             console.log(`🧹 Limpiando archivos temporales...`);
                             await cleanupTempFiles([tempPlanillaPath, tempMergedPath]);
 
-                            console.log('✅✅✅ PDF regenerado exitosamente después de firmar con retención');
+                            console.log('✅✅✅ PDF regenerado exitosamente después de firmar con retención (plantilla + backups + informe)');
                           } else {
                             console.error('❌ No se encontró información del documento para regenerar PDF');
                           }
@@ -5019,12 +5127,8 @@ const resolvers = {
                         console.warn('⚠️⚠️⚠️ Documento sin metadata (sin plantilla FV completa), PDF NO se regenerará con retenciones');
                         console.warn('ℹ️ Para ver columnas de retención, el documento debe tener plantilla de factura completa guardada');
                       }
-                    } else {
-                      console.warn(`⚠️ Porcentaje de retención (${retentionPercentage}%) excede el asignado (${maxPercentage}%)`);
                     }
                   }
-                } else if (hasRespCtroCost) {
-                  console.log(`ℹ️ Usuario no quiere retener (retentionPercentage: ${retentionPercentage}, retentionReason: ${retentionReason})`);
                 } else {
                   const userDataResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
                   const userName = userDataResult.rows.length > 0 ? userDataResult.rows[0].name : 'Usuario desconocido';
@@ -5034,7 +5138,6 @@ const resolvers = {
             } else {
               console.warn(`⚠️ Documento ${documentId} no es tipo FV, no se puede retener`);
             }
-          }
         } catch (retentionError) {
           console.error('❌ Error al procesar retención:', retentionError);
           // No lanzamos el error para que no falle la firma
@@ -5258,19 +5361,24 @@ const resolvers = {
         const currentRetentions = docResult.rows[0].retention_data || [];
 
         // Validate user is responsible for this cost center
-        if (!metadata || !metadata.causacionDetails || !metadata.causacionDetails[centroCostoIndex]) {
+        // Los centros de costos están en metadata.filasControl (NO en causacionDetails)
+        if (!metadata || !metadata.filasControl || !metadata.filasControl[centroCostoIndex]) {
           throw new Error('Centro de costo no encontrado');
         }
 
-        const centroCosto = metadata.causacionDetails[centroCostoIndex];
-        const responsableId = centroCosto.responsable_centro_id;
+        const fila = metadata.filasControl[centroCostoIndex];
+        const responsableName = fila.respCentroCostos;
 
-        if (responsableId !== user.id) {
+        // Obtener nombre del usuario
+        const userDataResult = await query('SELECT name FROM users WHERE id = $1', [user.id]);
+        const userName = userDataResult.rows.length > 0 ? userDataResult.rows[0].name : null;
+
+        if (responsableName !== userName) {
           throw new Error('No eres responsable de este centro de costo');
         }
 
         // Validate retention percentage doesn't exceed assigned percentage
-        const maxPercentage = parseFloat(centroCosto.porcentaje_centro || 0);
+        const maxPercentage = parseFloat(fila.porcentaje || 0);
         if (retentionPercentage > maxPercentage) {
           throw new Error(`No puedes retener más del ${maxPercentage}% asignado`);
         }

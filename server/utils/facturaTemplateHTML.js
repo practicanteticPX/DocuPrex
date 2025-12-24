@@ -169,8 +169,13 @@ function generateFacturaHTML(data) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Planilla Control Factura</title>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    @font-face {
+      font-family: 'Higher';
+      src: url('file://${path.join(__dirname, '..', 'assets', 'fonts', 'higher.otf')}') format('opentype');
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -258,7 +263,7 @@ function generateFacturaHTML(data) {
       border: 1px solid #D1D5DB;
       border-radius: 4px;
       font-size: 12px;
-      font-family: 'Kalam', cursive;
+      font-family: 'Higher', cursive;
       font-weight: 400;
       font-style: normal;
       color: #1F2937;
@@ -414,7 +419,7 @@ function generateFacturaHTML(data) {
 
     .cell-content-firma {
       font-size: 11px;
-      font-family: 'Kalam', cursive;
+      font-family: 'Higher', cursive;
       font-weight: 400;
       font-style: normal;
       color: #1F2937;

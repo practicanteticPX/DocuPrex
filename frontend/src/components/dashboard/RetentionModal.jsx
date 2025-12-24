@@ -3,19 +3,26 @@ import './RetentionModal.css';
 
 /**
  * Modal para retención de facturas FV por responsables de centro de costos
+ * Soporta retención de múltiples centros de costos independientemente
  */
 function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] }) {
   const [wantsRetention, setWantsRetention] = useState(null); // null, true, false
-  const [selectedCentroIndex, setSelectedCentroIndex] = useState(null);
-  const [percentage, setPercentage] = useState('');
-  const [reason, setReason] = useState('');
+  const [retentions, setRetentions] = useState({}); // { centroCostoIndex: { percentage, reason, selected } }
   const [error, setError] = useState('');
   const [step, setStep] = useState(1); // 1: pregunta Sí/No, 2: detalles de retención
 
-  // Auto-seleccionar centro si solo hay uno
+  // Inicializar estructura de retenciones
   useEffect(() => {
-    if (availableCostCenters.length === 1) {
-      setSelectedCentroIndex(availableCostCenters[0].index);
+    if (availableCostCenters.length > 0) {
+      const initialRetentions = {};
+      availableCostCenters.forEach(centro => {
+        initialRetentions[centro.index] = {
+          selected: false,
+          percentage: '',
+          reason: ''
+        };
+      });
+      setRetentions(initialRetentions);
     }
   }, [availableCostCenters]);
 
@@ -27,6 +34,28 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
     }
   };
 
+  const toggleCentroSelection = (centroIndex) => {
+    setRetentions(prev => ({
+      ...prev,
+      [centroIndex]: {
+        ...prev[centroIndex],
+        selected: !prev[centroIndex].selected
+      }
+    }));
+    setError('');
+  };
+
+  const updateRetentionData = (centroIndex, field, value) => {
+    setRetentions(prev => ({
+      ...prev,
+      [centroIndex]: {
+        ...prev[centroIndex],
+        [field]: value
+      }
+    }));
+    setError('');
+  };
+
   const handleConfirm = () => {
     if (wantsRetention === null) {
       setError('Por favor selecciona una opción');
@@ -35,54 +64,74 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
 
     if (wantsRetention === false) {
       // Firmar sin retener
-      onConfirm(false);
+      onConfirm(false, []);
       handleClose();
       return;
     }
 
-    // Validaciones para retención
-    if (availableCostCenters.length > 1 && selectedCentroIndex === null) {
-      setError('Debes seleccionar un centro de costo');
+    // Validar que al menos un centro esté seleccionado
+    const selectedRetentions = Object.entries(retentions)
+      .filter(([_, data]) => data.selected)
+      .map(([index, data]) => ({
+        centroCostoIndex: parseInt(index),
+        percentage: data.percentage,
+        reason: data.reason
+      }));
+
+    if (selectedRetentions.length === 0) {
+      setError('Debes seleccionar al menos un centro de costo para retener');
       return;
     }
 
-    if (!percentage || percentage === '') {
-      setError('Debes ingresar el porcentaje de retención');
-      return;
+    // Validar cada retención seleccionada
+    for (const retention of selectedRetentions) {
+      const centro = availableCostCenters.find(c => c.index === retention.centroCostoIndex);
+
+      if (!retention.percentage || retention.percentage === '') {
+        setError(`Debes ingresar el porcentaje de retención para ${centro.nombre}`);
+        return;
+      }
+
+      if (!retention.reason || retention.reason.trim() === '') {
+        setError(`Debes ingresar el motivo de retención para ${centro.nombre}`);
+        return;
+      }
+
+      const percentageNum = parseInt(retention.percentage);
+      const maxPercentage = centro.porcentaje;
+
+      if (percentageNum < 1 || percentageNum > maxPercentage) {
+        setError(`El porcentaje para ${centro.nombre} debe estar entre 1 y ${maxPercentage}%`);
+        return;
+      }
+
+      // Actualizar con el valor numérico
+      retention.percentage = percentageNum;
+      retention.reason = retention.reason.trim();
     }
 
-    if (!reason || reason.trim() === '') {
-      setError('Debes ingresar el motivo de la retención');
-      return;
-    }
-
-    const percentageNum = parseInt(percentage);
-    const selectedCentro = availableCostCenters.find(c => c.index === selectedCentroIndex);
-    const maxPercentage = selectedCentro ? selectedCentro.porcentaje : 100;
-
-    if (percentageNum < 1 || percentageNum > maxPercentage) {
-      setError(`El porcentaje debe estar entre 1 y ${maxPercentage}% (máximo asignado a este centro)`);
-      return;
-    }
-
-    // Confirmar retención
-    onConfirm(true, percentageNum, reason.trim(), selectedCentroIndex);
+    // Confirmar retenciones múltiples
+    onConfirm(true, selectedRetentions);
     handleClose();
   };
 
   const handleBack = () => {
     setStep(1);
     setWantsRetention(null);
-    setPercentage('');
-    setReason('');
     setError('');
   };
 
   const handleClose = () => {
     setWantsRetention(null);
-    setSelectedCentroIndex(availableCostCenters.length === 1 ? availableCostCenters[0].index : null);
-    setPercentage('');
-    setReason('');
+    const initialRetentions = {};
+    availableCostCenters.forEach(centro => {
+      initialRetentions[centro.index] = {
+        selected: false,
+        percentage: '',
+        reason: ''
+      };
+    });
+    setRetentions(initialRetentions);
     setError('');
     setStep(1);
     onClose();
@@ -90,8 +139,7 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
 
   if (!isOpen) return null;
 
-  const selectedCentro = availableCostCenters.find(c => c.index === selectedCentroIndex);
-  const maxPercentage = selectedCentro ? selectedCentro.porcentaje : 100;
+  const selectedCount = Object.values(retentions).filter(r => r.selected).length;
 
   return (
     <div className="retention-modal-overlay" onClick={handleClose}>
@@ -109,7 +157,7 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
               <>
                 <h2>Detalles de la Retención</h2>
                 <p className="retention-instruction">
-                  Completa la información sobre la retención de la factura
+                  Selecciona los centros de costo que deseas retener ({selectedCount} seleccionado{selectedCount !== 1 ? 's' : ''})
                 </p>
               </>
             )}
@@ -155,82 +203,65 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
               </label>
             </div>
           ) : (
-            <div className="retention-details-form">
-              {/* Selector de centro de costo */}
-              {availableCostCenters.length > 1 && (
-                <div className="retention-form-field">
-                  <label className="retention-field-label">Centro de Costo</label>
-                  <select
-                    className="retention-select"
-                    value={selectedCentroIndex !== null ? selectedCentroIndex : ''}
-                    onChange={(e) => {
-                      const value = e.target.value !== '' ? parseInt(e.target.value) : null;
-                      setSelectedCentroIndex(value);
-                      setPercentage(''); // Reset percentage cuando cambia el centro
-                      setError('');
-                    }}
-                  >
-                    <option value="">-- Selecciona un centro de costo --</option>
-                    {availableCostCenters.map((centro) => (
-                      <option key={centro.index} value={centro.index}>
-                        {centro.nombre} (Máx: {centro.porcentaje}%)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            <div className="retention-multiple-centers">
+              {availableCostCenters.map((centro) => {
+                const retentionData = retentions[centro.index] || { selected: false, percentage: '', reason: '' };
 
-              {/* Info del centro cuando solo hay uno */}
-              {availableCostCenters.length === 1 && (
-                <div className="retention-info-box">
-                  <div className="retention-info-icon">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M13 16H12V12H11M12 8H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
+                return (
+                  <div key={centro.index} className={`retention-centro-card ${retentionData.selected ? 'selected' : ''}`}>
+                    {/* Header con checkbox */}
+                    <div className="retention-centro-header">
+                      <label className="retention-centro-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={retentionData.selected}
+                          onChange={() => toggleCentroSelection(centro.index)}
+                          className="retention-centro-checkbox"
+                        />
+                        <span className="retention-centro-checkbox-custom"></span>
+                        <div className="retention-centro-info">
+                          <strong className="retention-centro-name">{centro.nombre}</strong>
+                          <span className="retention-centro-max">Máximo: {centro.porcentaje}%</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Campos de porcentaje y motivo (solo si está seleccionado) */}
+                    {retentionData.selected && (
+                      <div className="retention-centro-fields">
+                        <div className="retention-form-field">
+                          <label className="retention-field-label">
+                            Porcentaje (1-{centro.porcentaje}%)
+                          </label>
+                          <div className="retention-input-wrapper">
+                            <input
+                              type="number"
+                              min="1"
+                              max={centro.porcentaje}
+                              className="retention-input"
+                              placeholder={`Ej: ${Math.min(50, centro.porcentaje)}`}
+                              value={retentionData.percentage}
+                              onChange={(e) => updateRetentionData(centro.index, 'percentage', e.target.value)}
+                            />
+                            <span className="retention-input-suffix">%</span>
+                          </div>
+                        </div>
+
+                        <div className="retention-form-field">
+                          <label className="retention-field-label">Motivo</label>
+                          <textarea
+                            className="retention-textarea"
+                            rows={3}
+                            placeholder="Motivo de la retención..."
+                            value={retentionData.reason}
+                            onChange={(e) => updateRetentionData(centro.index, 'reason', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="retention-info-text">
-                    <strong>{availableCostCenters[0].nombre}</strong>
-                    <span>Porcentaje máximo: {availableCostCenters[0].porcentaje}%</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Campo de porcentaje */}
-              <div className="retention-form-field">
-                <label className="retention-field-label">
-                  Porcentaje de Retención (1-{maxPercentage}%)
-                </label>
-                <div className="retention-input-wrapper">
-                  <input
-                    type="number"
-                    min="1"
-                    max={maxPercentage}
-                    className="retention-input"
-                    placeholder={`Ej: ${Math.min(50, maxPercentage)}`}
-                    value={percentage}
-                    onChange={(e) => {
-                      setPercentage(e.target.value);
-                      setError('');
-                    }}
-                  />
-                  <span className="retention-input-suffix">%</span>
-                </div>
-              </div>
-
-              {/* Campo de motivo */}
-              <div className="retention-form-field">
-                <label className="retention-field-label">Motivo de la Retención</label>
-                <textarea
-                  className="retention-textarea"
-                  rows={4}
-                  placeholder="Describe brevemente por qué se retiene esta factura..."
-                  value={reason}
-                  onChange={(e) => {
-                    setReason(e.target.value);
-                    setError('');
-                  }}
-                />
-              </div>
+                );
+              })}
             </div>
           )}
 
@@ -256,11 +287,11 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
           <button
             className={`retention-btn-confirm ${wantsRetention === false ? 'retention-btn-no-retention' : 'retention-btn-retention'}`}
             onClick={handleConfirm}
-            disabled={wantsRetention === null || (step === 2 && (!percentage || !reason))}
+            disabled={wantsRetention === null}
           >
             {step === 1
               ? (wantsRetention === false ? 'Firmar sin retener' : 'Continuar')
-              : 'Firmar y retener'
+              : `Firmar${selectedCount > 0 ? ` y retener (${selectedCount})` : ''}`
             }
           </button>
         </div>

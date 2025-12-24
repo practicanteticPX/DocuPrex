@@ -15,6 +15,7 @@ import FacturaTemplate from './FacturaTemplate';
 import LoadingScreen from './LoadingScreen';
 import SigningLoadingScreen from './SigningLoadingScreen';
 import RejectingLoadingScreen from './RejectingLoadingScreen';
+import ReleasingLoadingScreen from './ReleasingLoadingScreen';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
 import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
@@ -118,6 +119,8 @@ function Dashboard({ user, onLogout }) {
   const [showSigningLoader, setShowSigningLoader] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [showRejectingLoader, setShowRejectingLoader] = useState(false);
+  const [showReleasingLoader, setShowReleasingLoader] = useState(false);
+  const [showReleaseSuccess, setShowReleaseSuccess] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
 
   // Estado para modal de notificación elegante
@@ -975,7 +978,7 @@ function Dashboard({ user, onLogout }) {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [viewingDocument, showSignConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showOrderError, showQuickSignConfirm, managingDocument, confirmDeleteOpen, rejectionReasonPopup]);
+  }, [viewingDocument, showSignConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showReleaseSuccess, showOrderError, showQuickSignConfirm, managingDocument, confirmDeleteOpen, rejectionReasonPopup, showReleasingLoader]);
 
   // Cargar documentos pendientes al montar o cambiar de tab
   useEffect(() => {
@@ -2880,19 +2883,31 @@ function Dashboard({ user, onLogout }) {
 
       if (isFV && isRespCtroCost) {
         console.log('✅ Mostrar modal de retención');
+        console.log('🔍 doc.metadata:', doc.metadata);
+        console.log('🔍 doc.metadata.filasControl:', doc.metadata?.filasControl);
+        console.log('🔍 user.name:', user.name);
 
         // Detectar centros de costo donde el usuario es responsable
+        // Los centros están en metadata.filasControl (NO en causacionDetails)
         const userCostCenters = [];
-        if (doc.metadata && doc.metadata.causacionDetails && Array.isArray(doc.metadata.causacionDetails)) {
-          doc.metadata.causacionDetails.forEach((centro, index) => {
-            if (String(centro.responsable_centro_id) === String(user.id)) {
+        if (doc.metadata && doc.metadata.filasControl && Array.isArray(doc.metadata.filasControl)) {
+          console.log('🔍 Iterando sobre filasControl, total:', doc.metadata.filasControl.length);
+          doc.metadata.filasControl.forEach((fila, index) => {
+            console.log(`🔍 Fila ${index}:`, fila);
+            console.log(`🔍 fila.respCentroCostos: "${fila.respCentroCostos}", user.name: "${user.name}"`);
+
+            // Comparar el nombre del responsable del centro de costos con el nombre del usuario
+            if (fila.respCentroCostos && fila.respCentroCostos.trim() === user.name.trim()) {
               userCostCenters.push({
                 index: index,
-                nombre: centro.centro_costo_nombre || `Centro ${index + 1}`,
-                porcentaje: parseFloat(centro.porcentaje_centro || 0)
+                nombre: fila.centroCostos || `Centro ${index + 1}`,
+                porcentaje: parseFloat(fila.porcentaje || 0)
               });
+              console.log(`✅ Centro de costo encontrado para usuario: ${fila.centroCostos} (${fila.porcentaje}%)`);
             }
           });
+        } else {
+          console.warn('⚠️ No hay metadata.filasControl o no es un array');
         }
         console.log('🏢 Centros de costo del usuario:', userCostCenters);
 
@@ -2941,6 +2956,8 @@ function Dashboard({ user, onLogout }) {
       }
       signatureData += ` el ${new Date().toISOString()}`;
 
+      console.log('🔍 Datos de retención a enviar:', retention);
+
       const response = await axios.post(
         API_URL,
         {
@@ -2950,18 +2967,14 @@ function Dashboard({ user, onLogout }) {
               $signatureData: String!,
               $consecutivo: String,
               $realSignerName: String,
-              $retentionPercentage: Int,
-              $retentionReason: String,
-              $centroCostoIndex: Int
+              $retentions: String
             ) {
               signDocument(
                 documentId: $documentId,
                 signatureData: $signatureData,
                 consecutivo: $consecutivo,
                 realSignerName: $realSignerName,
-                retentionPercentage: $retentionPercentage,
-                retentionReason: $retentionReason,
-                centroCostoIndex: $centroCostoIndex
+                retentions: $retentions
               ) {
                 id
                 status
@@ -2976,9 +2989,7 @@ function Dashboard({ user, onLogout }) {
             signatureData: signatureData,
             consecutivo: consecutivo || null,
             realSignerName: realSigner || null,
-            retentionPercentage: retention?.percentage || null,
-            retentionReason: retention?.reason || null,
-            centroCostoIndex: retention?.centroCostoIndex !== undefined ? retention.centroCostoIndex : null
+            retentions: retention ? JSON.stringify(retention) : null
           }
         },
         {
@@ -3076,11 +3087,9 @@ function Dashboard({ user, onLogout }) {
   /**
    * Maneja la confirmación del modal de retención
    * @param {boolean} wantsRetention - Si el usuario quiere retener
-   * @param {number} percentage - Porcentaje de retención (solo si wantsRetention es true)
-   * @param {string} reason - Motivo de retención (solo si wantsRetention es true)
-   * @param {number|null} centroCostoIndex - Índice del centro de costo seleccionado
+   * @param {Array} retentions - Array de objetos { centroCostoIndex, percentage, reason }
    */
-  const handleRetentionConfirm = (wantsRetention, percentage = null, reason = null, centroCostoIndex = null) => {
+  const handleRetentionConfirm = (wantsRetention, retentions = []) => {
     if (!pendingSignWithRetention) {
       console.error('No hay firma pendiente');
       return;
@@ -3094,12 +3103,10 @@ function Dashboard({ user, onLogout }) {
     setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
     setAvailableCostCenters([]);
 
-    // Preparar datos de retención si aplica
-    const retentionParams = wantsRetention ? {
-      percentage: percentage,
-      reason: reason,
-      centroCostoIndex: centroCostoIndex
-    } : null;
+    console.log('🔍 Retenciones recibidas:', retentions);
+
+    // Preparar datos de retención si aplica (ahora es un array)
+    const retentionParams = wantsRetention && retentions.length > 0 ? retentions : null;
 
     // Firmar el documento con o sin retención
     handleSignDocument(docId, realSigner, retentionParams);
@@ -3129,42 +3136,10 @@ function Dashboard({ user, onLogout }) {
 
     if (pendingDocumentAction) {
       if (pendingDocumentAction.type === 'sign') {
-        // Verificar si después debe mostrar modal de retención
-        const doc = pendingDocuments.find(d => d.id === pendingDocumentAction.docId) || viewingDocument;
-        const isFV = doc && doc.documentType && doc.documentType.code === 'FV';
-        const isRespCtroCost = doc && hasRespCtroCostRole(doc);
-
-        if (isFV && isRespCtroCost) {
-          // Detectar centros de costo donde el usuario es responsable
-          const userCostCenters = [];
-          if (doc.metadata && doc.metadata.causacionDetails && Array.isArray(doc.metadata.causacionDetails)) {
-            doc.metadata.causacionDetails.forEach((centro, index) => {
-              if (String(centro.responsable_centro_id) === String(user.id)) {
-                userCostCenters.push({
-                  index: index,
-                  nombre: centro.centro_costo_nombre || `Centro ${index + 1}`,
-                  porcentaje: parseFloat(centro.porcentaje_centro || 0)
-                });
-              }
-            });
-          }
-
-          setAvailableCostCenters(userCostCenters);
-          const preselectedIndex = userCostCenters.length === 1 ? userCostCenters[0].index : null;
-
-          // Guardar el nombre del firmante real y mostrar modal de retención
-          setPendingSignWithRetention({ docId: pendingDocumentAction.docId, realSigner: signerName });
-          setRetentionData({
-            percentage: '',
-            reason: '',
-            wantsRetention: null,
-            selectedCentroIndex: preselectedIndex
-          });
-          setShowRetentionModal(true);
-        } else {
-          // Ejecutar firma directamente con el nombre real, sin retención
-          handleSignDocument(pendingDocumentAction.docId, signerName);
-        }
+        // IMPORTANTE: Negociaciones NUNCA puede retener porque no es responsable de centro de costos
+        // Solo firma en nombre de otro usuario, sin posibilidad de retención
+        console.log('✅ [NEGOCIACIONES] Firma directamente sin retención (Negociaciones no puede retener)');
+        handleSignDocument(pendingDocumentAction.docId, signerName);
       } else if (pendingDocumentAction.type === 'reject') {
         // Ejecutar rechazo con el nombre real
         handleRejectDocument(pendingDocumentAction.docId, pendingDocumentAction.reason, signerName);
@@ -3310,10 +3285,6 @@ function Dashboard({ user, onLogout }) {
 
       // Recargar documentos
       await loadRetainedDocuments();
-      if (viewingDocument && viewingDocument.id === documentId) {
-        // Reload current document
-        loadDocumentDetails(documentId);
-      }
 
       return true;
     } catch (error) {
@@ -3364,9 +3335,6 @@ function Dashboard({ user, onLogout }) {
       // Recargar documentos
       await loadRetainedDocuments();
       await loadSignedDocuments();
-      if (viewingDocument && viewingDocument.id === documentId) {
-        loadDocumentDetails(documentId);
-      }
 
       return true;
     } catch (error) {
@@ -7858,13 +7826,42 @@ function Dashboard({ user, onLogout }) {
                   </svg>
                 </div>
                 <h3 className="sign-confirm-title">Documento firmado</h3>
-                <p className="sign-confirm-message">El documento ha sido firmado exitosamente. Los involucrados han sido notificados.</p>
+                <p className="sign-confirm-message">El documento ha sido firmado exitosamente.</p>
                 <div className="sign-confirm-actions">
                   <button
                     className="sign-confirm-btn confirm full-width"
                     onClick={() => {
                       setShowSignSuccess(false);
                       handleCloseViewer();
+                    }}
+                  >
+                    Listo
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Popup de Éxito al Liberar */}
+          {showReleaseSuccess && (
+            <div className="sign-confirm-overlay" onClick={() => {
+              setShowReleaseSuccess(false);
+            }}>
+              <div className="sign-confirm-modal success-modal release-success" onClick={(e) => e.stopPropagation()}>
+                <div className="sign-confirm-icon release">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V8M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+                    <path d="M12 16.5V18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <h3 className="sign-confirm-title">Factura liberada</h3>
+                <p className="sign-confirm-message">La factura ha sido liberada exitosamente. La retención ha sido removida.</p>
+                <div className="sign-confirm-actions">
+                  <button
+                    className="sign-confirm-btn confirm full-width"
+                    onClick={() => {
+                      setShowReleaseSuccess(false);
                     }}
                   >
                     Listo
@@ -7956,6 +7953,11 @@ function Dashboard({ user, onLogout }) {
       {/* Animación de Rechazo */}
       <AnimatePresence>
         {showRejectingLoader && <RejectingLoadingScreen />}
+      </AnimatePresence>
+
+      {/* Animación de Liberación */}
+      <AnimatePresence>
+        {showReleasingLoader && <ReleasingLoadingScreen />}
       </AnimatePresence>
 
       {/* Modal de Detalles del Desarrollador */}
@@ -9252,6 +9254,10 @@ function Dashboard({ user, onLogout }) {
         }}
         onConfirm={async () => {
           if (pendingReleaseDocument && !releasingDocument) {
+            // Cerrar modal de confirmación y mostrar loader
+            setShowReleaseModal(false);
+            setShowReleasingLoader(true);
+
             try {
               setReleasingDocument(true);
 
@@ -9261,20 +9267,27 @@ function Dashboard({ user, onLogout }) {
               );
 
               if (success) {
+                // Cerrar loader y mostrar modal de éxito
+                setShowReleasingLoader(false);
+                setShowReleaseSuccess(true);
                 handleCloseViewer();
+
+                // Cambiar al tab de "Documentos firmados"
+                setTimeout(() => {
+                  setActiveTab('signed');
+                }, 800);
+              } else {
+                setShowReleasingLoader(false);
               }
 
-              // Recargar listas y documento actual
+              // Recargar listas
               await loadRetainedDocuments();
               await loadSignedDocuments();
-              if (viewingDocument) {
-                await loadDocumentDetails(viewingDocument.id);
-              }
             } catch (error) {
               console.error('Error en proceso de liberación:', error);
+              setShowReleasingLoader(false);
             } finally {
               setReleasingDocument(false);
-              setShowReleaseModal(false);
               setPendingReleaseDocument(null);
             }
           }

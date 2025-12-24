@@ -213,6 +213,121 @@
   line-height: 1.5;
 }
 
+/* Contenedor de centros de costo múltiples */
+.retention-multiple-centers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Tarjeta de centro de costo */
+.retention-centro-card {
+  border: 2px solid #E5E7EB;
+  border-radius: 12px;
+  background-color: #FFFFFF;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.retention-centro-card.selected {
+  border-color: #F59E0B;
+  background-color: #FFFBEB;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.1);
+}
+
+/* Header del centro de costo */
+.retention-centro-header {
+  padding: 16px 18px;
+}
+
+.retention-centro-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+/* Checkbox oculto */
+.retention-centro-checkbox {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Checkbox custom */
+.retention-centro-checkbox-custom {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #D1D5DB;
+  border-radius: 6px;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.retention-centro-checkbox:checked ~ .retention-centro-checkbox-custom {
+  border-color: #F59E0B;
+  background-color: #F59E0B;
+}
+
+.retention-centro-checkbox:checked ~ .retention-centro-checkbox-custom::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 10' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 5L4 8L11 1' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+/* Info del centro */
+.retention-centro-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.retention-centro-name {
+  font-size: 15px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 600;
+  color: #1F2937;
+  letter-spacing: -0.01em;
+}
+
+.retention-centro-max {
+  font-size: 13px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 400;
+  color: #6B7280;
+}
+
+/* Campos dentro del centro */
+.retention-centro-fields {
+  padding: 0 18px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Formulario de detalles de retención */
 .retention-details-form {
   display: flex;
