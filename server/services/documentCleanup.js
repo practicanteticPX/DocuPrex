@@ -16,7 +16,7 @@ async function cleanupOldDocuments() {
 
     // Primero, obtener los documentos que se van a eliminar para borrar los archivos físicos
     const documentsToDelete = await query(
-      `SELECT id, file_path, title, created_at
+      `SELECT id, file_path, title, created_at, original_pdf_backup
        FROM documents
        WHERE created_at < NOW() - INTERVAL '3 months'`,
       []
@@ -83,12 +83,37 @@ async function cleanupOldDocuments() {
 
       // 5. Eliminar archivos físicos (fuera de la transacción)
       let filesDeleted = 0;
+      let backupsDeleted = 0;
       for (const doc of documentsToDelete.rows) {
         try {
+          // Eliminar archivo principal
           const filePath = path.resolve(doc.file_path);
           await fs.unlink(filePath);
           filesDeleted++;
           console.log(`    🗑️  Archivo eliminado: ${doc.title}`);
+
+          // Eliminar archivos de backup originales
+          if (doc.original_pdf_backup) {
+            try {
+              const backupPaths = JSON.parse(doc.original_pdf_backup);
+              console.log(`    📦 Eliminando ${backupPaths.length} backup(s) del documento...`);
+
+              for (let i = 0; i < backupPaths.length; i++) {
+                const backupRelativePath = backupPaths[i].replace(/^uploads\//, '');
+                const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+
+                try {
+                  await fs.unlink(backupFullPath);
+                  backupsDeleted++;
+                  console.log(`       ✅ Backup ${i + 1}/${backupPaths.length} eliminado: ${path.basename(backupFullPath)}`);
+                } catch (backupError) {
+                  console.warn(`       ⚠️  No se pudo eliminar backup ${i + 1}: ${backupError.message}`);
+                }
+              }
+            } catch (parseError) {
+              console.warn(`    ⚠️  Error al parsear backups para ${doc.title}: ${parseError.message}`);
+            }
+          }
         } catch (fileError) {
           // Si el archivo no existe o hay error, continuar
           console.warn(`    ⚠️  No se pudo eliminar archivo: ${doc.title} - ${fileError.message}`);
@@ -99,7 +124,8 @@ async function cleanupOldDocuments() {
         documentsDeleted,
         signaturesDeleted,
         notificationsDeleted,
-        filesDeleted
+        filesDeleted,
+        backupsDeleted
       };
 
       console.log('\n✅ Limpieza completada exitosamente:');
@@ -107,6 +133,7 @@ async function cleanupOldDocuments() {
       console.log(`   ✍️  Firmas eliminadas: ${signaturesDeleted}`);
       console.log(`   🔔 Notificaciones eliminadas: ${notificationsDeleted}`);
       console.log(`   📁 Archivos físicos eliminados: ${filesDeleted}`);
+      console.log(`   📦 Backups eliminados: ${backupsDeleted}`);
 
       return summary;
 

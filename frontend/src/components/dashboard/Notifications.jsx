@@ -72,7 +72,9 @@ const getRelativeTime = (dateString) => {
 
 // Función para obtener el mensaje de la notificación
 const getNotificationMessage = (notification) => {
-  const actorName = notification.actor?.name || 'Alguien';
+  // Priorizar realSignerName (persona por quien se firmó) sobre actor.name (usuario logueado)
+  // Para grupos de causación o firma "por otra persona", mostrar el nombre correcto
+  const actorName = notification.actor?.realSignerName || notification.actor?.name || 'Alguien';
   const documentTitle = notification.documentTitle || 'el documento';
 
   switch (notification.type) {
@@ -165,6 +167,7 @@ const Notifications = ({ onNotificationClick, socket }) => {
                   id
                   name
                   email
+                  realSignerName
                 }
               }
               unreadNotificationsCount
@@ -309,11 +312,12 @@ const Notifications = ({ onNotificationClick, socket }) => {
             documentTitle: data.notification.document_title || data.notification.documentTitle,
             isRead: false,
             createdAt: Date.now(),
-            actor: data.notification.actor || {
-              id: data.notification.actor_id,
-              name: null,
-              email: null
-            }
+            actor: data.notification.actor ? {
+              id: data.notification.actor.id,
+              name: data.notification.actor.name,
+              email: data.notification.actor.email,
+              realSignerName: data.notification.actor.realSignerName
+            } : null
           };
 
           return [newNotification, ...prev];

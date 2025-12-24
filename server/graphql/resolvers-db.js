@@ -19,6 +19,147 @@ const websocketService = require('../services/websocket');
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 
 /**
+ * Helper: Verificar si un documento está completamente firmado
+ * @param {number} documentId - ID del documento
+ * @returns {Promise<boolean>} true si todas las firmas están completas
+ */
+async function checkIfDocumentFullySigned(documentId) {
+  try {
+    const result = await query(
+      `SELECT
+        COUNT(*) as total_signers,
+        COUNT(s.id) FILTER (WHERE s.status = 'signed') as signed_count
+       FROM document_signers ds
+       LEFT JOIN signatures s ON s.document_id = ds.document_id
+         AND ((ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+              (ds.is_causacion_group = true AND s.signer_id IN (
+                SELECT ci.user_id FROM causacion_integrantes ci
+                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                WHERE cg.codigo = ds.grupo_codigo
+              )))
+       WHERE ds.document_id = $1`,
+      [documentId]
+    );
+
+    if (result.rows.length === 0) return false;
+
+    const { total_signers, signed_count } = result.rows[0];
+    return parseInt(total_signers) > 0 && parseInt(total_signers) === parseInt(signed_count);
+  } catch (error) {
+    console.error('❌ Error al verificar si documento está completamente firmado:', error);
+    return false;
+  }
+}
+
+/**
+ * Helper: Verificar si un documento tiene retenciones activas
+ * @param {number} documentId - ID del documento
+ * @returns {Promise<boolean>} true si tiene retenciones activas
+ */
+async function checkIfDocumentHasActiveRetentions(documentId) {
+  try {
+    const result = await query(
+      `SELECT retention_data FROM documents WHERE id = $1`,
+      [documentId]
+    );
+
+    if (result.rows.length === 0) return false;
+
+    const retentionData = result.rows[0].retention_data;
+    if (!retentionData) return false;
+
+    const retentions = typeof retentionData === 'string' ? JSON.parse(retentionData) : retentionData;
+    const activeRetentions = retentions.filter(r => r.activa === true);
+
+    return activeRetentions.length > 0;
+  } catch (error) {
+    console.error('❌ Error al verificar retenciones activas:', error);
+    return false;
+  }
+}
+
+/**
+ * Helper: Eliminar archivos de backup de un documento
+ * @param {number} documentId - ID del documento
+ * @returns {Promise<number>} Número de backups eliminados
+ */
+async function cleanupDocumentBackups(documentId) {
+  try {
+    console.log(`🧹 [CLEANUP] Verificando backups para eliminar del documento ${documentId}...`);
+
+    const result = await query(
+      `SELECT original_pdf_backup FROM documents WHERE id = $1`,
+      [documentId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].original_pdf_backup) {
+      console.log(`   ℹ️  Documento ${documentId} no tiene backups para eliminar`);
+      return 0;
+    }
+
+    const backupPaths = JSON.parse(result.rows[0].original_pdf_backup);
+    console.log(`   📦 Encontrados ${backupPaths.length} backup(s) para eliminar`);
+
+    let deletedCount = 0;
+    for (let i = 0; i < backupPaths.length; i++) {
+      const relPath = backupPaths[i];
+      const backupRelativePath = relPath.replace(/^uploads\//, '');
+      const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+
+      try {
+        await fs.unlink(fullBackupPath);
+        deletedCount++;
+        console.log(`      ✅ Backup ${i + 1}/${backupPaths.length} eliminado: ${path.basename(fullBackupPath)}`);
+      } catch (fileErr) {
+        console.warn(`      ⚠️  No se pudo eliminar backup ${i + 1}: ${fileErr.message}`);
+      }
+    }
+
+    // Actualizar BD para marcar que ya no hay backups
+    await query(
+      `UPDATE documents SET original_pdf_backup = NULL WHERE id = $1`,
+      [documentId]
+    );
+
+    console.log(`   ✅ ${deletedCount}/${backupPaths.length} backups eliminados del documento ${documentId}`);
+    return deletedCount;
+  } catch (error) {
+    console.error('❌ Error al eliminar backups del documento:', error);
+    return 0;
+  }
+}
+
+/**
+ * Helper: Verificar y limpiar backups si el documento está completo
+ * Elimina backups solo si: está totalmente firmado Y no tiene retenciones activas
+ * @param {number} documentId - ID del documento
+ */
+async function checkAndCleanupBackupsIfComplete(documentId) {
+  try {
+    console.log(`🔍 [CLEANUP] Verificando si se pueden eliminar backups del documento ${documentId}...`);
+
+    const isFullySigned = await checkIfDocumentFullySigned(documentId);
+    const hasActiveRetentions = await checkIfDocumentHasActiveRetentions(documentId);
+
+    console.log(`   📊 Estado: Firmado=${isFullySigned}, Retenciones activas=${hasActiveRetentions}`);
+
+    if (isFullySigned && !hasActiveRetentions) {
+      console.log(`   ✅ Documento completo y sin retenciones → Eliminando backups...`);
+      await cleanupDocumentBackups(documentId);
+    } else {
+      if (!isFullySigned) {
+        console.log(`   ⏭️  Documento aún no está completamente firmado → Manteniendo backups`);
+      }
+      if (hasActiveRetentions) {
+        console.log(`   ⏭️  Documento tiene retenciones activas → Manteniendo backups`);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error al verificar y limpiar backups:', error);
+  }
+}
+
+/**
  * Helper: Obtener firmas de un documento tipo FV
  * Retorna un objeto con el mapeo: { 'nombre_persona': 'nombre_firmante' }
  * Usa el templateData para hacer matching correcto de nombres
@@ -864,7 +1005,7 @@ const resolvers = {
             console.log('✓ Usuario local autenticado:', localUser.email);
 
             const token = jwt.sign(
-              { id: localUser.id, email: localUser.email, role: localUser.role },
+              { id: localUser.id, email: localUser.email, name: localUser.name, role: localUser.role },
               JWT_SECRET,
               { expiresIn: process.env.JWT_EXPIRES || '8h' }
             );
@@ -913,7 +1054,7 @@ const resolvers = {
         }
 
         const token = jwt.sign(
-          { id: user.id, email: user.email, role: user.role },
+          { id: user.id, email: user.email, name: user.name, role: user.role },
           JWT_SECRET,
           { expiresIn: process.env.JWT_EXPIRES || '8h' }
         );
@@ -964,7 +1105,7 @@ const resolvers = {
 
       const user = result.rows[0];
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, email: user.email, name: user.name, role: user.role },
         JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES || '8h' }
       );
@@ -4215,6 +4356,10 @@ const resolvers = {
 
             // Emitir evento WebSocket con información completa del actor
             if (insertResult.rows.length > 0) {
+              // Obtener información completa del actor desde la BD (no del JWT)
+              const actorResult = await query('SELECT id, name, email FROM users WHERE id = $1', [user.id]);
+              const actorFromDB = actorResult.rows[0];
+
               websocketService.emitNotificationCreated(doc.uploaded_by, {
                 id: insertResult.rows[0].id,
                 type: 'document_signed',
@@ -4222,9 +4367,10 @@ const resolvers = {
                 actor_id: user.id,
                 document_title: doc.title,
                 actor: {
-                  id: user.id,
-                  name: user.name,
-                  email: user.email
+                  id: actorFromDB.id,
+                  name: actorFromDB.name,
+                  email: actorFromDB.email,
+                  realSignerName: effectiveRealSignerName || actorFromDB.name
                 }
               });
             }
@@ -4608,9 +4754,10 @@ const resolvers = {
       }
 
       // ========== PROCESAR RETENCIÓN SI SE PROPORCIONÓ ==========
+      console.log(`🔍 [DEBUG] Parámetros de retención recibidos:`, { retentionPercentage, retentionReason, centroCostoIndex });
       if (retentionPercentage && retentionReason) {
         try {
-          console.log(`📋 Procesando retención para documento ${documentId}...`);
+          console.log(`📋 ✅ INICIANDO Procesamiento de retención para documento ${documentId}...`);
 
           // Validar que el porcentaje esté en el rango correcto
           if (retentionPercentage < 1 || retentionPercentage > 100) {
@@ -4773,31 +4920,47 @@ const resolvers = {
                       console.log(`✅ Documento ${documentId} retenido por ${userName} (${retentionPercentage}%): ${retentionReason}`);
                       console.log(`📊 retention_data guardado:`, JSON.stringify(currentRetentions, null, 2));
 
+                      // Emitir evento WebSocket de retención
+                      websocketService.emitDocumentRetained(documentId, {
+                        retainedBy: userName,
+                        userId: user.id,
+                        percentage: retentionPercentage,
+                        reason: retentionReason,
+                        centroCostoIndex: finalCentroCostoIndex
+                      });
+                      console.log(`🔔 [WEBSOCKET] Emitido evento de retención para documento ${documentId}`);
+
                       // ========== REGENERAR PDF CON RETENCIONES ==========
+                      console.log(`🔍 [DEBUG] Verificando metadata:`, { hasMetadata: !!metadata, keysLength: metadata ? Object.keys(metadata).length : 0 });
                       if (metadata && Object.keys(metadata).length > 0) {
-                        console.log('📋 Regenerando PDF FV después de firmar con retención...');
+                        console.log('📋 ✅✅✅ REGENERANDO PDF FV después de firmar con retención...');
 
                         try {
                           const fs = require('fs').promises;
                           const path = require('path');
 
                           const templateData = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                          console.log(`🔍 [DEBUG] templateData parseado correctamente`);
 
                           // Obtener firmas actuales
                           const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
+                          console.log(`🔍 [DEBUG] Firmas actuales obtenidas:`, firmasActuales ? Object.keys(firmasActuales) : []);
 
                           // Usar las retenciones que acabamos de guardar
                           const activeRetentions = currentRetentions.filter(r => r.activa);
-                          console.log(`📦 Retenciones activas después de retener:`, activeRetentions);
+                          console.log(`📦 ✅ Retenciones activas después de retener (${activeRetentions.length}):`, activeRetentions);
 
                           // Regenerar PDF con retenciones
+                          console.log(`🔄 Llamando a generateFacturaTemplatePDF con ${activeRetentions.length} retenciones...`);
                           const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
+                          console.log(`✅ PDF de plantilla generado (${templatePdfBuffer.length} bytes)`);
 
                           // Guardar PDF en archivo temporal
                           const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
                           await fs.mkdir(tempDir, { recursive: true });
                           const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
                           await fs.writeFile(tempPlanillaPath, templatePdfBuffer);
+                          console.log(`✅ Planilla guardada en: ${tempPlanillaPath}`);
 
                           // Obtener info del documento para backups
                           const docBackupInfo = await query(
@@ -4808,42 +4971,53 @@ const resolvers = {
                           if (docBackupInfo.rows.length > 0) {
                             const relativePath = docBackupInfo.rows[0].file_path.replace(/^uploads\//, '');
                             const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
+                            console.log(`📄 PDF actual: ${currentPdfPath}`);
 
                             // Cargar backups
                             let backupFilePaths = [];
                             if (docBackupInfo.rows[0].original_pdf_backup) {
                               const backupPathsArray = JSON.parse(docBackupInfo.rows[0].original_pdf_backup);
+                              console.log(`📦 Backups registrados: ${backupPathsArray.length}`);
                               for (const relPath of backupPathsArray) {
                                 const backupRelativePath = relPath.replace(/^uploads\//, '');
                                 const backupFullPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
                                 try {
                                   await fs.access(backupFullPath);
                                   backupFilePaths.push(backupFullPath);
+                                  console.log(`   ✅ Backup encontrado: ${path.basename(backupFullPath)}`);
                                 } catch (e) {
-                                  console.warn(`⚠️ Backup no encontrado: ${backupFullPath}`);
+                                  console.warn(`   ⚠️ Backup no encontrado: ${backupFullPath}`);
                                 }
                               }
                             }
+                            console.log(`📦 Total backups cargados: ${backupFilePaths.length}`);
 
                             // Fusionar PDFs
                             const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
                             const filesToMerge = [tempPlanillaPath, ...backupFilePaths];
+                            console.log(`🔗 Fusionando ${filesToMerge.length} PDFs...`);
                             await mergePDFs(filesToMerge, tempMergedPath);
+                            console.log(`✅ PDFs fusionados en: ${tempMergedPath}`);
 
                             // Copiar merged PDF sobre el PDF actual
+                            console.log(`📋 Copiando PDF fusionado a: ${currentPdfPath}`);
                             await fs.copyFile(tempMergedPath, currentPdfPath);
 
                             // Limpiar archivos temporales
+                            console.log(`🧹 Limpiando archivos temporales...`);
                             await cleanupTempFiles([tempPlanillaPath, tempMergedPath]);
 
-                            console.log('✅ PDF regenerado exitosamente después de firmar con retención');
+                            console.log('✅✅✅ PDF regenerado exitosamente después de firmar con retención');
+                          } else {
+                            console.error('❌ No se encontró información del documento para regenerar PDF');
                           }
                         } catch (pdfError) {
                           console.error('❌ Error al regenerar PDF con retención:', pdfError);
                           // No lanzar error para no fallar la firma
                         }
                       } else {
-                        console.log('ℹ️ Documento sin metadata, PDF no se regenerará');
+                        console.warn('⚠️⚠️⚠️ Documento sin metadata (sin plantilla FV completa), PDF NO se regenerará con retenciones');
+                        console.warn('ℹ️ Para ver columnas de retención, el documento debe tener plantilla de factura completa guardada');
                       }
                     } else {
                       console.warn(`⚠️ Porcentaje de retención (${retentionPercentage}%) excede el asignado (${maxPercentage}%)`);
@@ -4868,9 +5042,19 @@ const resolvers = {
       }
 
       // Emitir evento WebSocket para notificar a todos los clientes
-      websocketService.emitDocumentSigned(documentId, {
+      const wsData = {
         signedBy: user.name,
+        realSignerName: effectiveRealSignerName || user.name,
+        signerId: user.id,
         status: newStatus
+      };
+      console.log(`🔔 [WEBSOCKET] Emitiendo evento de firma:`, wsData);
+      websocketService.emitDocumentSigned(documentId, wsData);
+
+      // Verificar si el documento está completamente firmado y sin retenciones
+      // para eliminar backups (esto no debe bloquear la firma)
+      checkAndCleanupBackupsIfComplete(documentId).catch(err => {
+        console.error('⚠️ Error al verificar cleanup de backups:', err);
       });
 
       return result.rows[0];
@@ -5163,36 +5347,174 @@ const resolvers = {
           if (docPathResult.rows[0].original_pdf_backup) {
             try {
               const backupPathsArray = JSON.parse(docPathResult.rows[0].original_pdf_backup);
+              console.log(`📦 [RETENTION] Backups registrados en DB:`, backupPathsArray);
+              console.log(`📦 [RETENTION] Total de backups a cargar: ${backupPathsArray.length}`);
+
               for (let i = 0; i < backupPathsArray.length; i++) {
                 const relPath = backupPathsArray[i];
+                console.log(`📄 [RETENTION] Procesando backup ${i + 1}/${backupPathsArray.length}:`, relPath);
+
                 const backupRelativePath = relPath.replace(/^uploads\//, '');
                 const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
-                const backupContent = await fs.readFile(fullBackupPath);
-                backupFilePaths.push(backupContent);
+                console.log(`   📁 Ruta completa: ${fullBackupPath}`);
+
+                try {
+                  // Verificar que el archivo existe
+                  await fs.access(fullBackupPath);
+                  console.log(`   ✅ Archivo existe`);
+
+                  const backupContent = await fs.readFile(fullBackupPath);
+                  console.log(`   ✅ Archivo leído: ${backupContent.length} bytes`);
+
+                  backupFilePaths.push(backupContent);
+                  console.log(`   ✅ Backup ${i + 1} agregado exitosamente`);
+                } catch (fileErr) {
+                  console.error(`   ❌ Error al leer backup ${i + 1}:`, fileErr.message);
+                  console.error(`   ❌ Path: ${fullBackupPath}`);
+                }
               }
+
+              console.log(`📦 [RETENTION] Total de backups cargados exitosamente: ${backupFilePaths.length}/${backupPathsArray.length}`);
             } catch (err) {
-              console.warn('⚠️ No se pudieron cargar los backups, solo se usará la plantilla:', err.message);
+              console.error('❌ [RETENTION] Error al procesar backups:', err);
+              console.error('❌ [RETENTION] Stack:', err.stack);
             }
+          } else {
+            console.warn('⚠️ [RETENTION] No hay backups registrados en original_pdf_backup');
           }
 
           // Combinar PDFs
+          console.log(`🔗 [RETENTION] Iniciando combinación de PDFs...`);
           const PDFDocument = require('pdf-lib').PDFDocument;
           const mergedPdf = await PDFDocument.create();
 
           // Agregar plantilla
+          console.log(`📄 [RETENTION] Agregando plantilla generada...`);
           const templatePdfDoc = await PDFDocument.load(templatePdfBuffer);
           const templatePages = await mergedPdf.copyPages(templatePdfDoc, templatePdfDoc.getPageIndices());
           templatePages.forEach(page => mergedPdf.addPage(page));
+          console.log(`   ✅ Plantilla agregada: ${templatePages.length} página(s)`);
 
           // Agregar backups
-          for (const backupBuffer of backupFilePaths) {
-            const backupPdfDoc = await PDFDocument.load(backupBuffer);
-            const backupPages = await mergedPdf.copyPages(backupPdfDoc, backupPdfDoc.getPageIndices());
-            backupPages.forEach(page => mergedPdf.addPage(page));
+          console.log(`📦 [RETENTION] Agregando ${backupFilePaths.length} backup(s)...`);
+          for (let i = 0; i < backupFilePaths.length; i++) {
+            const backupBuffer = backupFilePaths[i];
+            console.log(`   📄 Procesando backup ${i + 1}/${backupFilePaths.length}...`);
+            try {
+              const backupPdfDoc = await PDFDocument.load(backupBuffer);
+              const backupPages = await mergedPdf.copyPages(backupPdfDoc, backupPdfDoc.getPageIndices());
+              backupPages.forEach(page => mergedPdf.addPage(page));
+              console.log(`   ✅ Backup ${i + 1} agregado: ${backupPages.length} página(s)`);
+            } catch (loadErr) {
+              console.error(`   ❌ Error al cargar backup ${i + 1}:`, loadErr.message);
+            }
           }
 
+          const totalPages = mergedPdf.getPageCount();
+          console.log(`📊 [RETENTION] Total de páginas en PDF final: ${totalPages}`);
+
           const finalPdfBytes = await mergedPdf.save();
+          console.log(`💾 [RETENTION] PDF guardado: ${finalPdfBytes.length} bytes`);
           await fs.writeFile(currentPdfPath, finalPdfBytes);
+          console.log(`✅ [RETENTION] PDF escrito en: ${currentPdfPath}`);
+
+          // ========== AGREGAR INFORME DE FIRMANTES ==========
+          console.log(`📋 [RETENTION] Agregando informe de firmantes...`);
+          try {
+            // Obtener información del documento y firmantes
+            const docInfoResult = await query(
+              `SELECT
+                d.title,
+                d.file_name,
+                d.created_at,
+                u.name as uploader_name,
+                dt.name as document_type_name
+              FROM documents d
+              LEFT JOIN users u ON d.uploaded_by = u.id
+              LEFT JOIN document_types dt ON d.document_type_id = dt.id
+              WHERE d.id = $1`,
+              [documentId]
+            );
+
+            if (docInfoResult.rows.length > 0) {
+              const docInfo = docInfoResult.rows[0];
+
+              // Obtener firmantes
+              const signersResult = await query(
+                `SELECT
+                    ds.user_id,
+                    ds.order_position,
+                    ds.role_name,
+                    ds.role_names,
+                    ds.is_causacion_group,
+                    ds.grupo_codigo,
+                    u.name as user_name,
+                    cg.nombre as grupo_nombre,
+                    u.email,
+                    COALESCE(s.status, 'pending') as status,
+                    s.signed_at,
+                    s.rejected_at,
+                    s.rejection_reason,
+                    s.consecutivo,
+                    COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                    signer_user.email as signer_email
+                FROM document_signers ds
+                LEFT JOIN users u ON ds.user_id = u.id
+                LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+                LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+                  (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+                  (ds.is_causacion_group = true AND s.signer_id IN (
+                    SELECT ci.user_id
+                    FROM causacion_integrantes ci
+                    JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                    WHERE cg.codigo = ds.grupo_codigo
+                  ))
+                )
+                LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+                WHERE ds.document_id = $1
+                ORDER BY ds.order_position ASC`,
+                [documentId]
+              );
+
+              const signers = signersResult.rows.map(row => {
+                const name = row.is_causacion_group
+                  ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
+                  : (row.user_name || 'Sin nombre');
+
+                return {
+                  name: name,
+                  email: row.signer_email || row.email,
+                  order_position: row.order_position,
+                  role_name: row.role_name,
+                  role_names: row.role_names,
+                  status: row.status,
+                  signed_at: row.signed_at,
+                  rejected_at: row.rejected_at,
+                  rejection_reason: row.rejection_reason,
+                  consecutivo: row.consecutivo,
+                  is_causacion_group: row.is_causacion_group,
+                  grupo_codigo: row.grupo_codigo,
+                  real_signer_name: row.real_signer_name
+                };
+              });
+
+              const documentInfo = {
+                title: docInfo.title,
+                fileName: docInfo.file_name,
+                createdAt: docInfo.created_at,
+                uploadedBy: docInfo.uploader_name || 'Sistema',
+                documentTypeName: docInfo.document_type_name || null
+              };
+
+              // Agregar informe de firmantes al PDF
+              console.log(`📄 [RETENTION] Agregando ${signers.length} firmantes al informe...`);
+              await addCoverPageWithSigners(currentPdfPath, signers, documentInfo);
+              console.log(`✅ [RETENTION] Informe de firmantes agregado exitosamente`);
+            }
+          } catch (signersError) {
+            console.error(`❌ [RETENTION] Error al agregar informe de firmantes:`, signersError);
+            // No lanzar error para que no falle la retención
+          }
 
           console.log('✅ PDF regenerado exitosamente después de retener');
         }
@@ -5340,10 +5662,92 @@ const resolvers = {
           }
 
           const finalPdfBytes = await mergedPdf.save();
-          await fs.writeFile(currentPdfPath, finalPdfBytes);
 
-          console.log('✅ PDF regenerado exitosamente después de liberar retención');
+          // Guardar PDF temporal fusionado
+          const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
+          await fs.writeFile(tempMergedPath, finalPdfBytes);
+
+          // Agregar página de firmantes
+          const signersForCover = await query(
+            `SELECT
+              ds.user_id,
+              ds.order_position,
+              ds.role_name,
+              ds.role_names,
+              ds.is_causacion_group,
+              ds.grupo_codigo,
+              u.name as user_name,
+              cg.nombre as grupo_nombre,
+              u.email,
+              COALESCE(s.status, 'pending') as status,
+              s.signed_at,
+              s.rejected_at,
+              s.rejection_reason,
+              s.consecutivo,
+              COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+              signer_user.email as signer_email
+             FROM document_signers ds
+             LEFT JOIN users u ON ds.user_id = u.id
+             LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+             LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+               (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+               (ds.is_causacion_group = true AND s.signer_id IN (
+                 SELECT ci.user_id
+                 FROM causacion_integrantes ci
+                 JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                 WHERE cg.codigo = ds.grupo_codigo
+               ))
+             )
+             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+             WHERE ds.document_id = $1
+             ORDER BY ds.order_position ASC`,
+            [documentId]
+          );
+
+          const signers = signersForCover.rows.map(row => ({
+            name: row.is_causacion_group ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación') : (row.user_name || 'Sin nombre'),
+            email: row.signer_email || row.email,
+            order_position: row.order_position,
+            role_name: row.role_name,
+            role_names: row.role_names,
+            status: row.status,
+            signed_at: row.signed_at,
+            rejected_at: row.rejected_at,
+            rejection_reason: row.rejection_reason,
+            consecutivo: row.consecutivo,
+            is_causacion_group: row.is_causacion_group,
+            grupo_codigo: row.grupo_codigo,
+            real_signer_name: row.real_signer_name
+          }));
+
+          const docTitleResult = await query('SELECT title, file_name, created_at FROM documents WHERE id = $1', [documentId]);
+          const docTitleInfo = docTitleResult.rows[0];
+
+          const documentInfoForCover = {
+            title: docTitleInfo.title || 'Factura',
+            fileName: docTitleInfo.file_name || '',
+            createdAt: docTitleInfo.created_at,
+            uploadedBy: 'Sistema',
+            documentTypeName: 'Factura'
+          };
+
+          await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
+
+          // Copiar el PDF final con página de firmantes al destino
+          await fs.copyFile(tempMergedPath, currentPdfPath);
+
+          // Limpiar archivos temporales
+          await fs.unlink(tempPlanillaPath);
+          await fs.unlink(tempMergedPath);
+
+          console.log('✅ PDF regenerado exitosamente después de liberar retención (con informe de firmas actualizado)');
         }
+
+        // Verificar si ya no hay retenciones activas y el documento está firmado
+        // para eliminar backups (esto no debe bloquear la liberación)
+        checkAndCleanupBackupsIfComplete(documentId).catch(err => {
+          console.error('⚠️ Error al verificar cleanup de backups:', err);
+        });
 
         return true;
       } catch (error) {
@@ -5374,6 +5778,18 @@ const resolvers = {
     // Mapeo de metadata (BD) a templateData (GraphQL)
     // metadata es JSONB en PostgreSQL, el driver pg lo devuelve como objeto
     // El schema GraphQL espera String, así que stringify
+    metadata: (parent) => {
+      if (!parent.metadata) return null;
+
+      // Si metadata ya es un objeto (JSONB), stringificarlo
+      if (typeof parent.metadata === 'object') {
+        return JSON.stringify(parent.metadata);
+      }
+
+      // Si por alguna razón es string, devolverlo tal cual
+      return parent.metadata;
+    },
+
     templateData: (parent) => {
       if (!parent.metadata) return null;
 
@@ -5756,7 +6172,25 @@ const resolvers = {
     actor: async (parent) => {
       if (!parent.actor_id) return null;
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.actor_id]);
-      return result.rows[0];
+      const actor = result.rows[0];
+
+      // Si la notificación es de tipo 'document_signed', obtener el realSignerName de la firma
+      if (parent.type === 'document_signed' && parent.document_id) {
+        const signatureResult = await query(
+          `SELECT real_signer_name FROM signatures
+           WHERE document_id = $1 AND signer_id = $2 AND status = 'signed'
+           ORDER BY signed_at DESC LIMIT 1`,
+          [parent.document_id, parent.actor_id]
+        );
+
+        if (signatureResult.rows.length > 0 && signatureResult.rows[0].real_signer_name) {
+          actor.realSignerName = signatureResult.rows[0].real_signer_name;
+        } else {
+          actor.realSignerName = actor.name;
+        }
+      }
+
+      return actor;
     },
   },
 

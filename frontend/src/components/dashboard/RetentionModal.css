@@ -1,0 +1,527 @@
+/* Modal de retención de facturas */
+.retention-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 400;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.retention-modal-content {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 600px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.08);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Header */
+.retention-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 32px 40px;
+  border-bottom: 1px solid #F0F1F3;
+  background: linear-gradient(to bottom, #FAFBFC 0%, #FFFFFF 100%);
+}
+
+.retention-header-content {
+  flex: 1;
+}
+
+.retention-modal-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 22px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 600;
+  color: #1F2937;
+  letter-spacing: -0.02em;
+}
+
+.retention-modal-close {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: #9CA3AF;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.retention-modal-close:hover {
+  background-color: #F9FAFB;
+  color: #6B7280;
+}
+
+.retention-modal-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Body */
+.retention-modal-body {
+  padding: 32px 40px;
+}
+
+.retention-instruction {
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 400;
+  color: #6B7280;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Lista de elección (Sí/No) */
+.retention-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.retention-choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 22px;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  background-color: #FFFFFF;
+}
+
+.retention-choice-option:hover {
+  border-color: #CBD5E1;
+  background-color: #F9FAFB;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.retention-choice-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.retention-choice-option input[type="radio"]:checked ~ .retention-radio {
+  border-color: #10B981;
+  background-color: #10B981;
+}
+
+.retention-choice-option:has(input[type="radio"]:checked) {
+  border-color: #10B981;
+  background-color: #D1FAE5;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.15);
+}
+
+/* Estilo específico para "Retener factura" cuando está seleccionado */
+.retention-choice-option:has(input[value="yes"]:checked) input[type="radio"]:checked ~ .retention-radio {
+  border-color: #F59E0B;
+  background-color: #F59E0B;
+}
+
+.retention-choice-option:has(input[value="yes"]:checked) {
+  border-color: #F59E0B;
+  background-color: #FEF3C7;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.15);
+}
+
+.retention-choice-option input[type="radio"]:checked ~ .retention-radio::after {
+  transform: scale(1);
+}
+
+.retention-radio {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #D1D5DB;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.retention-radio::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background-color: white;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.retention-choice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.retention-choice-title {
+  font-size: 15px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 600;
+  color: #1F2937;
+  letter-spacing: -0.01em;
+}
+
+.retention-choice-subtitle {
+  font-size: 13px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 400;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+/* Formulario de detalles de retención */
+.retention-details-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.retention-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.retention-field-label {
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 500;
+  color: #374151;
+}
+
+.retention-select {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  background-color: #FFFFFF;
+  color: #1F2937;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.retention-select:hover {
+  border-color: #CBD5E1;
+}
+
+.retention-select:focus {
+  border-color: #F59E0B;
+  background-color: #FFFBEB;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
+}
+
+.retention-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.retention-input {
+  width: 100%;
+  padding: 12px 44px 12px 14px;
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  background-color: #FFFFFF;
+  color: #1F2937;
+  transition: all 0.2s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.retention-input:hover {
+  border-color: #CBD5E1;
+}
+
+.retention-input:focus {
+  border-color: #F59E0B;
+  background-color: #FFFBEB;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
+}
+
+.retention-input-suffix {
+  position: absolute;
+  right: 14px;
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 500;
+  color: #6B7280;
+  pointer-events: none;
+}
+
+.retention-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  background-color: #FFFFFF;
+  color: #1F2937;
+  transition: all 0.2s ease;
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+  box-sizing: border-box;
+}
+
+.retention-textarea:hover {
+  border-color: #CBD5E1;
+}
+
+.retention-textarea:focus {
+  border-color: #F59E0B;
+  background-color: #FFFBEB;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
+}
+
+.retention-textarea::placeholder {
+  color: #9CA3AF;
+}
+
+/* Caja de información */
+.retention-info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  background-color: #F0F9FF;
+  border: 2px solid #BFDBFE;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.retention-info-icon {
+  color: #3B82F6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.retention-info-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.retention-info-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.retention-info-text strong {
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 600;
+  color: #1E40AF;
+}
+
+.retention-info-text span {
+  font-size: 13px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 400;
+  color: #3B82F6;
+}
+
+/* Error */
+.retention-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  color: #DC2626;
+  font-size: 13px;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 400;
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+.retention-error svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Footer */
+.retention-modal-footer {
+  display: flex;
+  gap: 14px;
+  padding: 24px 40px 32px 40px;
+  border-top: 1px solid #F0F1F3;
+  background-color: #FAFBFC;
+}
+
+.retention-btn-cancel,
+.retention-btn-confirm {
+  padding: 13px 28px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  border: none;
+  font-family: 'Google Sans', sans-serif;
+  letter-spacing: -0.01em;
+  transition: all 0.2s ease;
+}
+
+.retention-btn-cancel {
+  background-color: white;
+  color: #6B7280;
+  border: 2px solid #E5E7EB;
+  padding: 11px 28px;
+}
+
+.retention-btn-cancel:hover {
+  background-color: #F9FAFB;
+  border-color: #CBD5E1;
+}
+
+.retention-btn-confirm {
+  flex: 1;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Botón para firmar sin retener (verde) */
+.retention-btn-no-retention {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+}
+
+.retention-btn-no-retention:hover {
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Botón para retener (amarillo/naranja) */
+.retention-btn-retention {
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+}
+
+.retention-btn-retention:hover {
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Estado deshabilitado de los botones */
+.retention-btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Botón Volver */
+.retention-btn-back {
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  background-color: white;
+  color: #6B7280;
+  border: 2px solid #E5E7EB;
+  font-family: 'Google Sans', sans-serif;
+  letter-spacing: -0.01em;
+  transition: all 0.15s ease;
+}
+
+.retention-btn-back:hover {
+  background-color: #F9FAFB;
+  border-color: #CBD5E1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .retention-modal-content {
+    max-width: 100%;
+    margin: 0 16px;
+  }
+
+  .retention-modal-header {
+    padding: 24px;
+  }
+
+  .retention-modal-header h2 {
+    font-size: 20px;
+  }
+
+  .retention-modal-body {
+    padding: 24px;
+  }
+
+  .retention-modal-footer {
+    padding: 20px 24px;
+    flex-direction: column-reverse;
+  }
+
+  .retention-btn-cancel,
+  .retention-btn-confirm {
+    width: 100%;
+  }
+}

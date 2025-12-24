@@ -13,6 +13,7 @@ const typeDefs = gql`
     emailNotifications: Boolean!
     createdAt: String!
     updatedAt: String!
+    realSignerName: String
   }
 
   type AuthPayload {
@@ -34,6 +35,7 @@ const typeDefs = gql`
     documentType: DocumentType
     documentTypeId: Int
     consecutivo: String
+    metadata: String
     templateData: String
     createdAt: String!
     updatedAt: String!

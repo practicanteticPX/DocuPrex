@@ -21,6 +21,8 @@ import Loader from '../Loader/Loader';
 import LogoutButton from '../LogoutButton/LogoutButton';
 import HelpModal from '../HelpModal/HelpModal';
 import RealSignerModal from './RealSignerModal';
+import RetentionModal from './RetentionModal';
+import ReleaseModal from './ReleaseModal';
 import CountUp from '../CountUp';
 import { Download, Close, Settings } from '../ui/animated-icons';
 import clockImage from '../../assets/clock.png';
@@ -346,6 +348,11 @@ function Dashboard({ user, onLogout }) {
 
     newSocket.on('document:updated', (data) => {
       console.log('📤 Documento actualizado recibido:', data);
+      reloadAllData();
+    });
+
+    newSocket.on('document:retained', (data) => {
+      console.log('📤 Documento retenido recibido:', data);
       reloadAllData();
     });
 
@@ -1158,6 +1165,23 @@ function Dashboard({ user, onLogout }) {
   }, [user, documentLoadedFromUrl]); // Ejecutar cuando el usuario o la bandera cambien
 
   /**
+   * Helper: Parsear metadata de documentos
+   */
+  const parseDocumentMetadata = (documents) => {
+    return documents.map(doc => {
+      if (doc.metadata && typeof doc.metadata === 'string') {
+        try {
+          doc.metadata = JSON.parse(doc.metadata);
+        } catch (e) {
+          console.warn('Error parsing metadata for document:', doc.id, e);
+          doc.metadata = null;
+        }
+      }
+      return doc;
+    });
+  };
+
+  /**
    * Cargar documentos pendientes de firma desde GraphQL
    */
   const loadPendingDocuments = async () => {
@@ -1176,6 +1200,7 @@ function Dashboard({ user, onLogout }) {
                 description
                 filePath
                 consecutivo
+                metadata
                 uploadedBy {
                   name
                   email
@@ -1237,7 +1262,8 @@ function Dashboard({ user, onLogout }) {
         throw new Error(response.data.errors[0].message);
       }
 
-      setPendingDocuments(response.data.data.pendingDocuments || []);
+      const docs = parseDocumentMetadata(response.data.data.pendingDocuments || []);
+      setPendingDocuments(docs);
     } catch (err) {
       console.error('Error al cargar documentos pendientes:', err);
       setError('Error al cargar documentos pendientes');
@@ -1267,6 +1293,7 @@ function Dashboard({ user, onLogout }) {
                 fileName
                 fileSize
                 consecutivo
+                metadata
                 documentType {
                   id
                   code
@@ -1330,7 +1357,8 @@ function Dashboard({ user, onLogout }) {
         throw new Error(response.data.errors[0].message);
       }
 
-      setSignedDocuments(response.data.data.signedDocuments || []);
+      const docs = parseDocumentMetadata(response.data.data.signedDocuments || []);
+      setSignedDocuments(docs);
     } catch (err) {
       console.error('Error al cargar documentos firmados:', err);
       setError('Error al cargar documentos firmados');
@@ -1370,6 +1398,7 @@ function Dashboard({ user, onLogout }) {
                   name
                   email
                 }
+                metadata
                 templateData
                 retentionData {
                   userId
@@ -1402,8 +1431,10 @@ function Dashboard({ user, onLogout }) {
                   rejectionReason
                   rejectedAt
                   signedAt
+                  roleCode
                   roleName
                   roleNames
+                  roleCodes
                   orderPosition
                   realSignerName
                 }
@@ -1422,7 +1453,8 @@ function Dashboard({ user, onLogout }) {
         throw new Error(response.data.errors[0].message);
       }
 
-      setMyDocuments(response.data.data.myDocuments || []);
+      const docs = parseDocumentMetadata(response.data.data.myDocuments || []);
+      setMyDocuments(docs);
     } catch (err) {
       console.error('Error al cargar mis documentos:', err);
       setError('Error al cargar mis documentos');
@@ -1702,6 +1734,7 @@ function Dashboard({ user, onLogout }) {
                 status
                 consecutivo
                 createdAt
+                metadata
                 documentType {
                   id
                   code
@@ -1725,8 +1758,10 @@ function Dashboard({ user, onLogout }) {
                   id
                   status
                   signedAt
+                  roleCode
                   roleName
                   roleNames
+                  roleCodes
                   orderPosition
                   realSignerName
                   signer {
@@ -1750,7 +1785,8 @@ function Dashboard({ user, onLogout }) {
         throw new Error(response.data.errors[0].message);
       }
 
-      setRetainedDocuments(response.data.data.retainedDocuments || []);
+      const docs = parseDocumentMetadata(response.data.data.retainedDocuments || []);
+      setRetainedDocuments(docs);
     } catch (err) {
       console.error('Error al cargar documentos retenidos:', err);
       if (!isAuthError(err)) {
@@ -3038,6 +3074,38 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
+   * Maneja la confirmación del modal de retención
+   * @param {boolean} wantsRetention - Si el usuario quiere retener
+   * @param {number} percentage - Porcentaje de retención (solo si wantsRetention es true)
+   * @param {string} reason - Motivo de retención (solo si wantsRetention es true)
+   * @param {number|null} centroCostoIndex - Índice del centro de costo seleccionado
+   */
+  const handleRetentionConfirm = (wantsRetention, percentage = null, reason = null, centroCostoIndex = null) => {
+    if (!pendingSignWithRetention) {
+      console.error('No hay firma pendiente');
+      return;
+    }
+
+    const { docId, realSigner } = pendingSignWithRetention;
+
+    // Cerrar modal y limpiar estados
+    setShowRetentionModal(false);
+    setPendingSignWithRetention(null);
+    setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
+    setAvailableCostCenters([]);
+
+    // Preparar datos de retención si aplica
+    const retentionParams = wantsRetention ? {
+      percentage: percentage,
+      reason: reason,
+      centroCostoIndex: centroCostoIndex
+    } : null;
+
+    // Firmar el documento con o sin retención
+    handleSignDocument(docId, realSigner, retentionParams);
+  };
+
+  /**
    * Maneja el inicio del proceso de rechazo
    * Si es usuario Negociaciones, muestra modal de selección primero
    */
@@ -3103,33 +3171,6 @@ function Dashboard({ user, onLogout }) {
       }
       // Limpiar acción pendiente
       setPendingDocumentAction(null);
-    }
-  };
-
-  /**
-   * Maneja la confirmación del modal de retención
-   */
-  const handleRetentionConfirm = (wantsRetention, percentage = null, reason = null, centroCostoIndex = null) => {
-    setShowRetentionModal(false);
-
-    if (pendingSignWithRetention) {
-      const { docId, realSigner } = pendingSignWithRetention;
-
-      if (wantsRetention && percentage && reason && centroCostoIndex !== null) {
-        // Firmar con retención
-        handleSignDocument(docId, realSigner, {
-          percentage: parseInt(percentage),
-          reason,
-          centroCostoIndex: parseInt(centroCostoIndex)
-        });
-      } else {
-        // Firmar sin retención
-        handleSignDocument(docId, realSigner);
-      }
-
-      setPendingSignWithRetention(null);
-      setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
-      setAvailableCostCenters([]);
     }
   };
 
@@ -9190,266 +9231,56 @@ function Dashboard({ user, onLogout }) {
       />
 
       {/* Modal de retención de factura (RESP_CTRO_COST en documentos FV) */}
-      {showRetentionModal && (
-        <div className="sign-confirm-overlay" onClick={() => {
+      <RetentionModal
+        isOpen={showRetentionModal}
+        onClose={() => {
           setShowRetentionModal(false);
           setPendingSignWithRetention(null);
           setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
           setAvailableCostCenters([]);
-        }}>
-          <div className="reject-confirm-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div className="reject-confirm-icon" style={{ backgroundColor: '#FEF3C7', color: '#F59E0B' }}>
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <h3 className="reject-confirm-title">Retención de Factura</h3>
-            <p className="reject-confirm-message">
-              ¿Deseas retener esta factura?
-            </p>
-
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', justifyContent: 'center' }}>
-              <button
-                onClick={() => {
-                  setRetentionData({ ...retentionData, wantsRetention: false });
-                }}
-                className={`filter-status-btn ${retentionData.wantsRetention === false ? 'active' : ''}`}
-                style={{ flex: 1, maxWidth: '120px' }}
-              >
-                No
-              </button>
-              <button
-                onClick={() => {
-                  setRetentionData({ ...retentionData, wantsRetention: true });
-                }}
-                className={`filter-status-btn ${retentionData.wantsRetention === true ? 'active' : ''}`}
-                style={{ flex: 1, maxWidth: '120px' }}
-              >
-                Sí
-              </button>
-            </div>
-
-            {retentionData.wantsRetention === true && (
-              <div className="reject-reason-container">
-                {/* Selector de centro de costo si hay múltiples */}
-                {availableCostCenters.length > 1 && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <label
-                      htmlFor="centro-costo-select"
-                      style={{
-                        display: 'block',
-                        marginBottom: '8px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        color: '#374151'
-                      }}
-                    >
-                      Centro de Costo:
-                    </label>
-                    <select
-                      id="centro-costo-select"
-                      value={retentionData.selectedCentroIndex !== null ? retentionData.selectedCentroIndex : ''}
-                      onChange={(e) => {
-                        const selectedIndex = e.target.value !== '' ? parseInt(e.target.value) : null;
-                        setRetentionData({
-                          ...retentionData,
-                          selectedCentroIndex: selectedIndex,
-                          percentage: '' // Reset percentage when changing center
-                        });
-                      }}
-                      className="reject-reason-input"
-                      style={{ height: '48px', fontSize: '14px', padding: '12px 15px' }}
-                    >
-                      <option value="">-- Selecciona un centro de costo --</option>
-                      {availableCostCenters.map((centro) => (
-                        <option key={centro.index} value={centro.index}>
-                          {centro.nombre} (Máx: {centro.porcentaje}%)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Información del centro cuando solo hay uno */}
-                {availableCostCenters.length === 1 && (
-                  <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#F3F4F6', borderRadius: '6px' }}>
-                    <p style={{ margin: 0, fontSize: '14px', color: '#6B7280' }}>
-                      Centro de Costo: <strong>{availableCostCenters[0].nombre}</strong>
-                    </p>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#9CA3AF' }}>
-                      Porcentaje máximo: {availableCostCenters[0].porcentaje}%
-                    </p>
-                  </div>
-                )}
-
-                <input
-                  id="retention-percentage"
-                  type="number"
-                  min="1"
-                  max={
-                    retentionData.selectedCentroIndex !== null
-                      ? availableCostCenters.find(c => c.index === retentionData.selectedCentroIndex)?.porcentaje || 100
-                      : 100
-                  }
-                  value={retentionData.percentage}
-                  onChange={(e) => setRetentionData({ ...retentionData, percentage: e.target.value })}
-                  placeholder={
-                    retentionData.selectedCentroIndex !== null
-                      ? `Porcentaje de retención (1-${availableCostCenters.find(c => c.index === retentionData.selectedCentroIndex)?.porcentaje || 100}%)`
-                      : "Porcentaje de retención (1-100%)"
-                  }
-                  className="reject-reason-input"
-                  style={{ height: '48px', fontSize: '14px', marginBottom: '16px', minHeight: 'auto', padding: '12px 15px' }}
-                />
-                <textarea
-                  id="retention-reason"
-                  value={retentionData.reason}
-                  onChange={(e) => setRetentionData({ ...retentionData, reason: e.target.value })}
-                  placeholder="Describe brevemente por qué se retiene esta factura..."
-                  rows={4}
-                  className="reject-reason-input"
-                />
-              </div>
-            )}
-
-            <div className="reject-confirm-actions">
-              <button
-                className="reject-confirm-btn cancel"
-                onClick={() => {
-                  setShowRetentionModal(false);
-                  setPendingSignWithRetention(null);
-                  setRetentionData({ percentage: '', reason: '', wantsRetention: null, selectedCentroIndex: null });
-                  setAvailableCostCenters([]);
-                }}
-              >
-                Cancelar
-              </button>
-              {retentionData.wantsRetention === false && (
-                <button
-                  className="reject-confirm-btn confirm"
-                  onClick={() => handleRetentionConfirm(false)}
-                  style={{ backgroundColor: '#3B82F6' }}
-                >
-                  Firmar sin retener
-                </button>
-              )}
-              {retentionData.wantsRetention === true && (
-                <button
-                  className="reject-confirm-btn confirm"
-                  onClick={() => {
-                    // Validar que si hay múltiples centros, se haya seleccionado uno
-                    if (availableCostCenters.length > 1 && retentionData.selectedCentroIndex === null) {
-                      alert('Debes seleccionar un centro de costo');
-                      return;
-                    }
-
-                    // Validar que se hayan ingresado datos
-                    if (!retentionData.percentage || !retentionData.reason) {
-                      alert('Debes ingresar el porcentaje y la razón de la retención');
-                      return;
-                    }
-
-                    const percentage = parseInt(retentionData.percentage);
-
-                    // Obtener el centro seleccionado
-                    const selectedCentro = availableCostCenters.find(c => c.index === retentionData.selectedCentroIndex);
-                    const maxPercentage = selectedCentro ? selectedCentro.porcentaje : 100;
-
-                    // Validar rango de porcentaje
-                    if (percentage < 1 || percentage > maxPercentage) {
-                      alert(`El porcentaje debe estar entre 1 y ${maxPercentage}% (máximo asignado a este centro de costo)`);
-                      return;
-                    }
-
-                    handleRetentionConfirm(true, percentage, retentionData.reason, retentionData.selectedCentroIndex);
-                  }}
-                  disabled={
-                    !retentionData.percentage ||
-                    !retentionData.reason ||
-                    (availableCostCenters.length > 1 && retentionData.selectedCentroIndex === null)
-                  }
-                  style={{
-                    backgroundColor: (!retentionData.percentage || !retentionData.reason) ? '#9CA3AF' : '#EF4444',
-                    cursor: (!retentionData.percentage || !retentionData.reason) ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Firmar y retener
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        }}
+        onConfirm={handleRetentionConfirm}
+        availableCostCenters={availableCostCenters}
+      />
 
       {/* Modal de confirmación de liberación */}
-      {showReleaseModal && (
-        <div className="sign-confirm-overlay" onClick={() => {
+      <ReleaseModal
+        isOpen={showReleaseModal}
+        onClose={() => {
           setShowReleaseModal(false);
           setPendingReleaseDocument(null);
-        }}>
-          <div className="release-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="release-confirm-icon">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 11V7C8 5.93913 8.42143 4.92172 9.17157 4.17157C9.92172 3.42143 10.9391 3 12 3C13.0609 3 14.0783 3.42143 14.8284 4.17157C15.5786 4.92172 16 5.93913 16 7V8M5 11H19C20.1046 11 21 11.8954 21 13V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V13C3 11.8954 3.89543 11 5 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
-                <path d="M12 16.5V18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <h3 className="release-confirm-title">Liberar Factura Retenida</h3>
-            <p className="release-confirm-message">
-              ¿Estás seguro de que deseas liberar esta factura retenida?
-            </p>
+        }}
+        onConfirm={async () => {
+          if (pendingReleaseDocument && !releasingDocument) {
+            try {
+              setReleasingDocument(true);
 
-            <div className="release-confirm-actions">
-              <button
-                className="release-confirm-btn release-cancel"
-                onClick={() => {
-                  setShowReleaseModal(false);
-                  setPendingReleaseDocument(null);
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                className="release-confirm-btn release-confirm"
-                disabled={releasingDocument}
-                onClick={async () => {
-                  if (pendingReleaseDocument && !releasingDocument) {
-                    try {
-                      setReleasingDocument(true);
+              const success = await handleReleaseDocument(
+                pendingReleaseDocument.docId,
+                pendingReleaseDocument.centroCostoIndex
+              );
 
-                      const success = await handleReleaseDocument(
-                        pendingReleaseDocument.docId,
-                        pendingReleaseDocument.centroCostoIndex
-                      );
+              if (success) {
+                handleCloseViewer();
+              }
 
-                      if (success) {
-                        handleCloseViewer();
-                      }
-
-                      // Recargar listas y documento actual (incluso si falló, para reflejar estado real)
-                      await loadRetainedDocuments();
-                      await loadSignedDocuments();
-                      if (viewingDocument) {
-                        await loadDocumentDetails(viewingDocument.id);
-                      }
-                    } catch (error) {
-                      console.error('Error en proceso de liberación:', error);
-                    } finally {
-                      // Siempre cerrar modal y resetear estados
-                      setReleasingDocument(false);
-                      setShowReleaseModal(false);
-                      setPendingReleaseDocument(null);
-                    }
-                  }
-                }}
-              >
-                {releasingDocument ? 'Liberando...' : 'Sí, liberar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              // Recargar listas y documento actual
+              await loadRetainedDocuments();
+              await loadSignedDocuments();
+              if (viewingDocument) {
+                await loadDocumentDetails(viewingDocument.id);
+              }
+            } catch (error) {
+              console.error('Error en proceso de liberación:', error);
+            } finally {
+              setReleasingDocument(false);
+              setShowReleaseModal(false);
+              setPendingReleaseDocument(null);
+            }
+          }
+        }}
+        loading={releasingDocument}
+      />
 
       {/* Modal de plantilla de factura */}
       {showFacturaTemplate && (selectedFactura || editingDocument) && (
