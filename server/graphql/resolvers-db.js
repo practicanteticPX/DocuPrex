@@ -3447,6 +3447,32 @@ const resolvers = {
     rejectDocument: async (_, { documentId, reason, realSignerName }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
+      // Helper para normalizar nombres (MISMA LÓGICA que generatePdfFromDocument)
+      const normalizarNombre = (nombre) => {
+        if (!nombre) return '';
+        return nombre.trim().toUpperCase().replace(/\s+/g, ' ');
+      };
+
+      // Helper para verificar si dos nombres coinciden
+      const nombresCoinciden = (nombre1, nombre2) => {
+        const n1 = normalizarNombre(nombre1);
+        const n2 = normalizarNombre(nombre2);
+
+        if (n1 === n2) return true;
+
+        const words1 = n1.split(' ').filter(w => w.length > 2);
+        const words2 = n2.split(' ').filter(w => w.length > 2);
+
+        let matchCount = 0;
+        words1.forEach(w1 => {
+          if (words2.some(w2 => w2.includes(w1) || w1.includes(w2))) {
+            matchCount++;
+          }
+        });
+
+        return matchCount >= 2;
+      };
+
       // Validar orden secuencial - el usuario debe ser el siguiente en la fila para rechazar
       const orderCheck = await query(
         `SELECT ds.order_position, ds.user_id
@@ -3792,17 +3818,15 @@ const resolvers = {
                 const nombreFirmante = signer.real_signer_name || signer.name;
                 if (templateData.filasControl && Array.isArray(templateData.filasControl)) {
                   templateData.filasControl.forEach(fila => {
-                    if (fila.respCuentaContable === signer.name || fila.respCentroCostos === signer.name) {
-                      if (fila.respCuentaContable === signer.name) {
-                        firmasMap[fila.respCuentaContable] = nombreFirmante;
-                      }
-                      if (fila.respCentroCostos === signer.name) {
-                        firmasMap[fila.respCentroCostos] = nombreFirmante;
-                      }
+                    if (fila.respCuentaContable && nombresCoinciden(signer.name, fila.respCuentaContable)) {
+                      firmasMap[fila.respCuentaContable] = nombreFirmante;
+                    }
+                    if (fila.respCentroCostos && nombresCoinciden(signer.name, fila.respCentroCostos)) {
+                      firmasMap[fila.respCentroCostos] = nombreFirmante;
                     }
                   });
                 }
-                if (templateData.nombreNegociador === signer.name) {
+                if (templateData.nombreNegociador && nombresCoinciden(signer.name, templateData.nombreNegociador)) {
                   firmasMap[templateData.nombreNegociador] = nombreFirmante;
                 }
               });
@@ -3935,6 +3959,32 @@ const resolvers = {
      */
     signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentions }, { user }) => {
       if (!user) throw new Error('No autenticado');
+
+      // Helper para normalizar nombres (MISMA LÓGICA que generatePdfFromDocument)
+      const normalizarNombre = (nombre) => {
+        if (!nombre) return '';
+        return nombre.trim().toUpperCase().replace(/\s+/g, ' ');
+      };
+
+      // Helper para verificar si dos nombres coinciden
+      const nombresCoinciden = (nombre1, nombre2) => {
+        const n1 = normalizarNombre(nombre1);
+        const n2 = normalizarNombre(nombre2);
+
+        if (n1 === n2) return true;
+
+        const words1 = n1.split(' ').filter(w => w.length > 2);
+        const words2 = n2.split(' ').filter(w => w.length > 2);
+
+        let matchCount = 0;
+        words1.forEach(w1 => {
+          if (words2.some(w2 => w2.includes(w1) || w1.includes(w2))) {
+            matchCount++;
+          }
+        });
+
+        return matchCount >= 2;
+      };
 
       const docOwnerCheck = await query(
         'SELECT uploaded_by FROM documents WHERE id = $1',
@@ -4890,7 +4940,7 @@ const resolvers = {
                       const fila = metadata.filasControl[centroCostoIndex];
 
                       // Validar que el usuario es responsable de este centro comparando nombres
-                      if (fila.respCentroCostos !== userName) {
+                      if (!nombresCoinciden(userName, fila.respCentroCostos)) {
                         console.error(`❌ Usuario ${userName} NO es responsable del centro ${fila.centroCostos}, saltando`);
                         continue;
                       }

@@ -369,7 +369,7 @@
 
 .retention-select:focus {
   border-color: #F59E0B;
-  background-color: #FFFBEB;
+  background-color: #FFFFFF;
   box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
 }
 
@@ -399,8 +399,20 @@
 
 .retention-input:focus {
   border-color: #F59E0B;
-  background-color: #FFFBEB;
+  background-color: #FFFFFF;
   box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
+}
+
+.retention-input.invalid {
+  border-color: #DC2626;
+  background-color: #FEF2F2;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.1);
+}
+
+.retention-input.invalid:focus {
+  border-color: #DC2626;
+  background-color: #FEF2F2;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15);
 }
 
 .retention-input-suffix {
@@ -435,7 +447,7 @@
 
 .retention-textarea:focus {
   border-color: #F59E0B;
-  background-color: #FFFBEB;
+  background-color: #FFFFFF;
   box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
 }
 

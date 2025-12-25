@@ -30,6 +30,29 @@ function getCompanyLogoBase64(cia) {
 }
 
 /**
+ * Helper function to get Higher font as base64 data URL
+ * @returns {string|null} - Base64 data URL or null if not found
+ */
+function getHigherFontBase64() {
+  try {
+    const fontPath = path.join(__dirname, '..', 'assets', 'fonts', 'higher.otf');
+
+    if (fs.existsSync(fontPath)) {
+      const fontBuffer = fs.readFileSync(fontPath);
+      const base64Font = fontBuffer.toString('base64');
+      console.log(`✍️ Fuente Higher cargada para HTML (${Math.round(fontBuffer.length / 1024)} KB)`);
+      return `data:font/otf;base64,${base64Font}`;
+    } else {
+      console.warn(`⚠️ Fuente Higher no encontrada: ${fontPath}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`❌ Error cargando fuente Higher:`, error.message);
+    return null;
+  }
+}
+
+/**
  * Genera HTML que replica EXACTAMENTE el componente FacturaTemplate.jsx
  * TODO en una sola página con textos completos y checks visibles
  * CORRIGE los nombres de campos para que coincidan con filasControl
@@ -56,6 +79,14 @@ function generateFacturaHTML(data) {
 
   // Get logo as base64
   const logoBase64 = getCompanyLogoBase64(cia);
+
+  // Get Higher font as base64
+  const higherFontBase64 = getHigherFontBase64();
+  if (higherFontBase64) {
+    console.log(`✅ Fuente Higher embebida en PDF (${higherFontBase64.substring(0, 50)}...)`);
+  } else {
+    console.warn(`⚠️ Fuente Higher NO pudo cargarse - usando fallback`);
+  }
 
   // Usar checklistRevision si existe, si no usar condiciones (compatibilidad)
   const condiciones = data.condiciones || checklistRevision || {};
@@ -135,26 +166,26 @@ function generateFacturaHTML(data) {
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content-firma">${firmaCuentaContable}</div>
       </td>
-      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.centroCostos || ''}</div>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.centroCostos || ''}</div>
       </td>
-      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.respCentroCostos || ''}</div>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.respCentroCostos || ''}</div>
       </td>
-      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.cargoCentroCostos || ''}</div>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.cargoCentroCostos || ''}</div>
       </td>
-      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content-firma">${firmaCentroCostos}</div>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
+        <div class="cell-content-firma" style="${retention ? 'background: #FEF3C7;' : ''}">${firmaCentroCostos}</div>
       </td>
-      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.porcentaje || ''}</div>
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.porcentaje || ''}</div>
       </td>
       ${hasRetentions ? `
-      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
         <div class="cell-content" style="${retention ? 'background: #FEF3C7; color: #92400E; font-weight: 600;' : ''}">${retention ? retention.porcentajeRetenido + '%' : '-'}</div>
       </td>
-      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
+      <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
         <div class="cell-content" style="${retention ? 'background: #FEF3C7; color: #92400E;' : ''}">${retention ? retention.motivo : '-'}</div>
       </td>
       ` : ''}
@@ -171,9 +202,19 @@ function generateFacturaHTML(data) {
   <title>Planilla Control Factura</title>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    ${higherFontBase64 ? `
     @font-face {
       font-family: 'Higher';
-      src: url('file://${path.join(__dirname, '..', 'assets', 'fonts', 'higher.otf')}') format('opentype');
+      src: url('${higherFontBase64}') format('opentype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: block;
+    }` : ''}
+
+    /* Fallback si la fuente no carga */
+    @font-face {
+      font-family: 'HigherFallback';
+      src: local('Brush Script MT'), local('Lucida Handwriting'), local('Segoe Script');
     }
 
     * {
@@ -262,8 +303,8 @@ function generateFacturaHTML(data) {
       padding: 7px 10px;
       border: 1px solid #D1D5DB;
       border-radius: 4px;
-      font-size: 12px;
-      font-family: 'Higher', cursive;
+      font-size: 18px;
+      font-family: 'Higher', 'HigherFallback', 'Brush Script MT', cursive !important;
       font-weight: 400;
       font-style: normal;
       color: #1F2937;
@@ -418,8 +459,8 @@ function generateFacturaHTML(data) {
     }
 
     .cell-content-firma {
-      font-size: 11px;
-      font-family: 'Higher', cursive;
+      font-size: 16px;
+      font-family: 'Higher', 'HigherFallback', 'Brush Script MT', cursive !important;
       font-weight: 400;
       font-style: normal;
       color: #1F2937;
@@ -632,11 +673,11 @@ function generateFacturaHTML(data) {
               <th>Cargo Resp<br/>Cta Contable</th>
               <th>Cta Contable</th>
               <th>Firma</th>
-              <th>C.Co</th>
-              <th>Resp. C.Co</th>
-              <th>Cargo Resp.<br/>C.Co</th>
-              <th>Firma</th>
-              <th>% C.Co</th>
+              <th${hasRetentions ? ' style="background: #FEF3C7;"' : ''}>C.Co</th>
+              <th${hasRetentions ? ' style="background: #FEF3C7;"' : ''}>Resp. C.Co</th>
+              <th${hasRetentions ? ' style="background: #FEF3C7;"' : ''}>Cargo Resp.<br/>C.Co</th>
+              <th${hasRetentions ? ' style="background: #FEF3C7;"' : ''}>Firma</th>
+              <th${hasRetentions ? ' style="background: #FEF3C7;"' : ''}>% C.Co</th>
               ${hasRetentions ? `
               <th style="background: #FEF3C7;">% Ret</th>
               <th style="background: #FEF3C7;">Motivo</th>

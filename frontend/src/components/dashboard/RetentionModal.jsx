@@ -6,12 +6,11 @@ import './RetentionModal.css';
  * Soporta retención de múltiples centros de costos independientemente
  */
 function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] }) {
-  const [wantsRetention, setWantsRetention] = useState(null); // null, true, false
-  const [retentions, setRetentions] = useState({}); // { centroCostoIndex: { percentage, reason, selected } }
+  const [wantsRetention, setWantsRetention] = useState(null);
+  const [retentions, setRetentions] = useState({});
   const [error, setError] = useState('');
-  const [step, setStep] = useState(1); // 1: pregunta Sí/No, 2: detalles de retención
+  const [step, setStep] = useState(1);
 
-  // Inicializar estructura de retenciones
   useEffect(() => {
     if (availableCostCenters.length > 0) {
       const initialRetentions = {};
@@ -46,13 +45,51 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
   };
 
   const updateRetentionData = (centroIndex, field, value) => {
-    setRetentions(prev => ({
-      ...prev,
-      [centroIndex]: {
-        ...prev[centroIndex],
-        [field]: value
+    // Si es el campo de porcentaje, validar y limitar
+    if (field === 'percentage') {
+      const centro = availableCostCenters.find(c => c.index === centroIndex);
+      const maxPercentage = centro ? centro.porcentaje : 100;
+
+      // Permitir campo vacío para que el usuario pueda borrar
+      if (value === '') {
+        setRetentions(prev => ({
+          ...prev,
+          [centroIndex]: {
+            ...prev[centroIndex],
+            [field]: ''
+          }
+        }));
+        return;
       }
-    }));
+
+      // Convertir a número y validar
+      const numValue = parseInt(value);
+
+      // Si es inválido, no actualizar
+      if (isNaN(numValue)) {
+        return;
+      }
+
+      // Limitar al máximo permitido
+      const limitedValue = Math.min(Math.max(0, numValue), maxPercentage);
+
+      setRetentions(prev => ({
+        ...prev,
+        [centroIndex]: {
+          ...prev[centroIndex],
+          [field]: limitedValue.toString()
+        }
+      }));
+    } else {
+      // Para otros campos, actualizar normalmente
+      setRetentions(prev => ({
+        ...prev,
+        [centroIndex]: {
+          ...prev[centroIndex],
+          [field]: value
+        }
+      }));
+    }
     setError('');
   };
 
@@ -140,6 +177,15 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
   if (!isOpen) return null;
 
   const selectedCount = Object.values(retentions).filter(r => r.selected).length;
+
+  // Helper para determinar si un porcentaje es inválido
+  const isPercentageInvalid = (centroIndex, percentage) => {
+    if (!percentage || percentage === '') return false;
+    const centro = availableCostCenters.find(c => c.index === centroIndex);
+    if (!centro) return false;
+    const numValue = parseInt(percentage);
+    return numValue < 1 || numValue > centro.porcentaje;
+  };
 
   return (
     <div className="retention-modal-overlay" onClick={handleClose}>
@@ -238,7 +284,7 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
                               type="number"
                               min="1"
                               max={centro.porcentaje}
-                              className="retention-input"
+                              className={`retention-input ${isPercentageInvalid(centro.index, retentionData.percentage) ? 'invalid' : ''}`}
                               placeholder={`Ej: ${Math.min(50, centro.porcentaje)}`}
                               value={retentionData.percentage}
                               onChange={(e) => updateRetentionData(centro.index, 'percentage', e.target.value)}

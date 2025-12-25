@@ -2875,41 +2875,48 @@ function Dashboard({ user, onLogout }) {
 
       // Verificar si debe mostrar modal de retención
       const isFV = doc && doc.documentType && doc.documentType.code === 'FV';
-      console.log('🔍 initiateSignDocument - isFV:', isFV);
-      console.log('🔍 initiateSignDocument - documentType:', doc?.documentType);
-
       const isRespCtroCost = doc && hasRespCtroCostRole(doc);
-      console.log('🔍 initiateSignDocument - isRespCtroCost:', isRespCtroCost);
 
       if (isFV && isRespCtroCost) {
-        console.log('✅ Mostrar modal de retención');
-        console.log('🔍 doc.metadata:', doc.metadata);
-        console.log('🔍 doc.metadata.filasControl:', doc.metadata?.filasControl);
-        console.log('🔍 user.name:', user.name);
+        // Helper para normalizar nombres (MISMA LÓGICA QUE EL BACKEND)
+        const normalizarNombre = (nombre) => {
+          if (!nombre) return '';
+          return nombre.trim().toUpperCase().replace(/\s+/g, ' ');
+        };
+
+        // Helper para verificar si dos nombres coinciden (MISMA LÓGICA QUE EL BACKEND)
+        const nombresCoinciden = (nombre1, nombre2) => {
+          const n1 = normalizarNombre(nombre1);
+          const n2 = normalizarNombre(nombre2);
+
+          if (n1 === n2) return true;
+
+          const words1 = n1.split(' ').filter(w => w.length > 2);
+          const words2 = n2.split(' ').filter(w => w.length > 2);
+
+          let matchCount = 0;
+          words1.forEach(w1 => {
+            if (words2.some(w2 => w2.includes(w1) || w1.includes(w2))) {
+              matchCount++;
+            }
+          });
+
+          return matchCount >= 2;
+        };
 
         // Detectar centros de costo donde el usuario es responsable
-        // Los centros están en metadata.filasControl (NO en causacionDetails)
         const userCostCenters = [];
         if (doc.metadata && doc.metadata.filasControl && Array.isArray(doc.metadata.filasControl)) {
-          console.log('🔍 Iterando sobre filasControl, total:', doc.metadata.filasControl.length);
           doc.metadata.filasControl.forEach((fila, index) => {
-            console.log(`🔍 Fila ${index}:`, fila);
-            console.log(`🔍 fila.respCentroCostos: "${fila.respCentroCostos}", user.name: "${user.name}"`);
-
-            // Comparar el nombre del responsable del centro de costos con el nombre del usuario
-            if (fila.respCentroCostos && fila.respCentroCostos.trim() === user.name.trim()) {
+            if (fila.respCentroCostos && nombresCoinciden(user.name, fila.respCentroCostos)) {
               userCostCenters.push({
                 index: index,
                 nombre: fila.centroCostos || `Centro ${index + 1}`,
                 porcentaje: parseFloat(fila.porcentaje || 0)
               });
-              console.log(`✅ Centro de costo encontrado para usuario: ${fila.centroCostos} (${fila.porcentaje}%)`);
             }
           });
-        } else {
-          console.warn('⚠️ No hay metadata.filasControl o no es un array');
         }
-        console.log('🏢 Centros de costo del usuario:', userCostCenters);
 
         setAvailableCostCenters(userCostCenters);
 
@@ -2926,7 +2933,6 @@ function Dashboard({ user, onLogout }) {
         });
         setShowRetentionModal(true);
       } else {
-        console.log('⏭️ Firmar directamente sin retención');
         // Firmar directamente sin retención
         handleSignDocument(docId);
       }
