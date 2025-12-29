@@ -168,6 +168,14 @@ textarea.form-input:focus {
   outline: none !important;
 }
 
+/* Override SOLO para los campos de título y descripción del documento */
+#document-title:focus,
+#document-description:focus {
+  border-color: #9CA3AF !important;
+  box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1) !important;
+  outline: none !important;
+}
+
 /* Asegurar que los form-groups no se salgan */
 .form-group {
   width: 100% !important;

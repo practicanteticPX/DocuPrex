@@ -39,8 +39,8 @@
 }
 
 .doc-type-selector__trigger:focus:not(:disabled) {
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  border-color: #9CA3AF;
+  box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
 }
 
 .doc-type-selector__trigger:disabled {
