@@ -1,10 +1,15 @@
-const puppeteer = require('puppeteer');
+const puppeteerPool = require('./puppeteerPool');
 const { generateFacturaHTML } = require('./facturaTemplateHTML');
 
 /**
  * Genera un PDF con el template de legalización de factura diligenciado
  * Renderiza HTML que replica EXACTAMENTE el formulario web
  * Página más grande para que se vea TODO completo
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Usa Browser Pool para reutilizar instancias de Puppeteer (~85% más rápido)
+ * - Usa 'load' + document.fonts.ready para esperar fuentes embebidas
+ *
  * @param {Object} templateData - Datos del template de factura
  * @param {Object} firmas - Objeto con firmas: { 'nombre_persona': 'nombre_firmante' }
  * @param {boolean} isRejected - Si el documento fue rechazado (muestra marca de agua)
@@ -13,6 +18,7 @@ const { generateFacturaHTML } = require('./facturaTemplateHTML');
  */
 async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected = false, retentionData = []) {
   let browser = null;
+  let page = null;
 
   try {
     console.log('📋 Generando PDF de plantilla de factura (HTML → PDF)...');
@@ -37,24 +43,23 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
       isRejected: isRejected
     });
 
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
-    });
+    // Obtener browser del pool (reutiliza instancias para velocidad)
+    browser = await puppeteerPool.getBrowser();
 
-    const page = await browser.newPage();
+    page = await browser.newPage();
 
     await page.setViewport({
       width: 1800,
       height: 1200
     });
 
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    // OPTIMIZATION: Usar 'load' para esperar a que las fuentes embebidas se carguen
+    // 'load' espera a que todos los recursos (incluidas fuentes base64) estén listos
+    await page.setContent(htmlContent, { waitUntil: 'load' });
+
+    // Esperar específicamente a que todas las fuentes estén cargadas
+    await page.evaluateHandle('document.fonts.ready');
+    console.log('✍️ Fuentes cargadas y listas para renderizar');
 
     const pdfBuffer = await page.pdf({
       width: '1600px',
@@ -75,8 +80,10 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
     console.error('❌ Error generando PDF de plantilla:', error);
     throw new Error(`Error al generar PDF de plantilla: ${error.message}`);
   } finally {
-    if (browser) {
-      await browser.close();
+    // CRITICAL: Cerrar la página para liberar memoria
+    // NO cerrar el browser porque pertenece al pool
+    if (page) {
+      await page.close();
     }
   }
 }

@@ -53,6 +53,39 @@ function getHigherFontBase64() {
 }
 
 /**
+ * Helper function to get Google Sans font as base64 data URLs
+ * @returns {Object} - Object with base64 data URLs for different weights
+ */
+function getGoogleSansFontsBase64() {
+  const fonts = {};
+  const weights = [
+    { weight: '400', file: 'google-sans-400.ttf' },
+    { weight: '500', file: 'google-sans-500.ttf' },
+    { weight: '600', file: 'google-sans-600.ttf' },
+    { weight: '700', file: 'google-sans-700.ttf' }
+  ];
+
+  for (const { weight, file } of weights) {
+    try {
+      const fontPath = path.join(__dirname, '..', 'assets', 'fonts', file);
+
+      if (fs.existsSync(fontPath)) {
+        const fontBuffer = fs.readFileSync(fontPath);
+        const base64Font = fontBuffer.toString('base64');
+        fonts[weight] = `data:font/truetype;base64,${base64Font}`;
+        console.log(`✍️ Google Sans ${weight} cargada (${Math.round(fontBuffer.length / 1024)} KB)`);
+      } else {
+        console.warn(`⚠️ Google Sans ${weight} no encontrada: ${fontPath}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error cargando Google Sans ${weight}:`, error.message);
+    }
+  }
+
+  return fonts;
+}
+
+/**
  * Genera HTML que replica EXACTAMENTE el componente FacturaTemplate.jsx
  * TODO en una sola página con textos completos y checks visibles
  * CORRIGE los nombres de campos para que coincidan con filasControl
@@ -86,6 +119,14 @@ function generateFacturaHTML(data) {
     console.log(`✅ Fuente Higher embebida en PDF (${higherFontBase64.substring(0, 50)}...)`);
   } else {
     console.warn(`⚠️ Fuente Higher NO pudo cargarse - usando fallback`);
+  }
+
+  // Get Google Sans fonts as base64
+  const googleSansFonts = getGoogleSansFontsBase64();
+  if (Object.keys(googleSansFonts).length > 0) {
+    console.log(`✅ Google Sans embebida en PDF (${Object.keys(googleSansFonts).length} variantes)`);
+  } else {
+    console.warn(`⚠️ Google Sans NO pudo cargarse - usando fallback`);
   }
 
   // Usar checklistRevision si existe, si no usar condiciones (compatibilidad)
@@ -200,8 +241,42 @@ function generateFacturaHTML(data) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Planilla Control Factura</title>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Google Sans - Fuente principal embebida */
+    ${googleSansFonts['400'] ? `
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('${googleSansFonts['400']}');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }` : ''}
+    ${googleSansFonts['500'] ? `
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('${googleSansFonts['500']}');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }` : ''}
+    ${googleSansFonts['600'] ? `
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('${googleSansFonts['600']}');
+      font-weight: 600;
+      font-style: normal;
+      font-display: swap;
+    }` : ''}
+    ${googleSansFonts['700'] ? `
+    @font-face {
+      font-family: 'Google Sans';
+      src: url('${googleSansFonts['700']}');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }` : ''}
+
+    /* Higher - Fuente para firmas embebida */
     ${higherFontBase64 ? `
     @font-face {
       font-family: 'Higher';
@@ -228,6 +303,8 @@ function generateFacturaHTML(data) {
       background: white;
       padding: 16px;
       margin: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     .factura-template-container {
@@ -245,8 +322,9 @@ function generateFacturaHTML(data) {
 
     .factura-section-title {
       font-size: 15px;
-      font-weight: 600;
-      color: #111827;
+      font-weight: 700;
+      color: #172B4D;
+      letter-spacing: -0.03em;
       margin: 0 0 12px 0;
     }
 
@@ -276,8 +354,8 @@ function generateFacturaHTML(data) {
 
     .factura-label {
       font-size: 11px;
-      font-weight: 600;
-      color: #374151;
+      font-weight: 500;
+      color: #5E6C84;
     }
 
     .ui-input {
@@ -287,7 +365,8 @@ function generateFacturaHTML(data) {
       font-size: 11px;
       font-family: 'Google Sans', sans-serif;
       font-weight: 500;
-      color: #1F2937;
+      color: #091E42;
+      letter-spacing: -0.01em;
       background: #E5E7EB;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -420,8 +499,8 @@ function generateFacturaHTML(data) {
       padding: 8px 6px;
       text-align: left;
       font-size: 10px;
-      font-weight: 600;
-      color: #374151;
+      font-weight: 500;
+      color: #5E6C84;
       border-bottom: 1px solid #E5E7EB;
       line-height: 1.2;
     }
@@ -446,7 +525,8 @@ function generateFacturaHTML(data) {
       font-size: 10px;
       font-family: 'Google Sans', sans-serif;
       font-weight: 500;
-      color: #1F2937;
+      color: #091E42;
+      letter-spacing: -0.01em;
       padding: 5px 8px;
       border: 1px solid #D1D5DB;
       border-radius: 4px;

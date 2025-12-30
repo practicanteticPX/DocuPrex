@@ -56,7 +56,14 @@
       "Bash(git restore:*)",
       "Bash(grep:*)",
       "Bash(docker ps:*)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "Bash(for func in handleNotificationClick handleDragEnter handleDragLeave handleDragOver handleFileDragStart handleFileDragOver handleFileDragEnd handleWillSignToggle handleDragStartSigner handleDragOverSigner handleDragEndSigner handleBack handleNext handleUpload handleToggleSignersDropdown handleViewDocument handleEditFacturaTemplate handleDeleteDocument handleCloseViewer handleOpenSignConfirm handleOpenRejectConfirm handleCancelSign handleConfirmSign handleCancelReject handleConfirmReject handleCancelConsecutivo handleSaveConsecutivo handleCancelQuickSign)",
+      "Bash(do grep -q \"const $func\\\\|function $func\" Dashboard.jsx)",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(for component in Loader LogoutButton HelpModal RealSignerModal RetentionModal ReleaseModal DocumentCreationLoader)",
+      "Bash(for css in Dashboard.css Dashboard.overrides.css Rejected.css SignersOrder.css WaitingTurn.css)",
+      "Bash(do [ -f \"$css\" ])"
     ],
     "deny": [],
     "ask": []

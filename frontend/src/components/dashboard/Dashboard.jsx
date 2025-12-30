@@ -472,6 +472,9 @@ function Dashboard({ user, onLogout }) {
   const [unifyPDFs, setUnifyPDFs] = useState(true);
   const [draggedIndex, setDraggedIndex] = useState(null);
 
+  // Estados para drag & drop de firmantes
+  const [draggedSignerIndex, setDraggedSignerIndex] = useState(null);
+  const [dragOverSignerIndex, setDragOverSignerIndex] = useState(null);
 
   // Estado para controlar "ver más" en firmantes de Mis Documentos
   const [expandedSigners, setExpandedSigners] = useState({});
