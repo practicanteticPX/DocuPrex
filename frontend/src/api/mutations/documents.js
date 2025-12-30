@@ -153,20 +153,6 @@ export const UPDATE_SIGNERS_ORDER = `
   }
 `;
 
-/**
- * Remueve un firmante de un documento
- */
-export const REMOVE_SIGNER = `
-  mutation RemoveSigner($documentId: Int!, $signerId: Int!) {
-    removeSigner(documentId: $documentId, signerId: $signerId) {
-      id
-      signers {
-        id
-        name
-      }
-    }
-  }
-`;
 
 /**
  * Crea un tipo de documento

@@ -105,3 +105,16 @@ button {
 *::-webkit-scrollbar-thumb:hover {
   background: #9CA3AF;
 }
+
+/* ========================================
+   SELECCIÓN DE TEXTO GLOBAL - GRIS CLARO
+   ======================================== */
+::selection {
+  background: rgba(100, 100, 100, 0.3);
+  color: inherit;
+}
+
+::-moz-selection {
+  background: rgba(100, 100, 100, 0.3);
+  color: inherit;
+}

@@ -181,26 +181,7 @@ const assignSigner = `
   RETURNING *
 `;
 
-/**
- * Remueve un firmante de un documento
- */
-const removeSigner = `
-  DELETE FROM document_signers
-  WHERE document_id = $1
-    AND user_id = $2
-  RETURNING *
-`;
 
-/**
- * Actualiza el orden de los firmantes
- */
-const updateSignerOrder = `
-  UPDATE document_signers
-  SET order_position = $3
-  WHERE document_id = $1
-    AND user_id = $2
-  RETURNING *
-`;
 
 /**
  * Actualiza el rol de un firmante
@@ -329,8 +310,6 @@ module.exports = {
   areAllRequiredSignaturesCompleted,
   getDocumentSigners,
   assignSigner,
-  removeSigner,
-  updateSignerOrder,
   updateSignerRole,
   removeAllSigners,
   getNextRequiredSigner,

@@ -28,21 +28,23 @@
   border-top-right-radius: 45%;
   border-bottom-left-radius: 35%;
   border-bottom-right-radius: 40%;
-  z-index: -1;
+  z-index: 0;
 }
 
+/* Ola 1 - Morado claro transparente */
 .login-card::before {
   left: 40%;
-  bottom: -130%;
-  background-color: rgba(156, 163, 175, 0.15);
-  animation: waves 8.4s infinite linear;
+  bottom: -160%;
+  background-color: rgba(139, 92, 246, 0.226);
+  animation: waves 12s infinite linear;
 }
 
+/* Ola 2 - Morado medio transparente */
 .login-card::after {
   left: 35%;
-  bottom: -125%;
-  background-color: rgba(107, 114, 128, 0.12);
-  animation: waves 9.8s infinite;
+  bottom: -155%;
+  background-color: rgba(124, 58, 237, 0.26);
+  animation: waves 15s infinite linear;
 }
 
 @keyframes waves {
@@ -60,7 +62,7 @@
 .login-card {
   overflow: hidden;
   background-color: white;
-  padding: 25px 30px 25px 30px;
+  padding: 12px 30px 28px 30px;
   border-radius: 10px;
   position: absolute;
   top: 50%;
@@ -78,9 +80,9 @@
 .login-header {
   text-align: center;
   margin-top: 0px;
-  margin-bottom: 15px;
+  margin-bottom: 5px;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .logo-container {
@@ -112,7 +114,7 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 
@@ -128,7 +130,7 @@
   width: 100%;
   border: 1px solid #ddd;
   padding: 10px 10px;
-  margin: 6px 0;
+  margin: 4px 0;
   box-sizing: border-box;
   color: #111827;
   transition: all 0.2s ease;
@@ -215,31 +217,22 @@
 /* ------------------------------------ */
 /* Botón de inicio de sesión           */
 /* ------------------------------------ */
-.submit-button {
-  font-family: 'Google Sans', sans-serif;
-  cursor: pointer;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 400;
-  width: 100%;
-  border: 0;
-  padding: 10px 0;
-  margin-top: 10px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, #9CA3AF 0%, #6B7280 100%);
+/* Override para quitar hover flotante en login */
+.login-form .submit-button:hover {
+  transform: none !important;
 }
 
 /* ------------------------------------ */
 /* Selección de texto                  */
 /* ------------------------------------ */
 ::selection {
-  background: #9CA3AF;
-  color: white;
+  background: rgba(100, 100, 100, 0.3);
+  color: inherit;
 }
 
 ::-moz-selection {
-  background: #9CA3AF;
-  color: white;
+  background: rgba(100, 100, 100, 0.3);
+  color: inherit;
 }
 
 /* ------------------------------------ */

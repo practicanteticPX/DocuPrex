@@ -317,6 +317,7 @@ function generateFacturaHTML(data) {
       box-sizing: border-box;
       display: flex;
       align-items: center;
+      letter-spacing: -0.5px;
     }
 
     .factura-field-checkbox-simple {
@@ -474,6 +475,7 @@ function generateFacturaHTML(data) {
       min-height: 26px;
       display: flex;
       align-items: center;
+      letter-spacing: -0.5px;
     }
 
     .factura-total-section {

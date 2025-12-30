@@ -4159,8 +4159,13 @@
 
 .ds-aside-header .logo-container {
   display: flex;
-  align-items: baseline;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
+  margin-left: -20px;
+}
+
+.ds-aside-header .logo-container .pyramid-loader {
+  transform: rotateX(-20deg) translateY(-7px);
 }
 
 .ds-aside .logo {
@@ -4190,6 +4195,19 @@
   letter-spacing: -0.5px;
   text-transform: lowercase;
   transform: translateY(-10px);
+}
+
+.ds-brand-logo {
+  height: 56px !important;
+  width: auto !important;
+  object-fit: contain;
+  display: block !important;
+  margin-bottom: 0 !important;
+  margin-left: -5px;
+  transform: translateY(2px);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .ds-side-nav {
@@ -5260,7 +5278,7 @@ html:has(.pdf-viewer-minimal-overlay) {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #F9FAFB;
+  background-color: #323639;
   z-index: 10000;
   display: flex;
   flex-direction: column;
@@ -5549,22 +5567,25 @@ html:has(.pdf-viewer-minimal-overlay) {
 .pdf-viewer-minimal-body {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  overflow: auto;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  overflow: hidden;
   max-width: 100%;
   box-sizing: border-box;
   min-height: 0;
+  background-color: #323639;
 }
 
 .pdf-viewer-minimal-iframe {
   width: 100%;
   height: 100%;
   border: none;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
-  background-color: white;
+  border-radius: 0 !important;
+  box-shadow: none;
+  background-color: #323639;
+  outline: none;
+  display: block;
 }
 
 /* Fallback cuando no se puede mostrar el PDF */
@@ -5658,11 +5679,12 @@ html:has(.pdf-viewer-minimal-overlay) {
   }
 
   .pdf-viewer-minimal-body {
-    padding: 16px;
+    padding: 0;
+    overflow: hidden;
   }
 
   .pdf-viewer-minimal-iframe {
-    border-radius: 8px;
+    border-radius: 0 !important;
   }
 
   .fallback-icon {
@@ -5778,14 +5800,13 @@ html:has(.pdf-viewer-minimal-overlay) {
 }
 
 .sign-confirm-btn.cancel {
-  background-color: white;
-  border: 1px solid #E5E7EB;
+  background-color: #F3F4F6;
+  border: none;
   color: #374151;
 }
 
 .sign-confirm-btn.cancel:hover {
-  background-color: #F9FAFB;
-  border-color: #D1D5DB;
+  background-color: #E5E7EB;
 }
 
 .sign-confirm-btn.confirm {

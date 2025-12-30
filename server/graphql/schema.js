@@ -266,8 +266,6 @@ const typeDefs = gql`
     updateDocument(id: Int!, title: String, description: String, status: String, documentTypeId: Int): Document!
     deleteDocument(id: Int!): Boolean!
     assignSigners(documentId: Int!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
-    removeSigner(documentId: Int!, userId: Int!): Boolean!
-    reorderSigners(documentId: Int!, newOrder: [Int!]!): Boolean!
     updateFacturaTemplate(documentId: Int!, templateData: String!): UpdateFacturaTemplateResponse!
 
     # Firmas
