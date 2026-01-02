@@ -2122,7 +2122,11 @@ const resolvers = {
 
         // Verificar que el documento existe y el usuario es el creador
         const docResult = await client.query(
-          'SELECT * FROM documents WHERE id = $1',
+          `SELECT d.*, u.name as uploader_name, dt.name as document_type_name, dt.code as document_type_code
+          FROM documents d
+          LEFT JOIN users u ON d.uploaded_by = u.id
+          LEFT JOIN document_types dt ON d.document_type_id = dt.id
+          WHERE d.id = $1`,
           [documentId]
         );
 
@@ -2688,8 +2692,8 @@ const resolvers = {
           title: doc.title,
           fileName: doc.file_name,
           createdAt: doc.created_at,
-          uploadedBy: user.name,
-          documentTypeName: 'Factura',
+          uploadedBy: doc.uploader_name || user.name,
+          documentTypeName: doc.document_type_name || 'Factura',
           cia: parsedTemplateData.cia || null
         };
 
@@ -3556,7 +3560,7 @@ const resolvers = {
       // ========== REGENERAR PLANTILLA FV CON FIRMAS ACTUALIZADAS ==========
       try {
         const docInfoResult = await query(
-          `SELECT d.id, d.title, d.metadata, d.file_path, d.file_name, d.created_at, d.original_pdf_backup, d.retention_data, dt.code as document_type_code, u.name as uploader_name
+          `SELECT d.id, d.title, d.metadata, d.file_path, d.file_name, d.created_at, d.original_pdf_backup, d.retention_data, dt.code as document_type_code, dt.name as document_type_name, u.name as uploader_name
            FROM documents d
            LEFT JOIN document_types dt ON d.document_type_id = dt.id
            LEFT JOIN users u ON d.uploaded_by = u.id
@@ -3704,7 +3708,7 @@ const resolvers = {
               fileName: docInfo.file_name || '',
               createdAt: docInfo.created_at,
               uploadedBy: docInfo.uploader_name || 'Sistema',
-              documentTypeName: 'Factura'
+              documentTypeName: docInfo.document_type_name || 'Factura'
             };
 
             await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
@@ -4495,7 +4499,11 @@ const resolvers = {
 
                             // Obtener información del documento para la portada
                             const docInfoForCover = await query(
-                              'SELECT title, file_name, created_at FROM documents WHERE id = $1',
+                              `SELECT d.title, d.file_name, d.created_at, u.name as uploader_name, dt.name as document_type_name
+                              FROM documents d
+                              LEFT JOIN users u ON d.uploaded_by = u.id
+                              LEFT JOIN document_types dt ON d.document_type_id = dt.id
+                              WHERE d.id = $1`,
                               [documentId]
                             );
                             const docData = docInfoForCover.rows[0];
@@ -4504,8 +4512,8 @@ const resolvers = {
                               title: docData.title || 'Factura',
                               fileName: docData.file_name || '',
                               createdAt: docData.created_at,
-                              uploadedBy: 'Sistema',
-                              documentTypeName: 'Factura'
+                              uploadedBy: docData.uploader_name || 'Sistema',
+                              documentTypeName: docData.document_type_name || 'Factura'
                             };
 
                             await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
@@ -4964,7 +4972,22 @@ const resolvers = {
         await client.query('BEGIN');
 
         const docResult = await client.query(
-          'SELECT d.id, d.metadata, d.retention_data, d.file_path, dt.code as document_type_code FROM documents d LEFT JOIN document_types dt ON d.document_type_id = dt.id WHERE d.id = $1',
+          `SELECT
+            d.id,
+            d.metadata,
+            d.retention_data,
+            d.file_path,
+            d.original_pdf_backup,
+            d.title,
+            d.file_name,
+            d.created_at,
+            dt.code as document_type_code,
+            dt.name as document_type_name,
+            u.name as uploader_name
+          FROM documents d
+          LEFT JOIN document_types dt ON d.document_type_id = dt.id
+          LEFT JOIN users u ON d.uploaded_by = u.id
+          WHERE d.id = $1`,
           [documentId]
         );
 
@@ -5039,19 +5062,25 @@ const resolvers = {
 
           // OPTIMIZED: Usar rutas de archivo directamente (no buffers)
           let backupFilePaths = [];
+          console.log('🔍 [RELEASE] Verificando backups:', docInfo.original_pdf_backup);
           if (docInfo.original_pdf_backup) {
             const backupPathsArray = JSON.parse(docInfo.original_pdf_backup);
+            console.log('📋 [RELEASE] Backups encontrados en BD:', backupPathsArray);
             for (const relPath of backupPathsArray) {
               const backupRelativePath = relPath.replace(/^uploads\//, '');
               const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
               try {
                 await fs.access(fullBackupPath);
                 backupFilePaths.push(fullBackupPath);
+                console.log(`✅ [RELEASE] Backup verificado: ${fullBackupPath}`);
               } catch (err) {
-                console.error(`⚠️ Backup no encontrado: ${fullBackupPath}`);
+                console.error(`⚠️ [RELEASE] Backup no encontrado: ${fullBackupPath}`);
               }
             }
+          } else {
+            console.warn('⚠️ [RELEASE] No hay backups en la BD para este documento');
           }
+          console.log(`📄 [RELEASE] Total backups a mergear: ${backupFilePaths.length}`);
 
           // OPTIMIZED: Usar mergePDFs() con lectura paralela
           const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
@@ -5105,8 +5134,8 @@ const resolvers = {
             title: docInfo.title || 'Factura',
             fileName: docInfo.file_name || '',
             createdAt: docInfo.created_at,
-            uploadedBy: 'Sistema',
-            documentTypeName: 'Factura'
+            uploadedBy: docInfo.uploader_name || 'Sistema',
+            documentTypeName: docInfo.document_type_name || 'Factura'
           };
 
           await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
