@@ -4160,12 +4160,7 @@
 .ds-aside-header .logo-container {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: -20px;
-}
-
-.ds-aside-header .logo-container .pyramid-loader {
-  transform: rotateX(-20deg) translateY(-7px);
+  justify-content: center;
 }
 
 .ds-aside .logo {
@@ -4198,12 +4193,12 @@
 }
 
 .ds-brand-logo {
-  height: 56px !important;
+  height: 70px !important;
   width: auto !important;
   object-fit: contain;
   display: block !important;
   margin-bottom: 0 !important;
-  margin-left: -5px;
+  margin-left: -9px;
   transform: translateY(2px);
   pointer-events: none;
   user-select: none;

@@ -17,7 +17,6 @@ import SigningLoadingScreen from './SigningLoadingScreen';
 import RejectingLoadingScreen from './RejectingLoadingScreen';
 import ReleasingLoadingScreen from './ReleasingLoadingScreen';
 import DocumentCreationLoader from '../DocumentCreationLoader/DocumentCreationLoader';
-import PyramidLoader from '../PyramidLoader/PyramidLoader';
 import Loader from '../Loader/Loader';
 import LogoutButton from '../LogoutButton/LogoutButton';
 import HelpModal from '../HelpModal/HelpModal';
@@ -929,7 +928,7 @@ function Dashboard({ user, onLogout }) {
 
       return () => clearInterval(intervalId);
     } else {
-      document.title = 'DocuPrex';
+      document.title = 'Docuprex';
     }
   }, [viewingDocument]);
 
@@ -4040,8 +4039,7 @@ function Dashboard({ user, onLogout }) {
           <aside className="ds-aside">
             <div className="ds-aside-header">
               <div className="logo-container">
-                <PyramidLoader />
-                <img src={docuprexLogo} alt="DocuPrex" className="ds-brand-logo" />
+                <img src={docuprexLogo} alt="Docuprex" className="ds-brand-logo" />
               </div>
             </div>
             <nav className="ds-side-nav">

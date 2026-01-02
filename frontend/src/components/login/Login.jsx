@@ -96,7 +96,7 @@ function Login({ onLogin }) {
       <div className="login-card">
         <div className="login-header">
           <div className="logo-container">
-            <img src={docuprexLogo} alt="DocuPrex" className="logo-image" />
+            <img src={docuprexLogo} alt="Docuprex" className="logo-image" />
           </div>
         </div>
 

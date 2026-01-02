@@ -13,6 +13,7 @@ const {
 const pdfLogger = require('../utils/pdfLogger');
 const { generateFacturaTemplatePDF } = require('../utils/pdfFacturaTemplate');
 const { mergePDFs, cleanupTempFiles } = require('../utils/pdfMerger');
+const { addStampToPdf } = require('../utils/pdfStamp');
 const serverConfig = require('../config/server');
 const websocketService = require('../services/websocket');
 
@@ -3039,6 +3040,15 @@ const resolvers = {
             // Para otros documentos, actualizar inmediatamente
             await updateSignersPage(pdfPath, signers, documentInfo);
             console.log('✅ Página de firmantes actualizada después de rechazar');
+
+            // Agregar sello "RECHAZADO" en esquina superior izquierda
+            try {
+              await addStampToPdf(pdfPath, 'RECHAZADO');
+              console.log('✅ Sello RECHAZADO agregado al documento');
+            } catch (stampError) {
+              console.error('❌ Error al agregar sello RECHAZADO:', stampError);
+              // No lanzamos el error para que no falle el rechazo
+            }
           }
         }
       } catch (updateError) {
@@ -3204,6 +3214,15 @@ const resolvers = {
             // Copiar el resultado temporal al archivo final
             await fs.copyFile(tempMergedPath, currentPdfPath);
             console.log('✅ Archivo del documento reemplazado correctamente');
+
+            // Agregar sello "RECHAZADO" en esquina superior izquierda
+            try {
+              await addStampToPdf(currentPdfPath, 'RECHAZADO');
+              console.log('✅ Sello RECHAZADO agregado al documento');
+            } catch (stampError) {
+              console.error('❌ Error al agregar sello RECHAZADO:', stampError);
+              // No lanzamos el error para que no falle el rechazo
+            }
 
             // Limpiar temporal fusionado
             await cleanupTempFiles([tempMergedPath]);
@@ -3669,6 +3688,17 @@ const resolvers = {
             // Reemplazar archivo original
             await fs.copyFile(tempMergedPath, currentPdfPath);
 
+            // Si el documento está completamente firmado, agregar sello "APROBADO"
+            if (newStatus === 'completed') {
+              try {
+                await addStampToPdf(currentPdfPath, 'APROBADO');
+                console.log('✅ Sello APROBADO agregado al documento (última firma completada)');
+              } catch (stampError) {
+                console.error('❌ Error al agregar sello APROBADO:', stampError);
+                // No lanzamos el error para que no falle la firma
+              }
+            }
+
             // Limpiar temporales
             await fs.unlink(tempPlanillaPath);
             await fs.unlink(tempMergedPath);
@@ -4032,6 +4062,17 @@ const resolvers = {
           await updateSignersPage(pdfPath, signers, documentInfo);
 
           console.log('✅ Página de firmantes actualizada después de firmar');
+
+          // Si el documento está completamente firmado, agregar sello "APROBADO"
+          if (newStatus === 'completed') {
+            try {
+              await addStampToPdf(pdfPath, 'APROBADO');
+              console.log('✅ Sello APROBADO agregado al documento (última firma completada)');
+            } catch (stampError) {
+              console.error('❌ Error al agregar sello APROBADO:', stampError);
+              // No lanzamos el error para que no falle la firma
+            }
+          }
         }
       } catch (updateError) {
         console.error('❌ Error al actualizar página de firmantes:', updateError);

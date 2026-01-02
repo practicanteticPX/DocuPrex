@@ -46,7 +46,7 @@ const COLORS = {
   PENDING: rgb(0.4, 0.4, 0.4),     // Gris oscuro
   REJECTED: rgb(0.4, 0.4, 0.4),    // Gris oscuro
 
-  // Colores de marca de agua (transparentes)
+  // Colores de marca de agua
   WATERMARK_SIGNED: rgb(0.72, 0.94, 0.82),    // Verde muy claro
   WATERMARK_PENDING: rgb(0.9, 0.9, 0.9),      // Gris muy claro
   WATERMARK_REJECTED: rgb(0.99, 0.78, 0.78),  // Rojo muy claro

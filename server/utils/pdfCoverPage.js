@@ -402,7 +402,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
           size: watermarkSize,
           font: fontBold,
           color: watermarkColor,
-          rotate: { angle: -45, type: 'degrees' },
+          rotate: { angle: -55, type: 'degrees' },
           opacity: 0.3,
         });
       }
