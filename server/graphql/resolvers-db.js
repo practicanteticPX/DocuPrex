@@ -714,31 +714,55 @@ const resolvers = {
 
       const expandedSigners = [];
 
+      // OPTIMIZED: Batch query para grupos de causación (N+1 query elimination)
+      // Recolectar todos los códigos de grupo únicos
+      const grupoCodigos = result.rows
+        .filter(row => row.isCausacionGroup && row.grupoCodigo)
+        .map(row => row.grupoCodigo);
+
+      // Obtener todos los miembros de todos los grupos en una sola query
+      let grupoMembersMap = {};
+      if (grupoCodigos.length > 0) {
+        const uniqueCodigos = [...new Set(grupoCodigos)];
+
+        const allMembersResult = await query(`
+          SELECT
+            cg.codigo as grupo_codigo,
+            ci.user_id,
+            u.id,
+            u.name,
+            u.email,
+            s.id as signature_id,
+            s.status as signature_status,
+            s.signed_at as signature_signed_at,
+            s.rejected_at as signature_rejected_at,
+            s.rejection_reason as signature_rejection_reason,
+            s.consecutivo as signature_consecutivo,
+            s.real_signer_name as signature_real_signer_name,
+            s.created_at as signature_created_at
+          FROM causacion_integrantes ci
+          LEFT JOIN users u ON ci.user_id = u.id
+          LEFT JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+          LEFT JOIN signatures s ON s.document_id = $1 AND s.signer_id = ci.user_id
+          WHERE cg.codigo = ANY($2) AND ci.activo = true
+        `, [documentId, uniqueCodigos]);
+
+        // Construir mapa: grupoCode -> [members]
+        grupoMembersMap = allMembersResult.rows.reduce((map, member) => {
+          if (!map[member.grupo_codigo]) {
+            map[member.grupo_codigo] = [];
+          }
+          map[member.grupo_codigo].push(member);
+          return map;
+        }, {});
+      }
+
       for (const row of result.rows) {
         if (row.isCausacionGroup && row.grupoCodigo) {
-          // Expandir grupo de causación en sus miembros
-          const membersResult = await query(`
-            SELECT
-              ci.user_id,
-              u.id,
-              u.name,
-              u.email,
-              s.id as signature_id,
-              s.status as signature_status,
-              s.signed_at as signature_signed_at,
-              s.rejected_at as signature_rejected_at,
-              s.rejection_reason as signature_rejection_reason,
-              s.consecutivo as signature_consecutivo,
-              s.real_signer_name as signature_real_signer_name,
-              s.created_at as signature_created_at
-            FROM causacion_integrantes ci
-            LEFT JOIN users u ON ci.user_id = u.id
-            LEFT JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-            LEFT JOIN signatures s ON s.document_id = $1 AND s.signer_id = ci.user_id
-            WHERE cg.codigo = $2 AND ci.activo = true
-          `, [documentId, row.grupoCodigo]);
+          // Expandir grupo de causación usando el mapa (sin query adicional)
+          const members = grupoMembersMap[row.grupoCodigo] || [];
 
-          for (const member of membersResult.rows) {
+          for (const member of members) {
             expandedSigners.push({
               userId: member.user_id,
               orderPosition: row.orderPosition,
@@ -4792,217 +4816,126 @@ const resolvers = {
         await client.query('COMMIT');
 
         // ========== REGENERAR PDF FV SI ES NECESARIO ==========
-        // Usar query global en lugar de client después del COMMIT
-        const docTypeResult = await query(
-          'SELECT dt.code FROM documents d LEFT JOIN document_types dt ON d.document_type_id = dt.id WHERE d.id = $1',
+        // OPTIMIZED: Consolidar queries y usar mergePDFs() optimizado
+        const docInfoResult = await query(
+          `SELECT
+            d.file_path,
+            d.original_pdf_backup,
+            d.title,
+            d.file_name,
+            d.created_at,
+            dt.code as document_type_code,
+            dt.name as document_type_name,
+            u.name as uploader_name
+          FROM documents d
+          LEFT JOIN document_types dt ON d.document_type_id = dt.id
+          LEFT JOIN users u ON d.uploaded_by = u.id
+          WHERE d.id = $1`,
           [documentId]
         );
 
-        const isFVDocument = docTypeResult.rows.length > 0 && docTypeResult.rows[0].code === 'FV';
+        const isFVDocument = docInfoResult.rows.length > 0 && docInfoResult.rows[0].document_type_code === 'FV';
         const hasMetadata = metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0;
 
         if (isFVDocument && hasMetadata) {
           console.log('📋 Regenerando PDF FV después de retener...');
 
+          const docInfo = docInfoResult.rows[0];
           const templateData = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
 
-          // Obtener firmas actuales
+          // Obtener firmas y retenciones
           const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
-
-          // Obtener retenciones activas actualizadas (después de retener)
           const activeRetentions = currentRetentions.filter(r => r.activa);
-          console.log(`📦 Retenciones activas después de retener:`, activeRetentions);
 
-          // Regenerar PDF con retenciones
+          // Regenerar plantilla
           const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
 
-          // Guardar PDF en archivo temporal
           const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
           await fs.mkdir(tempDir, { recursive: true });
           const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
           await fs.writeFile(tempPlanillaPath, templatePdfBuffer);
 
-          // Obtener ruta del PDF actual
-          const docPathResult = await query(
-            'SELECT file_path, original_pdf_backup FROM documents WHERE id = $1',
-            [documentId]
-          );
-          const relativePath = docPathResult.rows[0].file_path.replace(/^uploads\//, '');
+          const relativePath = docInfo.file_path.replace(/^uploads\//, '');
           const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
 
-          // Cargar backup del PDF original (sin firmas)
+          // OPTIMIZED: Usar rutas de archivo directamente (no buffers)
           let backupFilePaths = [];
-          if (docPathResult.rows[0].original_pdf_backup) {
-            try {
-              const backupPathsArray = JSON.parse(docPathResult.rows[0].original_pdf_backup);
-              console.log(`📦 [RETENTION] Backups registrados en DB:`, backupPathsArray);
-              console.log(`📦 [RETENTION] Total de backups a cargar: ${backupPathsArray.length}`);
-
-              for (let i = 0; i < backupPathsArray.length; i++) {
-                const relPath = backupPathsArray[i];
-                console.log(`📄 [RETENTION] Procesando backup ${i + 1}/${backupPathsArray.length}:`, relPath);
-
-                const backupRelativePath = relPath.replace(/^uploads\//, '');
-                const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
-                console.log(`   📁 Ruta completa: ${fullBackupPath}`);
-
-                try {
-                  // Verificar que el archivo existe
-                  await fs.access(fullBackupPath);
-                  console.log(`   ✅ Archivo existe`);
-
-                  const backupContent = await fs.readFile(fullBackupPath);
-                  console.log(`   ✅ Archivo leído: ${backupContent.length} bytes`);
-
-                  backupFilePaths.push(backupContent);
-                  console.log(`   ✅ Backup ${i + 1} agregado exitosamente`);
-                } catch (fileErr) {
-                  console.error(`   ❌ Error al leer backup ${i + 1}:`, fileErr.message);
-                  console.error(`   ❌ Path: ${fullBackupPath}`);
-                }
+          if (docInfo.original_pdf_backup) {
+            const backupPathsArray = JSON.parse(docInfo.original_pdf_backup);
+            for (const relPath of backupPathsArray) {
+              const backupRelativePath = relPath.replace(/^uploads\//, '');
+              const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+              try {
+                await fs.access(fullBackupPath);
+                backupFilePaths.push(fullBackupPath);
+              } catch (err) {
+                console.error(`⚠️ Backup no encontrado: ${fullBackupPath}`);
               }
-
-              console.log(`📦 [RETENTION] Total de backups cargados exitosamente: ${backupFilePaths.length}/${backupPathsArray.length}`);
-            } catch (err) {
-              console.error('❌ [RETENTION] Error al procesar backups:', err);
-              console.error('❌ [RETENTION] Stack:', err.stack);
-            }
-          } else {
-            console.warn('⚠️ [RETENTION] No hay backups registrados en original_pdf_backup');
-          }
-
-          // Combinar PDFs
-          console.log(`🔗 [RETENTION] Iniciando combinación de PDFs...`);
-          const PDFDocument = require('pdf-lib').PDFDocument;
-          const mergedPdf = await PDFDocument.create();
-
-          // Agregar plantilla
-          console.log(`📄 [RETENTION] Agregando plantilla generada...`);
-          const templatePdfDoc = await PDFDocument.load(templatePdfBuffer);
-          const templatePages = await mergedPdf.copyPages(templatePdfDoc, templatePdfDoc.getPageIndices());
-          templatePages.forEach(page => mergedPdf.addPage(page));
-          console.log(`   ✅ Plantilla agregada: ${templatePages.length} página(s)`);
-
-          // Agregar backups
-          console.log(`📦 [RETENTION] Agregando ${backupFilePaths.length} backup(s)...`);
-          for (let i = 0; i < backupFilePaths.length; i++) {
-            const backupBuffer = backupFilePaths[i];
-            console.log(`   📄 Procesando backup ${i + 1}/${backupFilePaths.length}...`);
-            try {
-              const backupPdfDoc = await PDFDocument.load(backupBuffer);
-              const backupPages = await mergedPdf.copyPages(backupPdfDoc, backupPdfDoc.getPageIndices());
-              backupPages.forEach(page => mergedPdf.addPage(page));
-              console.log(`   ✅ Backup ${i + 1} agregado: ${backupPages.length} página(s)`);
-            } catch (loadErr) {
-              console.error(`   ❌ Error al cargar backup ${i + 1}:`, loadErr.message);
             }
           }
 
-          const totalPages = mergedPdf.getPageCount();
-          console.log(`📊 [RETENTION] Total de páginas en PDF final: ${totalPages}`);
+          // OPTIMIZED: Usar mergePDFs() con lectura paralela
+          const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
+          const filesToMerge = [tempPlanillaPath, ...backupFilePaths];
+          await mergePDFs(filesToMerge, tempMergedPath);
 
-          const finalPdfBytes = await mergedPdf.save();
-          console.log(`💾 [RETENTION] PDF guardado: ${finalPdfBytes.length} bytes`);
-          await fs.writeFile(currentPdfPath, finalPdfBytes);
-          console.log(`✅ [RETENTION] PDF escrito en: ${currentPdfPath}`);
+          // Obtener firmantes
+          const signersResult = await query(
+            `SELECT
+              ds.user_id, ds.order_position, ds.role_name, ds.role_names,
+              ds.is_causacion_group, ds.grupo_codigo,
+              u.name as user_name, cg.nombre as grupo_nombre, u.email,
+              COALESCE(s.status, 'pending') as status,
+              s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo,
+              COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+              signer_user.email as signer_email
+            FROM document_signers ds
+            LEFT JOIN users u ON ds.user_id = u.id
+            LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+            LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+              (ds.is_causacion_group = true AND s.signer_id IN (
+                SELECT ci.user_id FROM causacion_integrantes ci
+                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                WHERE cg.codigo = ds.grupo_codigo
+              ))
+            )
+            LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+            WHERE ds.document_id = $1
+            ORDER BY ds.order_position ASC`,
+            [documentId]
+          );
 
-          // ========== AGREGAR INFORME DE FIRMANTES ==========
-          console.log(`📋 [RETENTION] Agregando informe de firmantes...`);
-          try {
-            // Obtener información del documento y firmantes
-            const docInfoResult = await query(
-              `SELECT
-                d.title,
-                d.file_name,
-                d.created_at,
-                u.name as uploader_name,
-                dt.name as document_type_name
-              FROM documents d
-              LEFT JOIN users u ON d.uploaded_by = u.id
-              LEFT JOIN document_types dt ON d.document_type_id = dt.id
-              WHERE d.id = $1`,
-              [documentId]
-            );
+          const signers = signersResult.rows.map(row => ({
+            name: row.is_causacion_group ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación') : (row.user_name || 'Sin nombre'),
+            email: row.signer_email || row.email,
+            order_position: row.order_position,
+            role_name: row.role_name,
+            role_names: row.role_names,
+            status: row.status,
+            signed_at: row.signed_at,
+            rejected_at: row.rejected_at,
+            rejection_reason: row.rejection_reason,
+            consecutivo: row.consecutivo,
+            is_causacion_group: row.is_causacion_group,
+            grupo_codigo: row.grupo_codigo,
+            real_signer_name: row.real_signer_name
+          }));
 
-            if (docInfoResult.rows.length > 0) {
-              const docInfo = docInfoResult.rows[0];
+          const documentInfoForCover = {
+            title: docInfo.title || 'Factura',
+            fileName: docInfo.file_name || '',
+            createdAt: docInfo.created_at,
+            uploadedBy: docInfo.uploader_name || 'Sistema',
+            documentTypeName: docInfo.document_type_name || 'Factura'
+          };
 
-              // Obtener firmantes
-              const signersResult = await query(
-                `SELECT
-                    ds.user_id,
-                    ds.order_position,
-                    ds.role_name,
-                    ds.role_names,
-                    ds.is_causacion_group,
-                    ds.grupo_codigo,
-                    u.name as user_name,
-                    cg.nombre as grupo_nombre,
-                    u.email,
-                    COALESCE(s.status, 'pending') as status,
-                    s.signed_at,
-                    s.rejected_at,
-                    s.rejection_reason,
-                    s.consecutivo,
-                    COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
-                    signer_user.email as signer_email
-                FROM document_signers ds
-                LEFT JOIN users u ON ds.user_id = u.id
-                LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
-                LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
-                  (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-                  (ds.is_causacion_group = true AND s.signer_id IN (
-                    SELECT ci.user_id
-                    FROM causacion_integrantes ci
-                    JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-                    WHERE cg.codigo = ds.grupo_codigo
-                  ))
-                )
-                LEFT JOIN users signer_user ON s.signer_id = signer_user.id
-                WHERE ds.document_id = $1
-                ORDER BY ds.order_position ASC`,
-                [documentId]
-              );
+          await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
+          await fs.copyFile(tempMergedPath, currentPdfPath);
 
-              const signers = signersResult.rows.map(row => {
-                const name = row.is_causacion_group
-                  ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
-                  : (row.user_name || 'Sin nombre');
-
-                return {
-                  name: name,
-                  email: row.signer_email || row.email,
-                  order_position: row.order_position,
-                  role_name: row.role_name,
-                  role_names: row.role_names,
-                  status: row.status,
-                  signed_at: row.signed_at,
-                  rejected_at: row.rejected_at,
-                  rejection_reason: row.rejection_reason,
-                  consecutivo: row.consecutivo,
-                  is_causacion_group: row.is_causacion_group,
-                  grupo_codigo: row.grupo_codigo,
-                  real_signer_name: row.real_signer_name
-                };
-              });
-
-              const documentInfo = {
-                title: docInfo.title,
-                fileName: docInfo.file_name,
-                createdAt: docInfo.created_at,
-                uploadedBy: docInfo.uploader_name || 'Sistema',
-                documentTypeName: docInfo.document_type_name || null
-              };
-
-              // Agregar informe de firmantes al PDF
-              console.log(`📄 [RETENTION] Agregando ${signers.length} firmantes al informe...`);
-              await addCoverPageWithSigners(currentPdfPath, signers, documentInfo);
-              console.log(`✅ [RETENTION] Informe de firmantes agregado exitosamente`);
-            }
-          } catch (signersError) {
-            console.error(`❌ [RETENTION] Error al agregar informe de firmantes:`, signersError);
-            // No lanzar error para que no falle la retención
-          }
+          // Cleanup
+          await fs.unlink(tempPlanillaPath);
+          await fs.unlink(tempMergedPath);
 
           console.log('✅ PDF regenerado exitosamente después de retener');
         }
@@ -5087,112 +5020,72 @@ const resolvers = {
         if (isFVDocument && hasMetadata) {
           console.log('📋 Regenerando PDF FV después de liberar retención...');
 
-          const templateData = typeof docInfo.metadata === 'string'
-            ? JSON.parse(docInfo.metadata)
-            : docInfo.metadata;
+          const templateData = typeof docInfo.metadata === 'string' ? JSON.parse(docInfo.metadata) : docInfo.metadata;
 
-          // Obtener firmas actuales
+          // Obtener firmas y retenciones
           const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
-
-          // Obtener retenciones activas actualizadas (después de liberar)
           const activeRetentions = currentRetentions.filter(r => r.activa);
-          console.log(`📦 Retenciones activas después de liberar:`, activeRetentions);
 
-          // Regenerar PDF con retenciones actualizadas
+          // Regenerar plantilla
           const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
 
-          // Guardar PDF en archivo temporal
           const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
           await fs.mkdir(tempDir, { recursive: true });
           const tempPlanillaPath = path.join(tempDir, `planilla_${documentId}_${Date.now()}.pdf`);
           await fs.writeFile(tempPlanillaPath, templatePdfBuffer);
 
-          // Obtener ruta del PDF actual
           const relativePath = docInfo.file_path.replace(/^uploads\//, '');
           const currentPdfPath = path.join(__dirname, '..', 'uploads', relativePath);
 
-          // Cargar backup del PDF original (sin firmas)
-          const backupResult = await query(
-            'SELECT original_pdf_backup FROM documents WHERE id = $1',
-            [documentId]
-          );
-
+          // OPTIMIZED: Usar rutas de archivo directamente (no buffers)
           let backupFilePaths = [];
-          if (backupResult.rows[0].original_pdf_backup) {
-            try {
-              const backupPathsArray = JSON.parse(backupResult.rows[0].original_pdf_backup);
-              for (let i = 0; i < backupPathsArray.length; i++) {
-                const relPath = backupPathsArray[i];
-                const backupRelativePath = relPath.replace(/^uploads\//, '');
-                const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
-                const backupContent = await fs.readFile(fullBackupPath);
-                backupFilePaths.push(backupContent);
+          if (docInfo.original_pdf_backup) {
+            const backupPathsArray = JSON.parse(docInfo.original_pdf_backup);
+            for (const relPath of backupPathsArray) {
+              const backupRelativePath = relPath.replace(/^uploads\//, '');
+              const fullBackupPath = path.join(__dirname, '..', 'uploads', backupRelativePath);
+              try {
+                await fs.access(fullBackupPath);
+                backupFilePaths.push(fullBackupPath);
+              } catch (err) {
+                console.error(`⚠️ Backup no encontrado: ${fullBackupPath}`);
               }
-            } catch (err) {
-              console.warn('⚠️ No se pudieron cargar los backups, solo se usará la plantilla:', err.message);
             }
           }
 
-          // Combinar PDFs
-          const PDFDocument = require('pdf-lib').PDFDocument;
-          const mergedPdf = await PDFDocument.create();
-
-          // Agregar plantilla
-          const templatePdfDoc = await PDFDocument.load(templatePdfBuffer);
-          const templatePages = await mergedPdf.copyPages(templatePdfDoc, templatePdfDoc.getPageIndices());
-          templatePages.forEach(page => mergedPdf.addPage(page));
-
-          // Agregar backups
-          for (const backupBuffer of backupFilePaths) {
-            const backupPdfDoc = await PDFDocument.load(backupBuffer);
-            const backupPages = await mergedPdf.copyPages(backupPdfDoc, backupPdfDoc.getPageIndices());
-            backupPages.forEach(page => mergedPdf.addPage(page));
-          }
-
-          const finalPdfBytes = await mergedPdf.save();
-
-          // Guardar PDF temporal fusionado
+          // OPTIMIZED: Usar mergePDFs() con lectura paralela
           const tempMergedPath = path.join(tempDir, `merged_${documentId}_${Date.now()}.pdf`);
-          await fs.writeFile(tempMergedPath, finalPdfBytes);
+          const filesToMerge = [tempPlanillaPath, ...backupFilePaths];
+          await mergePDFs(filesToMerge, tempMergedPath);
 
-          // Agregar página de firmantes
-          const signersForCover = await query(
+          // Obtener firmantes
+          const signersResult = await query(
             `SELECT
-              ds.user_id,
-              ds.order_position,
-              ds.role_name,
-              ds.role_names,
-              ds.is_causacion_group,
-              ds.grupo_codigo,
-              u.name as user_name,
-              cg.nombre as grupo_nombre,
-              u.email,
+              ds.user_id, ds.order_position, ds.role_name, ds.role_names,
+              ds.is_causacion_group, ds.grupo_codigo,
+              u.name as user_name, cg.nombre as grupo_nombre, u.email,
               COALESCE(s.status, 'pending') as status,
-              s.signed_at,
-              s.rejected_at,
-              s.rejection_reason,
-              s.consecutivo,
+              s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo,
               COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
               signer_user.email as signer_email
-             FROM document_signers ds
-             LEFT JOIN users u ON ds.user_id = u.id
-             LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
-             LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
-               (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-               (ds.is_causacion_group = true AND s.signer_id IN (
-                 SELECT ci.user_id
-                 FROM causacion_integrantes ci
-                 JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-                 WHERE cg.codigo = ds.grupo_codigo
-               ))
-             )
-             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
-             WHERE ds.document_id = $1
-             ORDER BY ds.order_position ASC`,
+            FROM document_signers ds
+            LEFT JOIN users u ON ds.user_id = u.id
+            LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+            LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+              (ds.is_causacion_group = true AND s.signer_id IN (
+                SELECT ci.user_id FROM causacion_integrantes ci
+                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                WHERE cg.codigo = ds.grupo_codigo
+              ))
+            )
+            LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+            WHERE ds.document_id = $1
+            ORDER BY ds.order_position ASC`,
             [documentId]
           );
 
-          const signers = signersForCover.rows.map(row => ({
+          const signers = signersResult.rows.map(row => ({
             name: row.is_causacion_group ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación') : (row.user_name || 'Sin nombre'),
             email: row.signer_email || row.email,
             order_position: row.order_position,
@@ -5208,27 +5101,22 @@ const resolvers = {
             real_signer_name: row.real_signer_name
           }));
 
-          const docTitleResult = await query('SELECT title, file_name, created_at FROM documents WHERE id = $1', [documentId]);
-          const docTitleInfo = docTitleResult.rows[0];
-
           const documentInfoForCover = {
-            title: docTitleInfo.title || 'Factura',
-            fileName: docTitleInfo.file_name || '',
-            createdAt: docTitleInfo.created_at,
+            title: docInfo.title || 'Factura',
+            fileName: docInfo.file_name || '',
+            createdAt: docInfo.created_at,
             uploadedBy: 'Sistema',
             documentTypeName: 'Factura'
           };
 
           await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
-
-          // Copiar el PDF final con página de firmantes al destino
           await fs.copyFile(tempMergedPath, currentPdfPath);
 
-          // Limpiar archivos temporales
+          // Cleanup
           await fs.unlink(tempPlanillaPath);
           await fs.unlink(tempMergedPath);
 
-          console.log('✅ PDF regenerado exitosamente después de liberar retención (con informe de firmas actualizado)');
+          console.log('✅ PDF regenerado exitosamente después de liberar retención');
         }
 
         // Verificar si ya no hay retenciones activas y el documento está firmado
@@ -5359,25 +5247,60 @@ const resolvers = {
         ORDER BY ds.order_position ASC
       `, [parent.id]);
 
-      // Para cada signer, obtener los role_codes basados en assigned_role_ids o role_names
+      // OPTIMIZED: Obtener role_codes en batch para todos los signers (N+1 query elimination)
+      // Recopilar todos los role_ids y role_names únicos
+      const allRoleIds = [];
+      const allRoleNames = [];
+
+      for (const signer of signersResult.rows) {
+        if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
+          allRoleIds.push(...signer.assigned_role_ids);
+        } else if (signer.role_names && signer.role_names.length > 0) {
+          allRoleNames.push(...signer.role_names);
+        }
+      }
+
+      // Obtener role_codes para todos los role_ids únicos (un solo query)
+      let roleIdToCodeMap = {};
+      if (allRoleIds.length > 0) {
+        const uniqueRoleIds = [...new Set(allRoleIds)];
+        const rolesResult = await query(`
+          SELECT id, role_code FROM document_type_roles WHERE id = ANY($1)
+        `, [uniqueRoleIds]);
+
+        roleIdToCodeMap = rolesResult.rows.reduce((map, row) => {
+          map[row.id] = row.role_code;
+          return map;
+        }, {});
+      }
+
+      // Obtener role_codes para todos los role_names únicos (un solo query - fallback)
+      let roleNameToCodeMap = {};
+      if (allRoleNames.length > 0) {
+        const uniqueRoleNames = [...new Set(allRoleNames)];
+        const rolesResult = await query(`
+          SELECT role_name, role_code FROM document_type_roles WHERE role_name = ANY($1)
+        `, [uniqueRoleNames]);
+
+        roleNameToCodeMap = rolesResult.rows.reduce((map, row) => {
+          map[row.role_name] = row.role_code;
+          return map;
+        }, {});
+      }
+
+      // Asignar role_codes a cada signer usando los mapas (sin queries adicionales)
       for (const signer of signersResult.rows) {
         console.log(`🔍 [signatures resolver] Procesando signer: user_id=${signer.user_id}, assigned_role_ids=${JSON.stringify(signer.assigned_role_ids)}, role_names=${JSON.stringify(signer.role_names)}`);
 
         if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
           // Usar assigned_role_ids si está disponible
           console.log(`  ➡️ Usando assigned_role_ids`);
-          const rolesResult = await query(`
-            SELECT role_code FROM document_type_roles WHERE id = ANY($1)
-          `, [signer.assigned_role_ids]);
-          signer.role_codes = rolesResult.rows.map(r => r.role_code);
+          signer.role_codes = signer.assigned_role_ids.map(id => roleIdToCodeMap[id]).filter(code => code);
           console.log(`  ✅ role_codes obtenidos: ${JSON.stringify(signer.role_codes)}`);
         } else if (signer.role_names && signer.role_names.length > 0) {
           // Fallback: buscar por role_name (compatibilidad con documentos antiguos)
           console.log(`  ➡️ Fallback: usando role_names`);
-          const rolesResult = await query(`
-            SELECT role_code FROM document_type_roles WHERE role_name = ANY($1)
-          `, [signer.role_names]);
-          signer.role_codes = rolesResult.rows.map(r => r.role_code);
+          signer.role_codes = signer.role_names.map(name => roleNameToCodeMap[name]).filter(code => code);
           console.log(`  ✅ role_codes obtenidos (fallback): ${JSON.stringify(signer.role_codes)}`);
         } else {
           console.log(`  ❌ No assigned_role_ids ni role_names disponibles`);
