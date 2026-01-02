@@ -19,6 +19,7 @@ const { startCleanupService } = require('./services/notificationCleanup');
 const { startDocumentCleanupService } = require('./services/documentCleanup');
 const { startReminderService } = require('./services/signatureReminders');
 const { query } = require('./database/db');
+const resourceCache = require('./utils/resourceCache');
 
 const JWT_SECRET = serverConfig.jwtSecret;
 const PORT = serverConfig.port;
@@ -337,6 +338,9 @@ async function startServer() {
     console.log(`   - Protocol: ${process.env.AD_PROTOCOL || 'ldap'}`);
     console.log(`   - Base DN: ${process.env.AD_BASE_DN || 'No configurado'}`);
     console.log(`💾 Base de datos: ${process.env.DATABASE_URL ? 'PostgreSQL conectado' : 'No configurado'}`);
+
+    // Inicializar caché de recursos estáticos (fuentes y logos)
+    resourceCache.initialize();
 
     // Iniciar servicio de limpieza automática de notificaciones
     startCleanupService();

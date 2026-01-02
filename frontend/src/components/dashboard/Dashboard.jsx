@@ -4469,7 +4469,7 @@ function Dashboard({ user, onLogout }) {
 
           {/* Upload Section - Rediseñado estilo ZapSign */}
           {activeTab === 'upload' && (
-            <div className="section upload-section-zapsign">
+            <div key="upload-tab" className="section upload-section-zapsign">
               {/* Stepper Horizontal Personalizado - 3 Pasos */}
               <div className="firmapro-stepper">
                 <div className="firmapro-stepper-items">
@@ -5242,7 +5242,7 @@ function Dashboard({ user, onLogout }) {
 
           {/* Pending Documents Section - Minimal */}
           {activeTab === 'pending' && (
-            <div className="section my-documents-section-clean">
+            <div key="pending-tab" className="section my-documents-section-clean">
               <div className="section-header-minimal">
                 <div>
                   <h2 className="section-title-minimal">Pendientes de Firma</h2>
@@ -5645,7 +5645,7 @@ function Dashboard({ user, onLogout }) {
 
           {/* Signed Documents Section - Minimal */}
           {activeTab === 'signed' && (
-            <div className="section my-documents-section-clean">
+            <div key="signed-tab" className="section my-documents-section-clean">
               <div className="section-header-minimal">
                 <div>
                   <h2 className="section-title-minimal">Documentos Firmados</h2>
@@ -5964,7 +5964,7 @@ function Dashboard({ user, onLogout }) {
 
           {/* My Documents Section - Rediseñado */}
           {activeTab === 'my-documents' && (
-            <div className="section my-documents-section-clean">
+            <div key="my-documents-tab" className="section my-documents-section-clean">
               <div className="section-header-minimal">
                 <div>
                   <h2 className="section-title-minimal">Mis Documentos</h2>
@@ -6322,7 +6322,7 @@ function Dashboard({ user, onLogout }) {
 
           {/* Rejected Documents Section */}
           {activeTab === 'rejected' && (
-            <div className="section my-documents-section-clean">
+            <div key="rejected-tab" className="section my-documents-section-clean">
               <div className="section-header-minimal">
                 <div>
                   <h2 className="section-title-minimal">Documentos Rechazados</h2>
@@ -6632,7 +6632,7 @@ function Dashboard({ user, onLogout }) {
 
           {/* Retained Documents Section */}
           {activeTab === 'retained' && (
-            <div className="section my-documents-section-clean">
+            <div key="retained-tab" className="section my-documents-section-clean">
               <div className="section-header-minimal">
                 <div>
                   <h2 className="section-title-minimal">Documentos Retenidos</h2>
