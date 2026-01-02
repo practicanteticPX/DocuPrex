@@ -3573,7 +3573,21 @@ function Dashboard({ user, onLogout }) {
   };
 
   const handleOpenSignConfirm = () => {
-    setShowSignConfirm(true);
+    // Verificar si es documento FV con rol Resp Centro Costos
+    const isFV = viewingDocument && viewingDocument.documentType && viewingDocument.documentType.code === 'FV';
+    const isRespCtroCost = viewingDocument && hasRespCtroCostRole(viewingDocument);
+
+    console.log('🔍 [SIGN] handleOpenSignConfirm - isFV:', isFV, 'isRespCtroCost:', isRespCtroCost);
+
+    if (isFV && isRespCtroCost) {
+      // Para Resp Centro Costos en FV: ir directo al modal de retención
+      console.log('✅ [SIGN] Abriendo modal de retención directamente (Resp Centro Costos)');
+      initiateSignDocument(viewingDocument.id);
+    } else {
+      // Para otros casos: mostrar modal de confirmación normal
+      console.log('ℹ️ [SIGN] Abriendo modal de confirmación normal');
+      setShowSignConfirm(true);
+    }
   };
 
   const handleCancelSign = () => {

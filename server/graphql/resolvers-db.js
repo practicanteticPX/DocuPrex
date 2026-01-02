@@ -1505,7 +1505,7 @@ const resolvers = {
       // OPTIMIZACIÓN: Contar total, firmados y rechazados en 1 sola query (50% más rápido)
       const statusCountsResult = await query(`
         SELECT
-          COUNT(*) as total,
+          COUNT(DISTINCT ds.id) as total,
           COUNT(DISTINCT CASE
             WHEN s.status = 'signed' AND (
               (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
@@ -1527,7 +1527,14 @@ const resolvers = {
             ) THEN ds.id END
           ) as rejected
         FROM document_signers ds
-        LEFT JOIN signatures s ON s.document_id = ds.document_id
+        LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+          (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+          (ds.is_causacion_group = true AND s.signer_id IN (
+            SELECT ci.user_id FROM causacion_integrantes ci
+            JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+            WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+          ))
+        )
         WHERE ds.document_id = $1
       `, [documentId]);
 
@@ -3492,10 +3499,33 @@ const resolvers = {
       // Solo se eliminan cuando se elimina el documento completo (en deleteDocument)
       console.log('📦 Los backups de PDFs originales se mantienen intactos');
 
+      // Debug: Listar todos los firmantes y firmas
+      const debugSigners = await query(`
+        SELECT
+          ds.id as ds_id,
+          ds.user_id,
+          ds.is_causacion_group,
+          ds.grupo_codigo,
+          ds.order_position,
+          u.name as user_name,
+          cg.nombre as grupo_nombre,
+          s.id as signature_id,
+          s.signer_id,
+          s.status as signature_status
+        FROM document_signers ds
+        LEFT JOIN users u ON ds.user_id = u.id
+        LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+        LEFT JOIN signatures s ON s.document_id = ds.document_id
+        WHERE ds.document_id = $1
+        ORDER BY ds.order_position
+      `, [documentId]);
+
+      console.log('📋 [DEBUG] Firmantes y firmas del documento:', JSON.stringify(debugSigners.rows, null, 2));
+
       // OPTIMIZACIÓN: Contar total, firmados y rechazados en 1 sola query (50% más rápido)
       const statusCountsResult = await query(`
         SELECT
-          COUNT(*) as total,
+          COUNT(DISTINCT ds.id) as total,
           COUNT(DISTINCT CASE
             WHEN s.status = 'signed' AND (
               (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
@@ -3517,7 +3547,14 @@ const resolvers = {
             ) THEN ds.id END
           ) as rejected
         FROM document_signers ds
-        LEFT JOIN signatures s ON s.document_id = ds.document_id
+        LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
+          (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
+          (ds.is_causacion_group = true AND s.signer_id IN (
+            SELECT ci.user_id FROM causacion_integrantes ci
+            JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+            WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+          ))
+        )
         WHERE ds.document_id = $1
       `, [documentId]);
 
@@ -3526,6 +3563,14 @@ const resolvers = {
       const rejected = parseInt(statusCountsResult.rows[0].rejected || 0);
       const pending = totalSigners - signed - rejected;
       const total = totalSigners;
+
+      console.log('🔍 [STATUS CHECK] Verificación de estado del documento:', {
+        documentId,
+        total: totalSigners,
+        signed,
+        rejected,
+        pending
+      });
 
       let newStatus = 'pending';
       let shouldSetCompletedAt = false;
@@ -3544,6 +3589,8 @@ const resolvers = {
         // Si hay firmas pendientes pero ninguna firmada, está pendiente
         newStatus = 'pending';
       }
+
+      console.log(`📊 [STATUS CHECK] Estado calculado: ${newStatus} (completedAt: ${shouldSetCompletedAt})`);
 
       if (shouldSetCompletedAt) {
         await query(
