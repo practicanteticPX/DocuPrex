@@ -1215,15 +1215,15 @@ html:has(.pdf-viewer-minimal-overlay) {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
 }
 
-/* Indicador visual: es mi turno de firmar */
+/* Indicador visual: es mi turno de firmar (20% más oscuro) */
 .my-doc-card-reference.my-turn-to-sign {
-  border: 1.5px solid #D1D5DB !important;
-  background: rgba(229, 231, 235, 0.08) !important;
+  border: 1.5px solid #9CA3AF !important;
+  background: rgba(229, 231, 235, 0.18) !important;
 }
 
 .my-doc-card-reference.my-turn-to-sign:hover {
-  border: 1.5px solid #D1D5DB !important;
-  background: rgba(229, 231, 235, 0.12) !important;
+  border: 1.5px solid #9CA3AF !important;
+  background: rgba(229, 231, 235, 0.25) !important;
 }
 
 /* Wrapper del contenido */

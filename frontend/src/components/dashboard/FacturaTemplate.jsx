@@ -921,38 +921,17 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
       const fila = filasControl[i];
       const numeroFila = i + 1;
 
+      // VALIDACIÓN SIMPLIFICADA: Solo validar campos que el usuario debe seleccionar manualmente
       if (!fila.noCuentaContable.trim()) {
-        errores.push(`Fila ${numeroFila}: El campo "No. Cuenta Contable" es obligatorio`);
-      }
-
-      // VALIDACIÓN ESTRICTA: Verificar que la cuenta contable tenga responsable y cargo
-      if (fila.noCuentaContable.trim() && !fila.respCuentaContable.trim()) {
-        errores.push(`Fila ${numeroFila}: La cuenta contable "${fila.noCuentaContable}" no tiene responsable asignado en la base de datos. Contacte al administrador.`);
-      }
-
-      if (fila.noCuentaContable.trim() && !fila.cargoCuentaContable.trim()) {
-        errores.push(`Fila ${numeroFila}: La cuenta contable "${fila.noCuentaContable}" no tiene cargo asignado en la base de datos. Contacte al administrador.`);
-      }
-
-      if (fila.noCuentaContable.trim() && !fila.nombreCuentaContable.trim()) {
-        errores.push(`Fila ${numeroFila}: La cuenta contable "${fila.noCuentaContable}" no tiene nombre de cuenta en la base de datos. Contacte al administrador.`);
+        errores.push(`Fila ${numeroFila}: Debe seleccionar una cuenta contable`);
       }
 
       if (!fila.centroCostos.trim()) {
-        errores.push(`Fila ${numeroFila}: El campo "Centro de Costos" es obligatorio`);
-      }
-
-      // VALIDACIÓN ESTRICTA: Verificar que el centro de costos tenga responsable y cargo
-      if (fila.centroCostos.trim() && !fila.respCentroCostos.trim()) {
-        errores.push(`Fila ${numeroFila}: El centro de costos "${fila.centroCostos}" no tiene responsable asignado en la base de datos. Contacte al administrador.`);
-      }
-
-      if (fila.centroCostos.trim() && !fila.cargoCentroCostos.trim()) {
-        errores.push(`Fila ${numeroFila}: El centro de costos "${fila.centroCostos}" no tiene cargo asignado en la base de datos. Contacte al administrador.`);
+        errores.push(`Fila ${numeroFila}: Debe seleccionar un centro de costos`);
       }
 
       if (!fila.porcentaje || fila.porcentaje.trim() === '') {
-        errores.push(`Fila ${numeroFila}: El campo "Porcentaje" es obligatorio`);
+        errores.push(`Fila ${numeroFila}: Debe ingresar el porcentaje`);
       } else {
         const porcentajeNum = parseFloat(fila.porcentaje);
         if (isNaN(porcentajeNum) || porcentajeNum <= 0) {

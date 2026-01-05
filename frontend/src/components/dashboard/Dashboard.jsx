@@ -2663,21 +2663,34 @@ function Dashboard({ user, onLogout }) {
           }
 
           // Autofirma: Si el usuario actual está en la lista de firmantes, firmar automáticamente
-          // Compara por userId O por nombre (para firmantes de FV que vienen por nombre)
-          const userInSigners = selectedSigners.some(s => {
-            if (typeof s === 'object') {
-              // Comparar por userId si existe
-              if (s.userId === user.id) return true;
-              // Comparar por nombre si no hay userId (caso FV)
-              if (!s.userId && s.name && user.name) {
-                return s.name.trim().toUpperCase() === user.name.trim().toUpperCase();
-              }
-            } else {
-              return s === user.id;
+          // Para FV: SOLO autofirmar si el usuario es el Negociador (primer firmante)
+          let shouldAutoSign = false;
+
+          if (selectedDocumentType && selectedDocumentType.code === 'FV') {
+            // Para FV: Solo autofirmar si es el Negociador (primer firmante con rol NEGOCIADOR)
+            const firstSigner = selectedSigners[0];
+            if (firstSigner && typeof firstSigner === 'object') {
+              const isNegociador = firstSigner.name && user.name &&
+                firstSigner.name.trim().toUpperCase() === user.name.trim().toUpperCase() &&
+                (
+                  (firstSigner.role && firstSigner.role.toLowerCase().includes('negociador')) ||
+                  (Array.isArray(firstSigner.roleNames) && firstSigner.roleNames.some(r => r.toLowerCase().includes('negociador')))
+                );
+              shouldAutoSign = isNegociador;
+              console.log(`🔍 FV - Verificando autofirma: Usuario=${user.name}, PrimerFirmante=${firstSigner.name}, EsNegociador=${shouldAutoSign}`);
             }
-            return false;
-          });
-          if (user && user.id && userInSigners) {
+          } else {
+            // Para otros tipos de documento (SA, etc.): autofirmar si el usuario está en la lista
+            shouldAutoSign = selectedSigners.some(s => {
+              if (typeof s === 'object') {
+                return s.userId === user.id;
+              } else {
+                return s === user.id;
+              }
+            });
+          }
+
+          if (user && user.id && shouldAutoSign) {
             try {
               const signResponse = await axios.post(
                 API_URL,
