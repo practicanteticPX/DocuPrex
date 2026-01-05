@@ -63,7 +63,10 @@
       "Bash(done)",
       "Bash(for component in Loader LogoutButton HelpModal RealSignerModal RetentionModal ReleaseModal DocumentCreationLoader)",
       "Bash(for css in Dashboard.css Dashboard.overrides.css Rejected.css SignersOrder.css WaitingTurn.css)",
-      "Bash(do [ -f \"$css\" ])"
+      "Bash(do [ -f \"$css\" ])",
+      "Bash(git log:*)",
+      "Bash(git checkout:*)",
+      "Bash(cp:*)"
     ],
     "deny": [],
     "ask": []

@@ -3,7 +3,7 @@ import './ReleaseModal.css';
 /**
  * Modal para confirmar la liberación de una factura retenida
  */
-function ReleaseModal({ isOpen, onClose, onConfirm, loading = false }) {
+function ReleaseModal({ isOpen, onClose, onConfirm, loading = false, retentionCount = 1 }) {
   if (!isOpen) return null;
 
   return (
@@ -17,7 +17,12 @@ function ReleaseModal({ isOpen, onClose, onConfirm, loading = false }) {
           </svg>
         </div>
         <h2 className="release-modal-title">Liberar Factura Retenida</h2>
-        <p className="release-modal-message">¿Estás seguro de que deseas liberar esta factura retenida?</p>
+        <p className="release-modal-message">
+          {retentionCount > 1
+            ? `¿Estás seguro de que deseas liberar todas tus retenciones (${retentionCount} centros de costo) de esta factura?`
+            : '¿Estás seguro de que deseas liberar esta factura retenida?'
+          }
+        </p>
         <div className="release-modal-actions">
           <button
             className="release-btn-cancel"

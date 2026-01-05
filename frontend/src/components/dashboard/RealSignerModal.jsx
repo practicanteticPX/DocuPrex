@@ -114,8 +114,8 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
   if (!isOpen) return null;
 
   return (
-    <div className="real-signer-modal-overlay" onClick={handleClose}>
-      <div className={`real-signer-modal-content real-signer-modal-${action}`} onClick={(e) => e.stopPropagation()}>
+    <div className="real-signer-modal-overlay">
+      <div className={`real-signer-modal-content real-signer-modal-${action}`}>
         <div className="real-signer-modal-header">
           <div className="real-signer-header-content">
             {step === 1 ? (

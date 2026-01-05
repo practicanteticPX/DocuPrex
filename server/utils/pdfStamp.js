@@ -3,9 +3,9 @@ const fs = require('fs').promises;
 const path = require('path');
 
 /**
- * Agrega un sello de "RECHAZADO" o "APROBADO" en la esquina superior izquierda de la PRIMERA página del PDF (planilla)
+ * Agrega un sello de "RECHAZADO", "APROBADO" o "RETENIDO" en la esquina superior izquierda de la PRIMERA página del PDF (planilla)
  * @param {string} pdfPath - Ruta del archivo PDF
- * @param {string} stampType - Tipo de sello: 'RECHAZADO' o 'APROBADO'
+ * @param {string} stampType - Tipo de sello: 'RECHAZADO', 'APROBADO' o 'RETENIDO'
  */
 async function addStampToPdf(pdfPath, stampType) {
   try {
@@ -24,7 +24,14 @@ async function addStampToPdf(pdfPath, stampType) {
     const { height } = firstPage.getSize();
 
     // Determinar qué imagen de sello usar
-    const stampFileName = stampType === 'RECHAZADO' ? 'rechazado.png' : 'aprobado.png';
+    let stampFileName;
+    if (stampType === 'RECHAZADO') {
+      stampFileName = 'rechazado.png';
+    } else if (stampType === 'RETENIDO') {
+      stampFileName = 'retenido.png';
+    } else {
+      stampFileName = 'aprobado.png';
+    }
     const stampImagePath = path.join(__dirname, '..', 'assets', 'stamps', stampFileName);
 
     // Verificar que la imagen existe

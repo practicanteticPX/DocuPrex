@@ -3287,34 +3287,47 @@ function Dashboard({ user, onLogout }) {
   };
 
   /**
-   * Libera un documento retenido
+   * Libera todas las retenciones activas del documento para el usuario actual
+   * @param {number} documentId - ID del documento a liberar
+   * @param {number|number[]} centroCostoIndexes - Índice(s) de centro(s) de costo a liberar
    */
-  const handleReleaseDocument = async (documentId, centroCostoIndex) => {
+  const handleReleaseDocument = async (documentId, centroCostoIndexes) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(
-        API_URL,
-        {
-          query: `
-            mutation ReleaseDocument($documentId: Int!, $centroCostoIndex: Int!) {
-              releaseDocument(documentId: $documentId, centroCostoIndex: $centroCostoIndex)
-            }
-          `,
-          variables: {
-            documentId: parseInt(documentId),
-            centroCostoIndex: parseInt(centroCostoIndex)
-          }
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
 
-      if (response.data.errors) {
-        throw new Error(response.data.errors[0].message);
+      // Normalizar a formato array
+      const indexesToRelease = Array.isArray(centroCostoIndexes) ? centroCostoIndexes : [centroCostoIndexes];
+
+      console.log(`🔓 Liberando ${indexesToRelease.length} retención/es del documento ${documentId}`);
+
+      // Liberar cada retención de centro de costo secuencialmente
+      for (const centroCostoIndex of indexesToRelease) {
+        const response = await axios.post(
+          API_URL,
+          {
+            query: `
+              mutation ReleaseDocument($documentId: Int!, $centroCostoIndex: Int!) {
+                releaseDocument(documentId: $documentId, centroCostoIndex: $centroCostoIndex)
+              }
+            `,
+            variables: {
+              documentId: parseInt(documentId),
+              centroCostoIndex: parseInt(centroCostoIndex)
+            }
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (response.data.errors) {
+          throw new Error(response.data.errors[0].message);
+        }
+
+        console.log(`✅ Retención liberada para centro de costo índice ${centroCostoIndex}`);
       }
 
       setNotificationData({
         title: 'Documento Liberado',
-        message: 'El documento ha sido liberado exitosamente',
+        message: `${indexesToRelease.length > 1 ? 'Todas las retenciones han sido' : 'El documento ha sido'} liberadas exitosamente`,
         type: 'success'
       });
       setShowNotification(true);
@@ -6963,13 +6976,17 @@ function Dashboard({ user, onLogout }) {
                   className="pdf-viewer-action-btn pdf-release-btn"
                   onClick={() => {
                     if (viewingDocument && viewingDocument.retentionData && Array.isArray(viewingDocument.retentionData)) {
-                      const retention = viewingDocument.retentionData.find(
+                      // Filtrar retenciones activas del usuario actual
+                      const userRetentions = viewingDocument.retentionData.filter(
                         r => String(r.userId) === String(user.id) && r.activa
                       );
-                      if (retention) {
+                      if (userRetentions.length > 0) {
+                        // Extraer índices de centros de costo
+                        const centroCostoIndexes = userRetentions.map(r => r.centroCostoIndex);
                         setPendingReleaseDocument({
                           docId: viewingDocument.id,
-                          centroCostoIndex: retention.centroCostoIndex
+                          centroCostoIndexes: centroCostoIndexes,
+                          count: userRetentions.length
                         });
                         setShowReleaseModal(true);
                       }
@@ -7067,8 +7084,8 @@ function Dashboard({ user, onLogout }) {
 
           {/* Popup de Confirmación de Firma - Minimalista */}
           {showSignConfirm && (
-            <div className="sign-confirm-overlay" onClick={handleCancelSign}>
-              <div className="sign-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sign-confirm-overlay">
+              <div className="sign-confirm-modal">
                 <div className="sign-confirm-icon">
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M11 5H6C5.46957 5 4.96086 5.21071 4.58579 5.58579C4.21071 5.96086 4 6.46957 4 7V19C4 19.5304 4.21071 20.0391 4.58579 20.4142C4.96086 20.7893 5.46957 21 6 21H18C18.5304 21 19.0391 20.7893 19.4142 20.4142C19.7893 20.0391 20 19.5304 20 19V14M18.5 2.5C18.8978 2.1022 19.4374 1.87868 20 1.87868C20.5626 1.87868 21.1022 2.1022 21.5 2.5C21.8978 2.8978 22.1213 3.43739 22.1213 4C22.1213 4.56261 21.8978 5.1022 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -8074,6 +8091,7 @@ function Dashboard({ user, onLogout }) {
       {/* Modal de confirmación de liberación */}
       <ReleaseModal
         isOpen={showReleaseModal}
+        retentionCount={pendingReleaseDocument?.count || 1}
         onClose={() => {
           setShowReleaseModal(false);
           setPendingReleaseDocument(null);
@@ -8089,7 +8107,7 @@ function Dashboard({ user, onLogout }) {
 
               const success = await handleReleaseDocument(
                 pendingReleaseDocument.docId,
-                pendingReleaseDocument.centroCostoIndex
+                pendingReleaseDocument.centroCostoIndexes
               );
 
               if (success) {

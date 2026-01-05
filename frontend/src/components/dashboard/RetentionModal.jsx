@@ -188,8 +188,8 @@ function RetentionModal({ isOpen, onClose, onConfirm, availableCostCenters = [] 
   };
 
   return (
-    <div className="retention-modal-overlay" onClick={handleClose}>
-      <div className="retention-modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="retention-modal-overlay">
+      <div className="retention-modal-content">
         <div className="retention-modal-header">
           <div className="retention-header-content">
             {step === 1 ? (

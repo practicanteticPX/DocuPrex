@@ -435,6 +435,11 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         statusText = 'Rechazado';
         statusBadgeColor = rgb(0.99, 0.89, 0.89);
         statusTextColor = rgb(0.87, 0.15, 0.15);
+      } else if (signer.status === 'pending' && anyRejected) {
+        // Si el documento fue rechazado, los pendientes se muestran en rojo
+        statusText = 'Firma pendiente';
+        statusBadgeColor = rgb(0.99, 0.89, 0.89);
+        statusTextColor = rgb(0.87, 0.15, 0.15);
       }
 
       // Construir el nombre del firmante:

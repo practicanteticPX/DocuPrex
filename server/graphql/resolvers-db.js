@@ -1334,15 +1334,26 @@ const resolvers = {
           ]
         );
 
-        // Auto-firmar al propietario cuando se agrega en posición 1
-        await query(
-          `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
-           VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
-           ON CONFLICT (document_id, signer_id) DO UPDATE
-           SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
-          [documentId, user.id]
-        );
-        console.log(`✅ Auto-firma aplicada al propietario (posición 1)`);
+        // Auto-firmar al propietario SOLO si es NEGOCIADOR
+        const isNegociador = ownerRoles.roleNames && ownerRoles.roleNames.includes('Negociador');
+        if (isNegociador) {
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+             VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
+             ON CONFLICT (document_id, signer_id) DO UPDATE
+             SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
+            [documentId, user.id]
+          );
+          console.log(`✅ Auto-firma aplicada al propietario NEGOCIADOR (posición 1)`);
+        } else {
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+             VALUES ($1, $2, 'pending', 'digital')
+             ON CONFLICT (document_id, signer_id) DO NOTHING`,
+            [documentId, user.id]
+          );
+          console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
+        }
 
         const otherUserIds = userIds.filter(id => id !== user.id);
         const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
@@ -1426,13 +1437,23 @@ const resolvers = {
             ]
           );
 
-          // Auto-firmar al propietario cuando se agrega en posición 1
-          await query(
-            `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
-             VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
-            [documentId, user.id]
-          );
-          console.log(`✅ Auto-firma aplicada al propietario (posición 1)`);
+          // Auto-firmar al propietario SOLO si es NEGOCIADOR
+          const isNegociador = ownerRoles.roleNames && ownerRoles.roleNames.includes('Negociador');
+          if (isNegociador) {
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+               VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
+              [documentId, user.id]
+            );
+            console.log(`✅ Auto-firma aplicada al propietario NEGOCIADOR (posición 1)`);
+          } else {
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+               VALUES ($1, $2, 'pending', 'digital')`,
+              [documentId, user.id]
+            );
+            console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
+          }
 
           startPosition = 2;
         }
@@ -1502,45 +1523,47 @@ const resolvers = {
         }
       }
 
-      // OPTIMIZACIÓN: Contar total, firmados y rechazados en 1 sola query (50% más rápido)
-      const statusCountsResult = await query(`
-        SELECT
-          COUNT(DISTINCT ds.id) as total,
-          COUNT(DISTINCT CASE
-            WHEN s.status = 'signed' AND (
-              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-              (ds.is_causacion_group = true AND s.signer_id IN (
-                SELECT ci.user_id FROM causacion_integrantes ci
-                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-                WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
-              ))
-            ) THEN ds.id END
-          ) as signed,
-          COUNT(DISTINCT CASE
-            WHEN s.status = 'rejected' AND (
-              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-              (ds.is_causacion_group = true AND s.signer_id IN (
-                SELECT ci.user_id FROM causacion_integrantes ci
-                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-                WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
-              ))
-            ) THEN ds.id END
-          ) as rejected
+      // Contar estado basado en document_signers (incluye grupos de causación)
+      const signersCountResult = await query(
+        `SELECT COUNT(*) as total FROM document_signers WHERE document_id = $1`,
+        [documentId]
+      );
+      const totalSigners = parseInt(signersCountResult.rows[0].total);
+
+      // Contar firmados: usuarios normales + grupos de causación con al menos un miembro que firmó
+      const signedResult = await query(`
+        SELECT COUNT(DISTINCT ds.id) as signed
         FROM document_signers ds
-        LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
-          (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-          (ds.is_causacion_group = true AND s.signer_id IN (
+        LEFT JOIN signatures s ON (
+          (ds.is_causacion_group = false AND s.document_id = ds.document_id AND s.signer_id = ds.user_id AND s.status = 'signed')
+          OR
+          (ds.is_causacion_group = true AND s.document_id = ds.document_id AND s.status = 'signed' AND s.signer_id IN (
             SELECT ci.user_id FROM causacion_integrantes ci
             JOIN causacion_grupos cg ON ci.grupo_id = cg.id
             WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
           ))
         )
-        WHERE ds.document_id = $1
+        WHERE ds.document_id = $1 AND s.id IS NOT NULL
       `, [documentId]);
+      const signed = parseInt(signedResult.rows[0].signed || 0);
 
-      const totalSigners = parseInt(statusCountsResult.rows[0].total);
-      const signed = parseInt(statusCountsResult.rows[0].signed || 0);
-      const rejected = parseInt(statusCountsResult.rows[0].rejected || 0);
+      // Contar rechazados
+      const rejectedResult = await query(`
+        SELECT COUNT(DISTINCT ds.id) as rejected
+        FROM document_signers ds
+        LEFT JOIN signatures s ON (
+          (ds.is_causacion_group = false AND s.document_id = ds.document_id AND s.signer_id = ds.user_id AND s.status = 'rejected')
+          OR
+          (ds.is_causacion_group = true AND s.document_id = ds.document_id AND s.status = 'rejected' AND s.signer_id IN (
+            SELECT ci.user_id FROM causacion_integrantes ci
+            JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+            WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+          ))
+        )
+        WHERE ds.document_id = $1 AND s.id IS NOT NULL
+      `, [documentId]);
+      const rejected = parseInt(rejectedResult.rows[0].rejected || 0);
+
       const pending = totalSigners - signed - rejected;
       const total = totalSigners;
 
@@ -3522,45 +3545,47 @@ const resolvers = {
 
       console.log('📋 [DEBUG] Firmantes y firmas del documento:', JSON.stringify(debugSigners.rows, null, 2));
 
-      // OPTIMIZACIÓN: Contar total, firmados y rechazados en 1 sola query (50% más rápido)
-      const statusCountsResult = await query(`
-        SELECT
-          COUNT(DISTINCT ds.id) as total,
-          COUNT(DISTINCT CASE
-            WHEN s.status = 'signed' AND (
-              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-              (ds.is_causacion_group = true AND s.signer_id IN (
-                SELECT ci.user_id FROM causacion_integrantes ci
-                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-                WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
-              ))
-            ) THEN ds.id END
-          ) as signed,
-          COUNT(DISTINCT CASE
-            WHEN s.status = 'rejected' AND (
-              (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-              (ds.is_causacion_group = true AND s.signer_id IN (
-                SELECT ci.user_id FROM causacion_integrantes ci
-                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-                WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
-              ))
-            ) THEN ds.id END
-          ) as rejected
+      // Contar estado basado en document_signers (incluye grupos de causación)
+      const signersCountResult = await query(
+        `SELECT COUNT(*) as total FROM document_signers WHERE document_id = $1`,
+        [documentId]
+      );
+      const totalSigners = parseInt(signersCountResult.rows[0].total);
+
+      // Contar firmados: usuarios normales + grupos de causación con al menos un miembro que firmó
+      const signedResult = await query(`
+        SELECT COUNT(DISTINCT ds.id) as signed
         FROM document_signers ds
-        LEFT JOIN signatures s ON s.document_id = ds.document_id AND (
-          (ds.is_causacion_group = false AND s.signer_id = ds.user_id) OR
-          (ds.is_causacion_group = true AND s.signer_id IN (
+        LEFT JOIN signatures s ON (
+          (ds.is_causacion_group = false AND s.document_id = ds.document_id AND s.signer_id = ds.user_id AND s.status = 'signed')
+          OR
+          (ds.is_causacion_group = true AND s.document_id = ds.document_id AND s.status = 'signed' AND s.signer_id IN (
             SELECT ci.user_id FROM causacion_integrantes ci
             JOIN causacion_grupos cg ON ci.grupo_id = cg.id
             WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
           ))
         )
-        WHERE ds.document_id = $1
+        WHERE ds.document_id = $1 AND s.id IS NOT NULL
       `, [documentId]);
+      const signed = parseInt(signedResult.rows[0].signed || 0);
 
-      const totalSigners = parseInt(statusCountsResult.rows[0].total);
-      const signed = parseInt(statusCountsResult.rows[0].signed || 0);
-      const rejected = parseInt(statusCountsResult.rows[0].rejected || 0);
+      // Contar rechazados
+      const rejectedResult = await query(`
+        SELECT COUNT(DISTINCT ds.id) as rejected
+        FROM document_signers ds
+        LEFT JOIN signatures s ON (
+          (ds.is_causacion_group = false AND s.document_id = ds.document_id AND s.signer_id = ds.user_id AND s.status = 'rejected')
+          OR
+          (ds.is_causacion_group = true AND s.document_id = ds.document_id AND s.status = 'rejected' AND s.signer_id IN (
+            SELECT ci.user_id FROM causacion_integrantes ci
+            JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+            WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+          ))
+        )
+        WHERE ds.document_id = $1 AND s.id IS NOT NULL
+      `, [documentId]);
+      const rejected = parseInt(rejectedResult.rows[0].rejected || 0);
+
       const pending = totalSigners - signed - rejected;
       const total = totalSigners;
 
@@ -3763,14 +3788,24 @@ const resolvers = {
             // Reemplazar archivo original
             await fs.copyFile(tempMergedPath, currentPdfPath);
 
-            // Si el documento está completamente firmado, agregar sello "APROBADO"
-            if (newStatus === 'completed') {
+            // Verificar si tiene retenciones activas PRIMERO
+            const hasActiveRetentions = retentionData && retentionData.length > 0;
+
+            if (hasActiveRetentions) {
+              // Si tiene retenciones activas, SIEMPRE agregar sello RETENIDO (porque se regeneró el PDF)
+              try {
+                await addStampToPdf(currentPdfPath, 'RETENIDO');
+                console.log('⚠️ Sello RETENIDO re-agregado después de regenerar PDF (documento con retención activa)');
+              } catch (stampError) {
+                console.error('❌ Error al re-agregar sello RETENIDO:', stampError);
+              }
+            } else if (newStatus === 'completed') {
+              // Si NO tiene retenciones y está completado, agregar sello APROBADO
               try {
                 await addStampToPdf(currentPdfPath, 'APROBADO');
-                console.log('✅ Sello APROBADO agregado al documento (última firma completada)');
+                console.log('✅ Sello APROBADO agregado al documento (completado sin retención)');
               } catch (stampError) {
                 console.error('❌ Error al agregar sello APROBADO:', stampError);
-                // No lanzamos el error para que no falle la firma
               }
             }
 
@@ -4138,14 +4173,24 @@ const resolvers = {
 
           console.log('✅ Página de firmantes actualizada después de firmar');
 
-          // Si el documento está completamente firmado, agregar sello "APROBADO"
-          if (newStatus === 'completed') {
+          // Verificar si tiene retenciones activas (puede haberse perdido el sello al actualizar páginas)
+          const hasActiveRetentions = await checkIfDocumentHasActiveRetentions(documentId);
+
+          if (hasActiveRetentions) {
+            // Si tiene retenciones activas, SIEMPRE re-agregar sello RETENIDO después de updateSignersPage
+            try {
+              await addStampToPdf(pdfPath, 'RETENIDO');
+              console.log('⚠️ Sello RETENIDO re-agregado después de updateSignersPage (documento con retención activa)');
+            } catch (stampError) {
+              console.error('❌ Error al re-agregar sello RETENIDO:', stampError);
+            }
+          } else if (newStatus === 'completed') {
+            // Si NO tiene retenciones y está completado, agregar sello APROBADO
             try {
               await addStampToPdf(pdfPath, 'APROBADO');
-              console.log('✅ Sello APROBADO agregado al documento (última firma completada)');
+              console.log('✅ Sello APROBADO agregado al documento (completado sin retención)');
             } catch (stampError) {
               console.error('❌ Error al agregar sello APROBADO:', stampError);
-              // No lanzamos el error para que no falle la firma
             }
           }
         }
@@ -4570,6 +4615,14 @@ const resolvers = {
                             console.log(`📋 Copiando PDF fusionado a: ${currentPdfPath}`);
                             await fs.copyFile(tempMergedPath, currentPdfPath);
 
+                            // SIEMPRE agregar sello RETENIDO cuando se retiene (sin importar estado)
+                            try {
+                              await addStampToPdf(currentPdfPath, 'RETENIDO');
+                              console.log('⚠️ Sello RETENIDO agregado al documento (factura retenida)');
+                            } catch (stampError) {
+                              console.error('❌ Error al agregar sello RETENIDO:', stampError);
+                            }
+
                             // Limpiar archivos temporales
                             console.log(`🧹 Limpiando archivos temporales...`);
                             await cleanupTempFiles([tempPlanillaPath, tempMergedPath]);
@@ -4988,6 +5041,14 @@ const resolvers = {
           await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
           await fs.copyFile(tempMergedPath, currentPdfPath);
 
+          // Agregar sello RETENIDO
+          try {
+            await addStampToPdf(currentPdfPath, 'RETENIDO');
+            console.log('⚠️ Sello RETENIDO agregado al documento (retención manual)');
+          } catch (stampError) {
+            console.error('❌ Error al agregar sello RETENIDO:', stampError);
+          }
+
           // Cleanup
           await fs.unlink(tempPlanillaPath);
           await fs.unlink(tempMergedPath);
@@ -5187,6 +5248,31 @@ const resolvers = {
 
           await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
           await fs.copyFile(tempMergedPath, currentPdfPath);
+
+          // Aplicar sello correcto según retenciones activas
+          if (activeRetentions.length > 0) {
+            // Aún quedan retenciones activas → Re-agregar sello RETENIDO
+            try {
+              await addStampToPdf(currentPdfPath, 'RETENIDO');
+              console.log(`⚠️ Sello RETENIDO re-agregado (quedan ${activeRetentions.length} retención/es activa/s)`);
+            } catch (stampError) {
+              console.error('❌ Error al re-agregar sello RETENIDO:', stampError);
+            }
+          } else {
+            // Ya no hay retenciones activas
+            const statusResult = await query('SELECT status FROM documents WHERE id = $1', [documentId]);
+            if (statusResult.rows.length > 0 && statusResult.rows[0].status === 'completed') {
+              // Documento completado → Cambiar a sello APROBADO
+              try {
+                await addStampToPdf(currentPdfPath, 'APROBADO');
+                console.log('✅ Sello cambiado de RETENIDO → APROBADO (documento liberado completamente)');
+              } catch (stampError) {
+                console.error('❌ Error al cambiar sello a APROBADO:', stampError);
+              }
+            } else {
+              console.log('ℹ️ Documento liberado pero no completado - sin sello');
+            }
+          }
 
           // Cleanup
           await fs.unlink(tempPlanillaPath);

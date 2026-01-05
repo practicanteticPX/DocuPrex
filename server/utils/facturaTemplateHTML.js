@@ -128,44 +128,71 @@ function generateFacturaHTML(data) {
   console.log(`🎨 [HTML] ============================================`);
 
   const filasHTML = filasControl.map((fila, index) => {
+    // VALIDACIÓN Y FALLBACKS: Detectar datos faltantes en metadata
+    const noCuentaContable = fila.noCuentaContable || '';
+    const respCuentaContable = fila.respCuentaContable || '';
+    const cargoCuentaContable = fila.cargoCuentaContable || '';
+    const nombreCuentaContable = fila.nombreCuentaContable || '';
+    const centroCostos = fila.centroCostos || '';
+    const respCentroCostos = fila.respCentroCostos || '';
+    const cargoCentroCostos = fila.cargoCentroCostos || '';
+    const porcentaje = fila.porcentaje || '';
+
+    // LOGS DE DEPURACIÓN: Advertir sobre datos faltantes
+    if (noCuentaContable && !respCuentaContable) {
+      console.warn(`⚠️ [HTML] Fila ${index + 1}: Cuenta "${noCuentaContable}" sin responsable`);
+    }
+    if (noCuentaContable && !cargoCuentaContable) {
+      console.warn(`⚠️ [HTML] Fila ${index + 1}: Cuenta "${noCuentaContable}" sin cargo`);
+    }
+    if (noCuentaContable && !nombreCuentaContable) {
+      console.warn(`⚠️ [HTML] Fila ${index + 1}: Cuenta "${noCuentaContable}" sin nombre de cuenta`);
+    }
+    if (centroCostos && !respCentroCostos) {
+      console.warn(`⚠️ [HTML] Fila ${index + 1}: Centro "${centroCostos}" sin responsable`);
+    }
+    if (centroCostos && !cargoCentroCostos) {
+      console.warn(`⚠️ [HTML] Fila ${index + 1}: Centro "${centroCostos}" sin cargo`);
+    }
+
     const firmaCuentaContable = firmas[fila.respCuentaContable] || '';
     const firmaCentroCostos = firmas[fila.respCentroCostos] || '';
 
     // Obtener retención para esta fila (si existe)
     const retention = retentionMap[index];
-    console.log(`📋 [HTML] Fila ${index}: Centro=${fila.centroCostos}, retention=`, retention ? `SÍ (${retention.porcentajeRetenido}%, ${retention.motivo})` : 'NO');
+    console.log(`📋 [HTML] Fila ${index}: Centro=${centroCostos}, retention=`, retention ? `SÍ (${retention.porcentajeRetenido}%, ${retention.motivo})` : 'NO');
 
     return `
     <tr>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.noCuentaContable || ''}</div>
+        <div class="cell-content">${noCuentaContable}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.respCuentaContable || ''}</div>
+        <div class="cell-content">${respCuentaContable}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.cargoCuentaContable || ''}</div>
+        <div class="cell-content">${cargoCuentaContable}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
-        <div class="cell-content">${fila.nombreCuentaContable || ''}</div>
+        <div class="cell-content">${nombreCuentaContable}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6;">
         <div class="cell-content-firma">${firmaCuentaContable}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
-        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.centroCostos || ''}</div>
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${centroCostos}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
-        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.respCentroCostos || ''}</div>
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${respCentroCostos}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
-        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.cargoCentroCostos || ''}</div>
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${cargoCentroCostos}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
         <div class="cell-content-firma" style="${retention ? 'background: #FEF3C7;' : ''}">${firmaCentroCostos}</div>
       </td>
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
-        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${fila.porcentaje || ''}</div>
+        <div class="cell-content" style="${retention ? 'background: #FEF3C7;' : ''}">${porcentaje}</div>
       </td>
       ${hasRetentions ? `
       <td style="padding: 6px; border-bottom: 1px solid #F3F4F6; ${retention ? 'background: #FEF3C7;' : ''}">
@@ -545,27 +572,9 @@ function generateFacturaHTML(data) {
       height: auto;
       object-fit: contain;
     }
-
-    /* Marca de agua RECHAZADO */
-    .rejected-watermark {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-45deg);
-      font-size: 120px;
-      font-weight: 900;
-      font-family: 'Google Sans', sans-serif;
-      color: rgba(220, 38, 38, 0.18);
-      text-transform: uppercase;
-      letter-spacing: 20px;
-      pointer-events: none;
-      z-index: 9999;
-      white-space: nowrap;
-    }
   </style>
 </head>
 <body>
-  ${isRejected ? '<div class="rejected-watermark">RECHAZADO</div>' : ''}
   <div class="factura-template-container">
     ${logoBase64 ? `
     <!-- Company Logo -->
