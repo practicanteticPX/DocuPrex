@@ -31,12 +31,9 @@ const SERVER_START_TIME = Date.now();
 const getUserFromToken = (token) => {
   try {
     if (!token) {
-      console.log('⚠️ getUserFromToken: No token provided');
       return null;
     }
-    console.log('🔑 getUserFromToken: Token recibido (primeros 20 chars):', token.substring(0, 20) + '...');
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('✅ getUserFromToken: Token válido para usuario:', decoded.username);
     return decoded;
   } catch (error) {
     console.error('❌ getUserFromToken: Error verificando token:', error.message);
@@ -78,7 +75,6 @@ async function startServer() {
       if (serverConfig.corsOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
-        console.log('⚠️  Origen bloqueado por CORS:', origin);
         callback(null, true); // En desarrollo, permitir todos los orígenes
       }
     },
@@ -264,8 +260,6 @@ async function startServer() {
     context: async ({ req }) => {
       // Obtener token del header
       const authHeader = req.headers.authorization;
-      console.log('🌐 Apollo Context: Authorization header:', authHeader ? `${authHeader.substring(0, 30)}...` : 'MISSING');
-
       const token = authHeader?.replace('Bearer ', '') || '';
 
       // Obtener IP del cliente
@@ -273,14 +267,12 @@ async function startServer() {
 
       // Si no hay token, retornar sin usuario
       if (!token) {
-        console.warn('⚠️ Apollo Context: No hay token en la request');
         return { user: null, req, ipAddress };
       }
 
       // PASO 1: Verificar JWT (verificación básica de firma y expiración)
       const userFromToken = getUserFromToken(token);
       if (!userFromToken) {
-        console.warn('⚠️ Apollo Context: Token JWT inválido o expirado');
         return { user: null, req, ipAddress };
       }
 
@@ -290,13 +282,10 @@ async function startServer() {
       const session = await validateSession(token);
 
       if (!session) {
-        console.warn(`⚠️ Apollo Context: Sesión expirada o inválida para usuario ${userFromToken.name} (ID: ${userFromToken.id})`);
-        console.warn('⏰ Razón: Han pasado 8 horas desde el login O la sesión fue cerrada');
         return { user: null, req, ipAddress };
       }
 
       // PASO 3: Sesión válida (JWT válido + menos de 8h desde login en BD)
-      console.log(`✅ Apollo Context: Usuario autenticado - ${userFromToken.name} (ID: ${userFromToken.id}, Session: ${session.id})`);
       return { user: userFromToken, req, ipAddress };
     },
     formatError: (error) => {

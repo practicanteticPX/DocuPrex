@@ -48,10 +48,6 @@ async function createSession(userId, token, ipAddress = null, userAgent = null) 
       RETURNING id
     `, [userId]);
 
-    if (closedSessions.rows.length > 0) {
-      console.log(`🔓 Cerradas ${closedSessions.rows.length} sesiones anteriores del usuario ${userId} (sesión única)`);
-    }
-
     // PASO 2: Crear la nueva sesión (única activa)
     const result = await query(`
       INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, login_time, is_active)
@@ -60,11 +56,9 @@ async function createSession(userId, token, ipAddress = null, userAgent = null) 
     `, [userId, tokenHash, ipAddress, userAgent]);
 
     const session = result.rows[0];
-    console.log(`🔐 Nueva sesión única creada: User ${userId}, Session ${session.id}, Login: ${session.login_time}`);
 
     // Emitir evento WebSocket para actualizar panel de sesiones en tiempo real
     websocketService.emitSessionsUpdated({ action: 'session_created', userId, sessionId: session.id });
-    console.log(`📡 WebSocket: Enviado evento sessions:updated (session_created) para User ID ${userId}`);
 
     return session;
   } catch (error) {
@@ -98,7 +92,6 @@ async function validateSession(token) {
     `, [tokenHash]);
 
     if (result.rows.length === 0) {
-      console.warn('⚠️ Sesión no encontrada o ya cerrada');
       return null;
     }
 
@@ -107,8 +100,6 @@ async function validateSession(token) {
 
     // VALIDACIÓN ESTRICTA: Si han pasado 8 horas, sesión EXPIRADA
     if (hoursElapsed >= SESSION_DURATION_HOURS) {
-      console.warn(`⏰ Sesión ${session.id} EXPIRADA: ${hoursElapsed.toFixed(2)}h desde login (máximo: ${SESSION_DURATION_HOURS}h)`);
-
       // Marcar sesión como inactiva
       await query(`
         UPDATE user_sessions
@@ -120,9 +111,6 @@ async function validateSession(token) {
     }
 
     // Sesión válida
-    const remainingHours = SESSION_DURATION_HOURS - hoursElapsed;
-    console.log(`✅ Sesión ${session.id} válida: ${hoursElapsed.toFixed(2)}h transcurridas, ${remainingHours.toFixed(2)}h restantes`);
-
     return session;
   } catch (error) {
     console.error('❌ Error validando sesión:', error);
@@ -148,7 +136,6 @@ async function closeSession(token) {
 
     if (result.rows.length > 0) {
       const session = result.rows[0];
-      console.log(`🔓 Sesión cerrada: User ${session.user_id}, Session ${session.id}`);
 
       // Emitir evento WebSocket para actualizar panel de sesiones en tiempo real
       websocketService.emitSessionsUpdated({
@@ -156,7 +143,6 @@ async function closeSession(token) {
         userId: session.user_id,
         sessionId: session.id
       });
-      console.log(`📡 WebSocket: Enviado evento sessions:updated (logout normal) para User ID ${session.user_id}`);
 
       return true;
     }
@@ -183,7 +169,6 @@ async function closeAllUserSessions(userId) {
     `, [userId]);
 
     const count = result.rows.length;
-    console.log(`🔓 Cerradas ${count} sesiones del usuario ${userId}`);
 
     return count;
   } catch (error) {
@@ -208,12 +193,6 @@ async function cleanupExpiredSessions() {
     `, [SESSION_DURATION_HOURS]);
 
     const count = result.rows.length;
-    if (count > 0) {
-      console.log(`🧹 Limpiadas ${count} sesiones expiradas (>8h)`);
-      result.rows.forEach(session => {
-        console.log(`   - Session ${session.id}, User ${session.user_id}, Login: ${session.login_time}`);
-      });
-    }
 
     return count;
   } catch (error) {

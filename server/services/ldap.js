@@ -35,14 +35,12 @@ function createLdapClient() {
  * Realiza bind con la cuenta de servicio
  */
 async function bindAsService(client) {
-  console.log(`🔑 Intentando bind con cuenta de servicio: ${AD_BIND_USER}`);
   await new Promise((resolve, reject) =>
     client.bind(AD_BIND_USER, AD_BIND_PASS, err => {
       if (err) {
         console.error(`❌ Error en bind de servicio:`, err.message);
         return reject(err);
       }
-      console.log(`✓ Bind de servicio exitoso`);
       resolve();
     })
   );
@@ -78,8 +76,6 @@ function composeUserSearchFilter(username) {
   // Escapar caracteres especiales pero mantener UTF-8 (como Ñ)
   const escapedUsername = escapeLdapFilter(username);
   const base = AD_USER_SEARCH_FILTER || '(&(objectCategory=person)(objectClass=user))';
-  console.log(`🔍 Username original: "${username}"`);
-  console.log(`🔍 Username escapado: "${escapedUsername}"`);
   return `(&${base}(sAMAccountName=${escapedUsername}))`;
 }
 
@@ -88,13 +84,10 @@ function composeUserSearchFilter(username) {
  */
 async function searchUserEntry(username) {
   const client = createLdapClient();
-  console.log(`🔍 URL LDAP: ${ldapUrl()}`);
   try {
     await bindAsService(client);
     const filter = composeUserSearchFilter(username);
     const searchBase = AD_SEARCH_BASE || AD_BASE_DN;
-    console.log(`🔍 Buscando usuario con filtro: ${filter}`);
-    console.log(`🔍 Base de búsqueda: ${searchBase}`);
 
     const opts = {
       scope: 'sub',
@@ -109,7 +102,6 @@ async function searchUserEntry(username) {
           return reject(err);
         }
         res.on('searchEntry', e => {
-          console.log(`✓ Entrada encontrada: ${e.objectName}`);
           // Convertir atributos de LDAP a objeto simple
           const entry = {
             dn: String(e.objectName) // Asegurar que DN sea string
@@ -129,7 +121,6 @@ async function searchUserEntry(username) {
             });
           }
 
-          console.log(`📋 Atributos del usuario:`, JSON.stringify(entry, null, 2));
           list.push(entry);
         });
         res.on('error', err => {
@@ -137,7 +128,6 @@ async function searchUserEntry(username) {
           reject(err);
         });
         res.on('end', () => {
-          console.log(`📊 Total de entradas encontradas: ${list.length}`);
           resolve(list);
         });
       });
@@ -202,30 +192,23 @@ function encodeLdapDN(dn) {
 async function verifyUserPassword(userDN, password) {
   const client = createLdapClient();
 
-  // Probar con el DN tal como viene de LDAP (ya escapado)
-  console.log(`🔐 Verificando contraseña para DN original: ${userDN}`);
-
   // También intentar con DN decodificado en caso de que LDAP lo necesite
   const decodedDN = decodeLdapDN(userDN);
-  console.log(`🔐 DN decodificado: ${decodedDN}`);
 
   try {
     // Intentar primero con el DN original (escapado)
     await new Promise((resolve, reject) =>
       client.bind(userDN, password, err => {
         if (err) {
-          console.log(`⚠️  Bind con DN escapado falló, intentando con DN decodificado...`);
           // Si falla, intentar con el DN decodificado
           client.bind(decodedDN, password, err2 => {
             if (err2) {
               console.error(`❌ Error al verificar contraseña con ambos DNs:`, err2.message);
               return reject(err2);
             }
-            console.log(`✓ Contraseña verificada correctamente con DN decodificado`);
             resolve();
           });
         } else {
-          console.log(`✓ Contraseña verificada correctamente con DN escapado`);
           resolve();
         }
       })
@@ -247,26 +230,19 @@ async function verifyUserPassword(userDN, password) {
  */
 async function authenticateUser(username, password) {
   try {
-    console.log(`🔐 Intentando autenticar usuario: ${username}`);
-    console.log(`🔤 Username bytes:`, Buffer.from(username, 'utf8'));
-
     // Buscar el usuario en AD
     const user = await searchUserEntry(username);
-    console.log(`✓ Usuario encontrado: ${user.displayName || user.cn}`);
 
     // Verificar la contraseña
     await verifyUserPassword(user.dn, password);
-    console.log(`✓ Contraseña verificada para: ${username}`);
 
     // Construir objeto de usuario
     // Prioridad para email: mail (campo de correo de AD) > userPrincipalName
     let email = user.mail;
     if (!email) {
-      console.warn(`⚠️  Usuario ${user.sAMAccountName} no tiene campo 'mail' en AD, usando userPrincipalName`);
       email = user.userPrincipalName;
     }
     if (!email) {
-      console.warn(`⚠️  Usuario ${user.sAMAccountName} no tiene email en AD, generando email por defecto`);
       email = `${user.sAMAccountName}@prexxa.local`;
     }
 
@@ -279,7 +255,6 @@ async function authenticateUser(username, password) {
       userPrincipalName: user.userPrincipalName
     };
 
-    console.log('✓ Autenticación exitosa:', userInfo.username);
     return userInfo;
   } catch (error) {
     console.error('❌ Error en autenticación:', error.message);
