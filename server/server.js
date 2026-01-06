@@ -61,7 +61,7 @@ async function startServer() {
 
   // Middleware de seguridad - Ajustado para soportar HTTP y HTTPS
   app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+    contentSecurityPolicy: false, // Deshabilitar CSP para permitir iframes y PDFs
     crossOriginEmbedderPolicy: false, // Permitir que los PDFs se embeden
     crossOriginResourcePolicy: { policy: "cross-origin" }, // Permitir recursos cross-origin
     crossOriginOpenerPolicy: false, // Deshabilitar COOP para desarrollo sin HTTPS

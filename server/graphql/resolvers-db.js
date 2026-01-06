@@ -1033,18 +1033,23 @@ const resolvers = {
         `);
 
         // Calcular horas restantes para cada sesión
-        const sessions = result.rows.map(session => ({
-          id: session.id,
-          userId: session.user_id,
-          userName: session.user_name,
-          userEmail: session.user_email,
-          loginTime: session.login_time,
-          ipAddress: session.ip_address,
-          userAgent: session.user_agent,
-          isActive: session.is_active,
-          hoursElapsed: parseFloat(session.hours_elapsed.toFixed(2)),
-          hoursRemaining: parseFloat((8 - session.hours_elapsed).toFixed(2))
-        }));
+        const sessions = result.rows.map(session => {
+          const hoursElapsed = parseFloat(session.hours_elapsed);
+          const hoursRemaining = 8 - hoursElapsed;
+
+          return {
+            id: session.id,
+            userId: session.user_id,
+            userName: session.user_name,
+            userEmail: session.user_email,
+            loginTime: session.login_time,
+            ipAddress: session.ip_address,
+            userAgent: session.user_agent,
+            isActive: session.is_active,
+            hoursElapsed: parseFloat(hoursElapsed.toFixed(2)),
+            hoursRemaining: parseFloat(hoursRemaining.toFixed(2))
+          };
+        });
 
         console.log(`📊 Admin ${user.email} consultó ${sessions.length} sesiones activas`);
         return sessions;
