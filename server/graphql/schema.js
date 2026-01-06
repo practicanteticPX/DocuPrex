@@ -21,6 +21,19 @@ const typeDefs = gql`
     user: User!
   }
 
+  type UserSession {
+    id: Int!
+    userId: Int!
+    userName: String!
+    userEmail: String!
+    loginTime: String!
+    ipAddress: String
+    userAgent: String
+    isActive: Boolean!
+    hoursElapsed: Float!
+    hoursRemaining: Float!
+  }
+
   type Document {
     id: Int!
     title: String!
@@ -249,6 +262,9 @@ const typeDefs = gql`
     # Grupos de Causación
     causacionGrupos: [CausacionGrupo!]!
     causacionGrupo(codigo: String!): CausacionGrupo
+
+    # Sesiones Activas (solo para administradores)
+    activeSessions: [UserSession!]!
   }
 
   type Mutation {
@@ -280,6 +296,9 @@ const typeDefs = gql`
     # Notificaciones
     markNotificationAsRead(notificationId: Int!): Notification!
     markAllNotificationsAsRead: Boolean!
+
+    # Sesiones (solo para administradores)
+    closeUserSession(sessionId: Int!): Boolean!
   }
 `;
 

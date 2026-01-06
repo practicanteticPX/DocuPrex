@@ -204,6 +204,41 @@
   height: 18px;
 }
 
+/* Sessions Dashboard Button (Admin only) */
+.sessions-dashboard-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  color: #3B82F6;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: 'Google Sans', sans-serif;
+}
+
+.sessions-dashboard-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3B82F6;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.sessions-dashboard-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sessions-dashboard-label {
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
 /* Main Content */
 .dashboard-main {
   flex: 1;

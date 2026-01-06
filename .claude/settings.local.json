@@ -67,7 +67,8 @@
       "Bash(git log:*)",
       "Bash(git checkout:*)",
       "Bash(cp:*)",
-      "Bash(docker stats:*)"
+      "Bash(docker stats:*)",
+      "Bash(timeout 5 sleep:*)"
     ],
     "deny": [],
     "ask": []

@@ -998,6 +998,61 @@ const resolvers = {
 
       return result.rows;
     },
+
+    /**
+     * Active Sessions - Dashboard de sesiones activas
+     * SEGURIDAD: Solo accesible para el administrador Esteban Zuluaga (e.zuluaga)
+     */
+    activeSessions: async (_, __, { user }) => {
+      // Verificar autenticación
+      if (!user) throw new Error('No autenticado');
+
+      // SEGURIDAD: Solo el administrador Esteban Zuluaga puede ver sesiones activas
+      const ADMIN_EMAIL = 'e.zuluaga@prexxa.com.co';
+      if (user.email !== ADMIN_EMAIL && user.email !== 'e.zuluaga') {
+        console.warn(`⚠️ Intento no autorizado de acceso a activeSessions por: ${user.email}`);
+        throw new Error('No autorizado. Esta función es solo para administradores.');
+      }
+
+      try {
+        const result = await query(`
+          SELECT
+            s.id,
+            s.user_id,
+            u.name as user_name,
+            u.email as user_email,
+            s.login_time,
+            s.ip_address,
+            s.user_agent,
+            s.is_active,
+            EXTRACT(EPOCH FROM (NOW() - s.login_time)) / 3600 as hours_elapsed
+          FROM user_sessions s
+          INNER JOIN users u ON u.id = s.user_id
+          WHERE s.is_active = true
+          ORDER BY s.login_time DESC
+        `);
+
+        // Calcular horas restantes para cada sesión
+        const sessions = result.rows.map(session => ({
+          id: session.id,
+          userId: session.user_id,
+          userName: session.user_name,
+          userEmail: session.user_email,
+          loginTime: session.login_time,
+          ipAddress: session.ip_address,
+          userAgent: session.user_agent,
+          isActive: session.is_active,
+          hoursElapsed: parseFloat(session.hours_elapsed.toFixed(2)),
+          hoursRemaining: parseFloat((8 - session.hours_elapsed).toFixed(2))
+        }));
+
+        console.log(`📊 Admin ${user.email} consultó ${sessions.length} sesiones activas`);
+        return sessions;
+      } catch (error) {
+        console.error('❌ Error obteniendo sesiones activas:', error);
+        throw new Error('Error al obtener sesiones activas');
+      }
+    },
   },
 
   Mutation: {
@@ -1030,12 +1085,12 @@ const resolvers = {
           if (validPassword) {
             console.log('✓ Usuario local autenticado:', localUser.email);
 
-            // JWT con expiración larga (30d) - solo sirve como identificador de sesión
-            // La expiración REAL de 8h se controla en la tabla user_sessions
+            // JWT con expiración de 8h (defensa en profundidad: JWT + BD)
+            // Doble validación: JWT expira a las 8h Y BD valida login_time
             const token = jwt.sign(
               { id: localUser.id, email: localUser.email, name: localUser.name, role: localUser.role },
               JWT_SECRET,
-              { expiresIn: process.env.JWT_EXPIRES || '30d' }
+              { expiresIn: process.env.JWT_EXPIRES || '8h' }
             );
 
             // Registrar login en logs
@@ -1138,13 +1193,15 @@ const resolvers = {
       );
 
       const user = result.rows[0];
+      // JWT con expiración de 8h (defensa en profundidad: JWT + BD)
+      // Doble validación: JWT expira a las 8h Y BD valida login_time
       const token = jwt.sign(
         { id: user.id, email: user.email, name: user.name, role: user.role },
         JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES || '8h' }
       );
 
-      // Crear sesión en BD (fuente de verdad para las 8 horas)
+      // Crear sesión en BD (segunda capa de validación)
       await createSession(user.id, token);
 
       return { token, user };
@@ -1178,6 +1235,45 @@ const resolvers = {
       } catch (error) {
         console.error('❌ Error en logout:', error);
         return false;
+      }
+    },
+
+    /**
+     * Close User Session - Cierra remotamente la sesión de un usuario (Admin only)
+     * SEGURIDAD: Solo el administrador (e.zuluaga@prexxa.com.co) puede ejecutar esta acción
+     */
+    closeUserSession: async (_, { sessionId }, { user }) => {
+      try {
+        // Validación 1: Usuario debe estar autenticado
+        if (!user) {
+          throw new Error('No autenticado');
+        }
+
+        // Validación 2: Solo el administrador puede cerrar sesiones remotamente
+        const ADMIN_EMAIL = 'e.zuluaga@prexxa.com.co';
+        if (user.email !== ADMIN_EMAIL && user.email !== 'e.zuluaga') {
+          throw new Error('No autorizado. Esta función es solo para administradores.');
+        }
+
+        // Cerrar la sesión en la base de datos
+        const result = await query(`
+          UPDATE user_sessions
+          SET is_active = false, logout_time = NOW(), updated_at = NOW()
+          WHERE id = $1 AND is_active = true
+          RETURNING id, user_id
+        `, [sessionId]);
+
+        if (result.rows.length > 0) {
+          const closedSession = result.rows[0];
+          console.log(`🔐 Admin ${user.name} cerró sesión remota: Session ID ${closedSession.id}, User ID ${closedSession.user_id}`);
+          return true;
+        } else {
+          console.warn(`⚠️ No se encontró sesión activa con ID ${sessionId}`);
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Error cerrando sesión remota:', error);
+        throw new Error(`Error al cerrar sesión: ${error.message}`);
       }
     },
 
