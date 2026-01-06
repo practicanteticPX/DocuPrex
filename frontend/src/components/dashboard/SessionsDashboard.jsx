@@ -10,8 +10,6 @@ const ACTIVE_SESSIONS_QUERY = `
       userName
       userEmail
       loginTime
-      ipAddress
-      userAgent
       isActive
       hoursElapsed
       hoursRemaining
@@ -28,14 +26,16 @@ const CLOSE_SESSION_MUTATION = `
 /**
  * Dashboard de sesiones activas (Solo Admin)
  * Permite ver todas las sesiones activas del sistema y cerrarlas remotamente
+ * TIEMPO REAL: Actualiza automáticamente vía WebSocket
  *
  * SEGURIDAD: Solo visible para e.zuluaga@prexxa.com.co
  */
-function SessionsDashboard({ isOpen, onClose }) {
+function SessionsDashboard({ isOpen, onClose, socket }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [closingSessionId, setClosingSessionId] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, sessionId: null, userName: '' });
 
   // Cargar sesiones activas
   const fetchSessions = async () => {
@@ -52,38 +52,56 @@ function SessionsDashboard({ isOpen, onClose }) {
     }
   };
 
-  // Cerrar sesión remota
-  const handleCloseSession = async (sessionId, userName) => {
-    if (!confirm(`¿Cerrar la sesión de ${userName}? El usuario deberá volver a iniciar sesión.`)) {
-      return;
-    }
+  // Abrir modal de confirmación
+  const handleOpenConfirmModal = (sessionId, userName) => {
+    setConfirmModal({ isOpen: true, sessionId, userName });
+  };
+
+  // Cancelar cierre de sesión
+  const handleCancelClose = () => {
+    setConfirmModal({ isOpen: false, sessionId: null, userName: '' });
+  };
+
+  // Confirmar cierre de sesión remota
+  const handleConfirmClose = async () => {
+    const { sessionId, userName } = confirmModal;
 
     try {
       setClosingSessionId(sessionId);
-      await graphqlClient.mutate(CLOSE_SESSION_MUTATION, { sessionId });
+      setConfirmModal({ isOpen: false, sessionId: null, userName: '' });
 
-      // Actualizar lista de sesiones
-      await fetchSessions();
+      console.log(`🔐 Cerrando sesión ${sessionId} del usuario ${userName}...`);
+      await graphqlClient.mutate(CLOSE_SESSION_MUTATION, { sessionId });
 
       console.log(`✅ Sesión ${sessionId} cerrada exitosamente`);
     } catch (err) {
-      console.error('Error cerrando sesión:', err);
+      console.error('❌ Error cerrando sesión:', err);
       setError(err.message || 'Error al cerrar la sesión');
     } finally {
       setClosingSessionId(null);
     }
   };
 
-  // Cargar sesiones al abrir el modal
+  // Cargar sesiones al abrir el modal y conectar WebSocket
   useEffect(() => {
     if (isOpen) {
       fetchSessions();
 
-      // Auto-refresh cada 30 segundos mientras esté abierto
-      const interval = setInterval(fetchSessions, 30000);
-      return () => clearInterval(interval);
+      // Escuchar eventos de WebSocket en TIEMPO REAL
+      if (socket) {
+        const handleSessionsUpdated = (data) => {
+          console.log('📡 Sesiones actualizadas (WebSocket):', data);
+          fetchSessions(); // Recargar inmediatamente
+        };
+
+        socket.on('sessions:updated', handleSessionsUpdated);
+
+        return () => {
+          socket.off('sessions:updated', handleSessionsUpdated);
+        };
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, socket]);
 
   // Formatear fecha
   const formatDate = (dateString) => {
@@ -98,24 +116,11 @@ function SessionsDashboard({ isOpen, onClose }) {
     });
   };
 
-  // Formatear User Agent (navegador)
-  const formatUserAgent = (ua) => {
-    if (!ua) return 'Desconocido';
-
-    // Detectar navegador
-    if (ua.includes('Chrome')) return 'Chrome';
-    if (ua.includes('Firefox')) return 'Firefox';
-    if (ua.includes('Safari')) return 'Safari';
-    if (ua.includes('Edge')) return 'Edge';
-
-    return 'Otro';
-  };
-
   if (!isOpen) return null;
 
   return (
-    <div className="sessions-modal-overlay">
-      <div className="sessions-modal-content">
+    <div className="sessions-fullscreen-overlay">
+      <div className="sessions-fullscreen-container">
         <div className="sessions-modal-header">
           <div className="sessions-header-content">
             <h2>Sesiones Activas</h2>
@@ -180,8 +185,6 @@ function SessionsDashboard({ isOpen, onClose }) {
                       <th>Inicio de Sesión</th>
                       <th>Tiempo Transcurrido</th>
                       <th>Tiempo Restante</th>
-                      <th>IP</th>
-                      <th>Navegador</th>
                       <th>Acción</th>
                     </tr>
                   </thead>
@@ -200,12 +203,10 @@ function SessionsDashboard({ isOpen, onClose }) {
                             <span className="expiring-badge">¡Expirando!</span>
                           )}
                         </td>
-                        <td className="session-ip">{session.ipAddress || 'N/A'}</td>
-                        <td className="session-browser">{formatUserAgent(session.userAgent)}</td>
                         <td className="session-actions">
                           <button
                             className="session-close-btn"
-                            onClick={() => handleCloseSession(session.id, session.userName)}
+                            onClick={() => handleOpenConfirmModal(session.id, session.userName)}
                             disabled={closingSessionId === session.id}
                             title="Cerrar esta sesión remotamente"
                           >
@@ -236,6 +237,32 @@ function SessionsDashboard({ isOpen, onClose }) {
           </button>
         </div>
       </div>
+
+      {/* Modal de Confirmación Personalizado */}
+      {confirmModal.isOpen && (
+        <div className="confirm-modal-overlay" onClick={handleCancelClose}>
+          <div className="confirm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-header">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="confirm-modal-icon">
+                <path d="M12 9V11M12 15H12.01M5.07183 19H18.9282C20.4678 19 21.4301 17.3333 20.6603 16L13.7321 4C12.9623 2.66667 11.0378 2.66667 10.268 4L3.33978 16C2.56998 17.3333 3.53223 19 5.07183 19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <h3>Confirmar Cierre de Sesión</h3>
+            </div>
+            <div className="confirm-modal-body">
+              <p>¿Estás seguro de cerrar la sesión de <strong>{confirmModal.userName}</strong>?</p>
+              <p className="confirm-modal-warning">El usuario deberá volver a iniciar sesión inmediatamente.</p>
+            </div>
+            <div className="confirm-modal-footer">
+              <button className="confirm-btn-cancel" onClick={handleCancelClose}>
+                Cancelar
+              </button>
+              <button className="confirm-btn-confirm" onClick={handleConfirmClose}>
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

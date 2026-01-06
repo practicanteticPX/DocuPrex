@@ -11,11 +11,18 @@
 
 /**
  * Obtiene la URL base del backend según el protocolo de acceso
- * @returns {string} URL base del backend (vacío para HTTPS, 'http://hostname:5001' para HTTP)
+ * @returns {string} URL base del backend (vacío para usar proxy, URL completa para acceso directo)
  */
 export const getBackendUrl = () => {
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
+  const port = window.location.port;
+
+  // Si estamos en el puerto 5173 (frontend Vite), usar el proxy interno
+  // Esto aplica tanto para desarrollo (vite dev) como producción (vite preview)
+  if (port === '5173') {
+    return ''; // Rutas relativas usan el proxy de Vite
+  }
 
   // HTTPS: Usar mismo dominio (proxy reverso maneja el routing)
   if (protocol === 'https:') {
@@ -88,7 +95,14 @@ export const getViewUrl = (documentId) => {
 export const getWebSocketUrl = () => {
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
+  const port = window.location.port;
   const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+
+  // Si estamos en puerto 5173, conectar directamente al backend en 5001
+  // (WebSocket no puede usar el proxy HTTP de Vite)
+  if (port === '5173') {
+    return `${wsProtocol}//${hostname}:5001`;
+  }
 
   // HTTPS: Usar proxy reverso en el mismo dominio
   if (protocol === 'https:') {

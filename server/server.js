@@ -18,6 +18,7 @@ const pdfLogger = require('./utils/pdfLogger');
 const { startCleanupService } = require('./services/notificationCleanup');
 const { startDocumentCleanupService } = require('./services/documentCleanup');
 const { startReminderService } = require('./services/signatureReminders');
+const { startSessionCleanupService } = require('./services/sessionCleanup');
 const { query } = require('./database/db');
 const resourceCache = require('./utils/resourceCache');
 
@@ -383,6 +384,9 @@ async function startServer() {
     // Iniciar servicio de recordatorios de firmas pendientes
     startReminderService();
     console.log(`📧 Servicio de recordatorios de firmas iniciado (cada 24h a las 9:00 AM)`);
+
+    // Iniciar servicio de limpieza de sesiones expiradas
+    startSessionCleanupService();
   });
 }
 

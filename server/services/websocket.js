@@ -79,6 +79,25 @@ function emitDocumentRetained(documentId, data = {}) {
   io.emit('document:retained', { documentId, timestamp: Date.now(), ...data });
 }
 
+/**
+ * Emite un evento cuando las sesiones activas cambian (para el panel de admin)
+ * @param {object} data - Datos de las sesiones actualizadas
+ */
+function emitSessionsUpdated(data = {}) {
+  if (!io) return;
+  io.emit('sessions:updated', { timestamp: Date.now(), ...data });
+}
+
+/**
+ * Emite un evento cuando una sesión específica es cerrada (fuerza logout del usuario)
+ * @param {number} userId - ID del usuario cuya sesión fue cerrada
+ * @param {number} sessionId - ID de la sesión cerrada
+ */
+function emitSessionClosed(userId, sessionId) {
+  if (!io) return;
+  io.emit('session:closed', { userId, sessionId, timestamp: Date.now() });
+}
+
 module.exports = {
   initialize,
   emitDocumentSigned,
@@ -89,5 +108,7 @@ module.exports = {
   emitNotificationDeleted,
   emitNotificationRead,
   emitAllNotificationsRead,
-  emitDocumentRetained
+  emitDocumentRetained,
+  emitSessionsUpdated,
+  emitSessionClosed
 };

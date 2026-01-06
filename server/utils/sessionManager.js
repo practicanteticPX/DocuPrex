@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { query } = require('../database/db');
+const websocketService = require('../services/websocket');
 
 /**
  * Session Manager - Gestión de sesiones de usuario con validación estricta de 8 horas
@@ -26,6 +27,9 @@ function hashToken(token) {
 
 /**
  * Registra una nueva sesión al hacer login
+ * REGLA CRÍTICA: Solo puede existir UNA sesión activa por usuario
+ * Todas las sesiones anteriores se cierran automáticamente
+ *
  * @param {number} userId - ID del usuario
  * @param {string} token - JWT token generado
  * @param {string} ipAddress - IP del cliente
@@ -36,6 +40,19 @@ async function createSession(userId, token, ipAddress = null, userAgent = null) 
   const tokenHash = hashToken(token);
 
   try {
+    // PASO 1: Cerrar TODAS las sesiones anteriores del usuario (sesión única)
+    const closedSessions = await query(`
+      UPDATE user_sessions
+      SET is_active = false, logout_time = NOW(), updated_at = NOW()
+      WHERE user_id = $1 AND is_active = true
+      RETURNING id
+    `, [userId]);
+
+    if (closedSessions.rows.length > 0) {
+      console.log(`🔓 Cerradas ${closedSessions.rows.length} sesiones anteriores del usuario ${userId} (sesión única)`);
+    }
+
+    // PASO 2: Crear la nueva sesión (única activa)
     const result = await query(`
       INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, login_time, is_active)
       VALUES ($1, $2, $3, $4, NOW(), true)
@@ -43,7 +60,11 @@ async function createSession(userId, token, ipAddress = null, userAgent = null) 
     `, [userId, tokenHash, ipAddress, userAgent]);
 
     const session = result.rows[0];
-    console.log(`🔐 Nueva sesión creada: User ${userId}, Session ${session.id}, Login: ${session.login_time}`);
+    console.log(`🔐 Nueva sesión única creada: User ${userId}, Session ${session.id}, Login: ${session.login_time}`);
+
+    // Emitir evento WebSocket para actualizar panel de sesiones en tiempo real
+    websocketService.emitSessionsUpdated({ action: 'session_created', userId, sessionId: session.id });
+    console.log(`📡 WebSocket: Enviado evento sessions:updated (session_created) para User ID ${userId}`);
 
     return session;
   } catch (error) {
@@ -128,6 +149,15 @@ async function closeSession(token) {
     if (result.rows.length > 0) {
       const session = result.rows[0];
       console.log(`🔓 Sesión cerrada: User ${session.user_id}, Session ${session.id}`);
+
+      // Emitir evento WebSocket para actualizar panel de sesiones en tiempo real
+      websocketService.emitSessionsUpdated({
+        action: 'session_closed',
+        userId: session.user_id,
+        sessionId: session.id
+      });
+      console.log(`📡 WebSocket: Enviado evento sessions:updated (logout normal) para User ID ${session.user_id}`);
+
       return true;
     }
 

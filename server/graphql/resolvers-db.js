@@ -1022,8 +1022,6 @@ const resolvers = {
             u.name as user_name,
             u.email as user_email,
             s.login_time,
-            s.ip_address,
-            s.user_agent,
             s.is_active,
             EXTRACT(EPOCH FROM (NOW() - s.login_time)) / 3600 as hours_elapsed
           FROM user_sessions s
@@ -1042,9 +1040,7 @@ const resolvers = {
             userId: session.user_id,
             userName: session.user_name,
             userEmail: session.user_email,
-            loginTime: session.login_time,
-            ipAddress: session.ip_address,
-            userAgent: session.user_agent,
+            loginTime: session.login_time.toISOString(),
             isActive: session.is_active,
             hoursElapsed: parseFloat(hoursElapsed.toFixed(2)),
             hoursRemaining: parseFloat(hoursRemaining.toFixed(2))
@@ -1271,6 +1267,15 @@ const resolvers = {
         if (result.rows.length > 0) {
           const closedSession = result.rows[0];
           console.log(`🔐 Admin ${user.name} cerró sesión remota: Session ID ${closedSession.id}, User ID ${closedSession.user_id}`);
+
+          // PASO 1: Forzar logout inmediato del usuario (WebSocket en tiempo real)
+          websocketService.emitSessionClosed(closedSession.user_id, closedSession.id);
+          console.log(`📡 WebSocket: Enviado evento session:closed al User ID ${closedSession.user_id}`);
+
+          // PASO 2: Notificar actualización del panel de sesiones al admin
+          websocketService.emitSessionsUpdated({ action: 'session_closed', sessionId: closedSession.id });
+          console.log(`📡 WebSocket: Enviado evento sessions:updated (session_closed)`);
+
           return true;
         } else {
           console.warn(`⚠️ No se encontró sesión activa con ID ${sessionId}`);

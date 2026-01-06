@@ -27,8 +27,6 @@ const typeDefs = gql`
     userName: String!
     userEmail: String!
     loginTime: String!
-    ipAddress: String
-    userAgent: String
     isActive: Boolean!
     hoursElapsed: Float!
     hoursRemaining: Float!
