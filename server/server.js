@@ -261,22 +261,43 @@ async function startServer() {
   const server = new ApolloServer({
     typeDefs,
     resolvers,
-    context: ({ req }) => {
+    context: async ({ req }) => {
       // Obtener token del header
       const authHeader = req.headers.authorization;
       console.log('🌐 Apollo Context: Authorization header:', authHeader ? `${authHeader.substring(0, 30)}...` : 'MISSING');
 
       const token = authHeader?.replace('Bearer ', '') || '';
-      const user = getUserFromToken(token);
-
-      if (!user) {
-        console.warn('⚠️ Apollo Context: Usuario no autenticado para esta request');
-      }
 
       // Obtener IP del cliente
       const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'IP desconocida';
 
-      return { user, req, ipAddress };
+      // Si no hay token, retornar sin usuario
+      if (!token) {
+        console.warn('⚠️ Apollo Context: No hay token en la request');
+        return { user: null, req, ipAddress };
+      }
+
+      // PASO 1: Verificar JWT (verificación básica de firma y expiración)
+      const userFromToken = getUserFromToken(token);
+      if (!userFromToken) {
+        console.warn('⚠️ Apollo Context: Token JWT inválido o expirado');
+        return { user: null, req, ipAddress };
+      }
+
+      // PASO 2: Validar sesión en BD (FUENTE DE VERDAD para las 8 horas)
+      // Esta es la validación OBLIGATORIA que no se puede manipular desde el cliente
+      const { validateSession } = require('./utils/sessionManager');
+      const session = await validateSession(token);
+
+      if (!session) {
+        console.warn(`⚠️ Apollo Context: Sesión expirada o inválida para usuario ${userFromToken.name} (ID: ${userFromToken.id})`);
+        console.warn('⏰ Razón: Han pasado 8 horas desde el login O la sesión fue cerrada');
+        return { user: null, req, ipAddress };
+      }
+
+      // PASO 3: Sesión válida (JWT válido + menos de 8h desde login en BD)
+      console.log(`✅ Apollo Context: Usuario autenticado - ${userFromToken.name} (ID: ${userFromToken.id}, Session: ${session.id})`);
+      return { user: userFromToken, req, ipAddress };
     },
     formatError: (error) => {
       console.error('GraphQL Error:', error);
@@ -315,14 +336,23 @@ async function startServer() {
   // Crear servidor HTTP (necesario para Socket.IO)
   const httpServer = http.createServer(app);
 
-  // Inicializar Socket.IO con CORS configurado
+  // Inicializar Socket.IO con CORS y configuración para 30+ usuarios concurrentes
   const io = new SocketIO(httpServer, {
     cors: {
       origin: "*",
       methods: ['GET', 'POST'],
       credentials: false
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    // Configuración para soportar 30+ conexiones simultáneas
+    maxHttpBufferSize: 1e7, // 10MB buffer para mensajes grandes
+    pingTimeout: 60000, // 60s timeout antes de considerar conexión muerta
+    pingInterval: 25000, // 25s entre pings de keep-alive
+    connectTimeout: 45000, // 45s timeout para establecer conexión
+    upgradeTimeout: 30000, // 30s timeout para upgrade a WebSocket
+    allowUpgrades: true, // Permitir upgrade de polling a WebSocket
+    perMessageDeflate: true, // Comprimir mensajes para reducir bandwidth
+    httpCompression: true // Comprimir respuestas HTTP
   });
 
   // Inicializar servicio WebSocket

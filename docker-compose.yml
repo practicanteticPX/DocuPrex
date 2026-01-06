@@ -24,11 +24,13 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Exponer solo en IP específica para usuarios remotos 
+      # Exponer solo en IP específica para usuarios remotos
       # NPM también puede acceder por nombre de contenedor (firmas_server) vía red Docker
       - "192.168.0.30:5001:5001"
     depends_on:
       - postgres-db
+    environment:
+      - NODE_ENV=production
     volumes:
       - ./server/uploads:/app/uploads
       - ./server/logs:/app/logs
@@ -58,13 +60,14 @@ services:
       - "192.168.0.30:5173:5173"
     depends_on:
       - server
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - ./frontend/index.html:/app/index.html
-      - ./frontend/vite.config.js:/app/vite.config.js
-    # Modo desarrollo con hot-reload
-    command: npm run dev -- --host
+    # Volúmenes de desarrollo comentados (no necesarios en modo producción)
+    # volumes:
+    #   - ./frontend/src:/app/src
+    #   - ./frontend/public:/app/public
+    #   - ./frontend/index.html:/app/index.html
+    #   - ./frontend/vite.config.js:/app/vite.config.js
+    # Modo producción con build optimizado
+    command: npx vite preview --port 5173 --host
     networks:
       - npm_docker_default  # Red compartida con NPM
       - default             # Red interna para comunicarse con server

@@ -46,5 +46,33 @@ export default defineConfig({
         secure: false
       }
     }
+  },
+  preview: {
+    host: true,
+    port: 5173,
+    strictPort: true,
+    allowedHosts: [
+      'docuprex.com',
+      'www.docuprex.com',
+      '192.168.0.30',
+      'localhost'
+    ],
+    proxy: {
+      '/graphql': {
+        target: 'http://firmas_server:5001',
+        changeOrigin: true,
+        secure: false
+      },
+      '/api': {
+        target: 'http://firmas_server:5001',
+        changeOrigin: true,
+        secure: false
+      },
+      '/uploads': {
+        target: 'http://firmas_server:5001',
+        changeOrigin: true,
+        secure: false
+      }
+    }
   }
 })

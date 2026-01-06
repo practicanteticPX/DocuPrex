@@ -255,6 +255,7 @@ const typeDefs = gql`
     # Autenticación
     login(email: String!, password: String!): AuthPayload!
     register(name: String!, email: String!, password: String!): AuthPayload!
+    logout: Boolean!
 
     # Usuarios
     updateUser(id: Int!, name: String, email: String): User!

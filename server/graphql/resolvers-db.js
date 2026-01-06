@@ -16,6 +16,7 @@ const { mergePDFs, cleanupTempFiles } = require('../utils/pdfMerger');
 const { addStampToPdf } = require('../utils/pdfStamp');
 const serverConfig = require('../config/server');
 const websocketService = require('../services/websocket');
+const { createSession, validateSession, closeSession } = require('../utils/sessionManager');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 
@@ -1029,14 +1030,19 @@ const resolvers = {
           if (validPassword) {
             console.log('✓ Usuario local autenticado:', localUser.email);
 
+            // JWT con expiración larga (30d) - solo sirve como identificador de sesión
+            // La expiración REAL de 8h se controla en la tabla user_sessions
             const token = jwt.sign(
               { id: localUser.id, email: localUser.email, name: localUser.name, role: localUser.role },
               JWT_SECRET,
-              { expiresIn: process.env.JWT_EXPIRES || '8h' }
+              { expiresIn: process.env.JWT_EXPIRES || '30d' }
             );
 
             // Registrar login en logs
             pdfLogger.logLogin(localUser.name);
+
+            // Crear sesión en BD (fuente de verdad para las 8 horas)
+            await createSession(localUser.id, token);
 
             return { token, user: localUser };
           }
@@ -1087,6 +1093,9 @@ const resolvers = {
         // Registrar login en logs
         pdfLogger.logLogin(user.name);
 
+        // Crear sesión en BD (fuente de verdad para las 8 horas)
+        await createSession(user.id, token);
+
         return { token, user };
       } catch (error) {
         console.error('❌ Error en login:', error.message);
@@ -1135,7 +1144,41 @@ const resolvers = {
         { expiresIn: process.env.JWT_EXPIRES || '8h' }
       );
 
+      // Crear sesión en BD (fuente de verdad para las 8 horas)
+      await createSession(user.id, token);
+
       return { token, user };
+    },
+
+    /**
+     * Logout - Cierra la sesión actual en la base de datos
+     * IMPORTANTE: El frontend debe eliminar el token del localStorage
+     * al recibir la confirmación de logout
+     */
+    logout: async (_, __, { req }) => {
+      try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader?.replace('Bearer ', '') || '';
+
+        if (!token) {
+          console.warn('⚠️ Logout: No hay token en la request');
+          return false;
+        }
+
+        // Cerrar sesión en BD
+        const closed = await closeSession(token);
+
+        if (closed) {
+          console.log('✅ Logout: Sesión cerrada correctamente');
+          return true;
+        } else {
+          console.warn('⚠️ Logout: No se encontró sesión activa para cerrar');
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Error en logout:', error);
+        return false;
+      }
     },
 
     updateUser: async (_, { id, name, email }, { user }) => {

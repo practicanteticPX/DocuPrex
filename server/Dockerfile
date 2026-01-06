@@ -14,6 +14,12 @@ RUN apk add --no-cache \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
+# Aumentar límite de memoria de Node.js para soportar:
+# - 15 browsers de Puppeteer concurrentes (~150MB cada uno)
+# - 50 conexiones WebSocket simultáneas
+# - Pool de 50 conexiones PostgreSQL
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 # Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 

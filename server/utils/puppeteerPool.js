@@ -8,15 +8,16 @@ const puppeteer = require('puppeteer');
  * - Sin pool: ~3-5 segundos por generación de PDF (lanzar browser + generar)
  * - Con pool: ~0.5-1 segundo por generación de PDF (solo generar)
  *
- * SAFETY:
- * - Max 2 browsers simultáneos para evitar consumo excesivo de memoria
+ * CONCURRENCY:
+ * - Max 15 browsers simultáneos para soportar 12+ acciones de PDF concurrentes
+ * - Cada acción de creación/firma puede generar múltiples PDFs (documento + stamps)
  * - Auto-cleanup de browsers si hay crashes
  * - Graceful shutdown al cerrar servidor
  */
 class PuppeteerPool {
   constructor() {
     this.browsers = [];
-    this.maxBrowsers = 2;
+    this.maxBrowsers = 15; // Aumentado para soportar 30 usuarios con 12+ acciones simultáneas
     this.inUse = new Set(); // Track browsers currently in use
     this.isShuttingDown = false;
     console.log(`🏊 Puppeteer Browser Pool inicializado (max: ${this.maxBrowsers} browsers)`);
