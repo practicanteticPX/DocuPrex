@@ -73,11 +73,6 @@ router.post('/upload', authenticate, (req, res) => {
       if (templateData) {
         try {
           parsedMetadata = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
-          console.log('📋 Template Data recibido:', {
-            consecutivo: parsedMetadata.consecutivo,
-            cia: parsedMetadata.cia,
-            proveedor: parsedMetadata.proveedor
-          });
         } catch (parseError) {
           console.error('⚠️ Error al parsear templateData:', parseError);
           parsedMetadata = {};
@@ -85,7 +80,6 @@ router.post('/upload', authenticate, (req, res) => {
       }
 
       // 🔑 HACER BACKUP DEL PDF INDIVIDUAL ANTES DE PROCESARLO
-      console.log(`💾 Haciendo backup del archivo individual...`);
       const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
       const fs = require('fs').promises;
       await fs.mkdir(backupDir, { recursive: true });
@@ -302,7 +296,6 @@ router.post('/upload-unified', authenticate, (req, res) => {
       const filePaths = req.files.map(f => f.path);
 
       // Validar que todos los archivos sean PDFs válidos
-      console.log('🔍 Validando archivos PDF...');
       const validation = await validatePDFs(filePaths);
 
       if (!validation.allValid) {
@@ -322,7 +315,6 @@ router.post('/upload-unified', authenticate, (req, res) => {
       mergedPdfPath = path.join(userDir, mergedFileName);
 
       // 🔑 HACER BACKUP DE CADA PDF INDIVIDUAL ANTES DE FUSIONAR
-      console.log(`💾 Haciendo backup de ${req.files.length} archivos individuales...`);
       const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
       const fs = require('fs').promises;
       await fs.mkdir(backupDir, { recursive: true });
@@ -336,12 +328,9 @@ router.post('/upload-unified', authenticate, (req, res) => {
 
         await fs.copyFile(file.path, backupPath);
         backupPaths.push(relativeBackupPath);
-        console.log(`   ✅ Backup ${i + 1}/${req.files.length}: ${file.originalname}`);
       }
-      console.log(`✅ ${backupPaths.length} archivos respaldados exitosamente`);
 
       // Unificar los PDFs
-      console.log('🔀 Unificando PDFs...');
       const mergeResult = await mergePDFs(filePaths, mergedPdfPath);
 
       if (!mergeResult.success) {
@@ -353,11 +342,6 @@ router.post('/upload-unified', authenticate, (req, res) => {
       if (templateData) {
         try {
           parsedMetadata = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
-          console.log('📋 Template Data recibido:', {
-            consecutivo: parsedMetadata.consecutivo,
-            cia: parsedMetadata.cia,
-            proveedor: parsedMetadata.proveedor
-          });
         } catch (parseError) {
           console.error('⚠️ Error al parsear templateData:', parseError);
           parsedMetadata = {};
@@ -406,7 +390,7 @@ router.post('/upload-unified', authenticate, (req, res) => {
       console.log('🗑️  Limpiando archivos temporales...');
       await cleanupTempFiles(filePaths);
 
-      console.log(`✅ Documento unificado creado: ${document.title} (ID: ${document.id})`);
+      // console.log(`✅ Documento unificado creado: ${document.title} (ID: ${document.id})`);
 
       res.json({
         success: true,

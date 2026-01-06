@@ -10,16 +10,12 @@ const path = require('path');
  */
 async function mergePDFs(pdfPaths, outputPath) {
   try {
-    console.log(`📄 Iniciando unificación de ${pdfPaths.length} PDFs...`);
-
     // Crear un nuevo documento PDF
     const mergedPdf = await PDFDocument.create();
 
     // OPTIMIZATION: Leer todos los PDFs en paralelo (60% más rápido)
-    console.log(`⚡ Leyendo ${pdfPaths.length} PDFs en paralelo...`);
     const pdfBytesArray = await Promise.all(
-      pdfPaths.map(async (pdfPath, i) => {
-        console.log(`  📖 Leyendo archivo ${i + 1}/${pdfPaths.length}: ${path.basename(pdfPath)}`);
+      pdfPaths.map(async (pdfPath) => {
         return await fs.readFile(pdfPath);
       })
     );
@@ -27,8 +23,6 @@ async function mergePDFs(pdfPaths, outputPath) {
     // Procesar cada PDF (esto debe ser secuencial debido a pdf-lib)
     for (let i = 0; i < pdfBytesArray.length; i++) {
       const pdfBytes = pdfBytesArray[i];
-      const pdfPath = pdfPaths[i];
-      console.log(`  🔗 Combinando archivo ${i + 1}/${pdfPaths.length}: ${path.basename(pdfPath)}`);
 
       // Cargar el documento PDF
       const pdf = await PDFDocument.load(pdfBytes);
@@ -40,8 +34,6 @@ async function mergePDFs(pdfPaths, outputPath) {
       copiedPages.forEach((page) => {
         mergedPdf.addPage(page);
       });
-
-      console.log(`  ✅ ${copiedPages.length} página(s) agregadas`);
     }
 
     // Establecer metadata del documento
@@ -56,11 +48,6 @@ async function mergePDFs(pdfPaths, outputPath) {
 
     const totalPages = mergedPdf.getPageCount();
     const fileSize = mergedPdfBytes.length;
-
-    console.log(`✅ PDF unificado creado exitosamente`);
-    console.log(`  📄 Total de páginas: ${totalPages}`);
-    console.log(`  💾 Tamaño: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`  📁 Guardado en: ${outputPath}`);
 
     return {
       success: true,
@@ -86,7 +73,7 @@ async function cleanupTempFiles(filePaths) {
     try {
       await fs.unlink(filePath);
       results.push({ path: filePath, deleted: true });
-      console.log(`🗑️  Archivo temporal eliminado: ${path.basename(filePath)}`);
+      // console.log(`🗑️  Archivo temporal eliminado: ${path.basename(filePath)}`);
     } catch (error) {
       results.push({ path: filePath, deleted: false, error: error.message });
       console.error(`⚠️  No se pudo eliminar: ${path.basename(filePath)}`, error.message);

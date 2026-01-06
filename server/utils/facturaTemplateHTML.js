@@ -60,17 +60,13 @@ function generateFacturaHTML(data) {
 
   // Get Higher font as base64
   const higherFontBase64 = getHigherFontBase64();
-  if (higherFontBase64) {
-    console.log(`✅ Fuente Higher embebida en PDF (${higherFontBase64.substring(0, 50)}...)`);
-  } else {
+  if (!higherFontBase64) {
     console.warn(`⚠️ Fuente Higher NO pudo cargarse - usando fallback`);
   }
 
   // Get Google Sans fonts as base64
   const googleSansFonts = getGoogleSansFontsBase64();
-  if (Object.keys(googleSansFonts).length > 0) {
-    console.log(`✅ Google Sans embebida en PDF (${Object.keys(googleSansFonts).length} variantes)`);
-  } else {
+  if (Object.keys(googleSansFonts).length === 0) {
     console.warn(`⚠️ Google Sans NO pudo cargarse - usando fallback`);
   }
 
@@ -101,31 +97,16 @@ function generateFacturaHTML(data) {
 
   // Verificar si hay retenciones activas
   const hasRetentions = retentionData && Array.isArray(retentionData) && retentionData.length > 0;
-  console.log(`🎨 [HTML] ============== RETENCIONES DEBUG ==============`);
-  console.log(`🎨 [HTML] retentionData recibido:`, JSON.stringify(retentionData, null, 2));
-  console.log(`🎨 [HTML] hasRetentions:`, hasRetentions);
-  console.log(`🎨 [HTML] retentionData es Array:`, Array.isArray(retentionData));
-  console.log(`🎨 [HTML] retentionData.length:`, retentionData?.length);
 
   // Crear un mapa de retenciones por índice de centro de costo
   const retentionMap = {};
   if (hasRetentions) {
-    retentionData.forEach((retention, idx) => {
-      console.log(`🔍 [HTML] Procesando retención ${idx}:`, retention);
-      console.log(`🔍 [HTML] retention.activa:`, retention.activa, typeof retention.activa);
-      console.log(`🔍 [HTML] retention.centroCostoIndex:`, retention.centroCostoIndex, typeof retention.centroCostoIndex);
-
+    retentionData.forEach((retention) => {
       if (retention.activa) {
         retentionMap[retention.centroCostoIndex] = retention;
-        console.log(`✅ [HTML] Mapeando retención para índice ${retention.centroCostoIndex}:`, retention);
-      } else {
-        console.log(`⏭️ [HTML] Retención ${idx} NO está activa (activa=${retention.activa})`);
       }
     });
   }
-  console.log(`🗺️ [HTML] retentionMap final:`, JSON.stringify(retentionMap, null, 2));
-  console.log(`🗺️ [HTML] Cantidad de retenciones en mapa:`, Object.keys(retentionMap).length);
-  console.log(`🎨 [HTML] ============================================`);
 
   const filasHTML = filasControl.map((fila, index) => {
     // VALIDACIÓN Y FALLBACKS: Detectar datos faltantes en metadata
@@ -160,7 +141,6 @@ function generateFacturaHTML(data) {
 
     // Obtener retención para esta fila (si existe)
     const retention = retentionMap[index];
-    console.log(`📋 [HTML] Fila ${index}: Centro=${centroCostos}, retention=`, retention ? `SÍ (${retention.porcentajeRetenido}%, ${retention.motivo})` : 'NO');
 
     return `
     <tr>

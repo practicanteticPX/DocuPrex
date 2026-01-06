@@ -899,18 +899,13 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
       descuentosTotales: 'Descuentos Totales'
     };
 
-    Object.keys(checklistRevision).forEach(key => {
-      if (!checklistRevision[key]) {
-        errores.push(`Debe marcar el checklist: "${checklistLabels[key]}"`);
-      }
-    });
-
-    if (!nombreNegociador.trim()) {
-      errores.push('El nombre del negociador es obligatorio');
+    const hayChecklistSinMarcar = Object.keys(checklistRevision).some(key => !checklistRevision[key]);
+    if (hayChecklistSinMarcar) {
+      errores.push('Debe marcar todos los checklist de Revisión');
     }
 
-    if (!cargoNegociador.trim()) {
-      errores.push('El cargo del negociador es obligatorio');
+    if (!nombreNegociador.trim()) {
+      errores.push('Debe seleccionar un negociador');
     }
 
     if (!grupoCausacion) {

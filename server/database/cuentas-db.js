@@ -19,10 +19,6 @@ cuentasPool.on('error', (err, client) => {
   console.error('❌ Error inesperado en el pool de DB_QPREX (Cuentas):', err);
 });
 
-cuentasPool.on('connect', () => {
-  console.log('🔗 Nueva conexión establecida con DB_QPREX (Cuentas)');
-});
-
 /**
  * Ejecuta una query SQL en el esquema public
  * @param {string} text - Query SQL

@@ -54,7 +54,7 @@ class PuppeteerPool {
       try {
         await browser.version(); // Quick health check
         this.inUse.add(browser);
-        console.log(`♻️ Reutilizando browser del pool (disponibles: ${this.browsers.length}, en uso: ${this.inUse.size})`);
+        // // console.log(`♻️ Reutilizando browser del pool (disponibles: ${this.browsers.length}, en uso: ${this.inUse.size})`);
         return browser;
       } catch (error) {
         // Si el browser está cerrado, crear uno nuevo
@@ -80,7 +80,6 @@ class PuppeteerPool {
     }
 
     // Crear un nuevo browser
-    console.log(`🆕 Creando nuevo browser (total en uso: ${this.inUse.size + 1}/${this.maxBrowsers})`);
     const browser = await puppeteer.launch({
       headless: 'new',
       args: [
@@ -141,7 +140,6 @@ class PuppeteerPool {
       // Si tenemos espacio en el pool, guardar el browser
       if (this.browsers.length < this.maxBrowsers) {
         this.browsers.push(browser);
-        console.log(`🔄 Browser devuelto al pool (disponibles: ${this.browsers.length}, en uso: ${this.inUse.size})`);
       } else {
         // Pool lleno, cerrar este browser
         await browser.close();

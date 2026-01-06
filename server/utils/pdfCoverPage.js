@@ -12,8 +12,6 @@ const path = require('path');
  */
 async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
   try {
-    console.log(`📄 Agregando página de información de firmantes a: ${path.basename(pdfPath)}`);
-
     const existingPdfBytes = await fs.readFile(pdfPath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
 
@@ -638,8 +636,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     const pdfBytes = await pdfDoc.save();
     await fs.writeFile(pdfPath, pdfBytes);
 
-    console.log(`✅ ${totalSignerPages} página(s) de firmantes agregada(s) exitosamente`);
-
     return pdfBytes;
   } catch (error) {
     console.error('❌ Error al agregar página de firmantes:', error);
@@ -656,8 +652,6 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
  */
 async function updateSignersPage(pdfPath, signers, documentInfo) {
   try {
-    console.log(`🔄 Actualizando páginas de firmantes en: ${path.basename(pdfPath)}`);
-
     const existingPdfBytes = await fs.readFile(pdfPath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true });
 
@@ -701,16 +695,10 @@ async function updateSignersPage(pdfPath, signers, documentInfo) {
       }
     }
 
-    if (pagesToRemove > 0) {
-      console.log(`🗑️  ${pagesToRemove} página(s) de firmantes eliminada(s)`);
-    }
-
     const pdfBytesWithoutSigners = await pdfDoc.save();
     await fs.writeFile(pdfPath, pdfBytesWithoutSigners);
 
     await addCoverPageWithSigners(pdfPath, signers, documentInfo);
-
-    console.log(`✅ Páginas de firmantes actualizadas exitosamente`);
   } catch (error) {
     console.error('❌ Error al actualizar páginas de firmantes:', error);
     throw error;

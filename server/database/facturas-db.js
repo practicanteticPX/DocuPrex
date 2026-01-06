@@ -19,10 +19,6 @@ facturasPool.on('error', (err, client) => {
   console.error('❌ Error inesperado en el pool de SERV_QPREX (Facturas):', err);
 });
 
-facturasPool.on('connect', () => {
-  console.log('🔗 Nueva conexión establecida con SERV_QPREX (Facturas)');
-});
-
 /**
  * Ejecuta una query SQL en el esquema crud_facturas
  * @param {string} text - Query SQL

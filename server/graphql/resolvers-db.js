@@ -138,20 +138,13 @@ async function cleanupDocumentBackups(documentId) {
  */
 async function checkAndCleanupBackupsIfComplete(documentId) {
   try {
-    console.log(`🔍 [CLEANUP] Verificando si se pueden eliminar backups del documento ${documentId}...`);
-
     const isFullySigned = await checkIfDocumentFullySigned(documentId);
     const hasActiveRetentions = await checkIfDocumentHasActiveRetentions(documentId);
-
-    console.log(`   📊 Estado: Firmado=${isFullySigned}, Retenciones activas=${hasActiveRetentions}`);
 
     if (isFullySigned && !hasActiveRetentions) {
       console.log(`   ✅ Documento completo y sin retenciones → Eliminando backups...`);
       await cleanupDocumentBackups(documentId);
     } else {
-      if (!isFullySigned) {
-        console.log(`   ⏭️  Documento aún no está completamente firmado → Manteniendo backups`);
-      }
       if (hasActiveRetentions) {
         console.log(`   ⏭️  Documento tiene retenciones activas → Manteniendo backups`);
       }
@@ -322,11 +315,6 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
       firmas['_CAUSACION'] = firmaCausacion;
     }
 
-    console.log(`📝 Firmas encontradas para documento ${documentId}:`, Object.keys(firmas).length);
-    console.log(`📋 Keys de firmas:`, Object.keys(firmas));
-    if (firmas['_CAUSACION']) {
-      console.log(`📋 Firma _CAUSACION:`, firmas['_CAUSACION']);
-    }
     return firmas;
   } catch (error) {
     console.error('❌ Error al obtener firmas:', error);
@@ -423,7 +411,6 @@ const resolvers = {
       `, [user.id]);
 
       const grupoCodigos = userGroups.rows.map(g => g.codigo);
-      console.log(`🔍 pendingDocuments para user ${user.id} (${user.name}), grupos:`, grupoCodigos);
 
       try {
       const result = await query(`
@@ -516,7 +503,6 @@ const resolvers = {
         ORDER BY d.id, d.created_at DESC
       `, [user.id, grupoCodigos]);
 
-      console.log(`📋 pendingDocuments encontrados: ${result.rows.length}`, result.rows.map(r => ({ id: r.id, title: r.title })));
       return result.rows;
       } catch (err) {
         console.error('❌ Error en pendingDocuments query:', err.message);
@@ -1047,7 +1033,7 @@ const resolvers = {
           };
         });
 
-        console.log(`📊 Admin ${user.email} consultó ${sessions.length} sesiones activas`);
+        // console.log(`📊 Admin ${user.email} consultó ${sessions.length} sesiones activas`);
         return sessions;
       } catch (error) {
         console.error('❌ Error obteniendo sesiones activas:', error);
@@ -1084,8 +1070,6 @@ const resolvers = {
           const validPassword = await bcrypt.compare(password, localUser.password_hash);
 
           if (validPassword) {
-            console.log('✓ Usuario local autenticado:', localUser.email);
-
             // JWT con expiración de 8h (defensa en profundidad: JWT + BD)
             // Doble validación: JWT expira a las 8h Y BD valida login_time
             const token = jwt.sign(
@@ -1100,6 +1084,8 @@ const resolvers = {
             // Crear sesión en BD (fuente de verdad para las 8 horas)
             await createSession(localUser.id, token);
 
+            // // console.log(`✅ Usuario inició sesión: ${localUser.name}`);
+
             return { token, user: localUser };
           }
           // Si la contraseña no es válida, lanzar error inmediatamente
@@ -1108,10 +1094,6 @@ const resolvers = {
 
         // Extraer username del email
         const username = email.includes('@') ? email.split('@')[0] : email;
-
-        console.log('🔍 Intentando autenticar usuario:', username);
-        console.log('🔍 Username length:', username.length);
-        console.log('🔍 Username charCodes:', [...username].map(c => c.charCodeAt(0)));
 
         const ldapUser = await authenticateUser(username, password);
 
@@ -1130,14 +1112,12 @@ const resolvers = {
             [ldapUser.name, ldapUser.email, ldapUser.username, 'user', true]
           );
           user = insertResult.rows[0];
-          console.log('✓ Nuevo usuario creado desde AD:', user.ad_username);
         } else {
           const updateResult = await query(
             'UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING *',
             [ldapUser.name, ldapUser.email, user.id]
           );
           user = updateResult.rows[0];
-          console.log('✓ Usuario existente autenticado desde AD:', user.ad_username);
         }
 
         const token = jwt.sign(
@@ -1151,6 +1131,8 @@ const resolvers = {
 
         // Crear sesión en BD (fuente de verdad para las 8 horas)
         await createSession(user.id, token);
+
+        // // console.log(`✅ Usuario inició sesión: ${user.name}`);
 
         return { token, user };
       } catch (error) {
@@ -1213,26 +1195,24 @@ const resolvers = {
      * IMPORTANTE: El frontend debe eliminar el token del localStorage
      * al recibir la confirmación de logout
      */
-    logout: async (_, __, { req }) => {
+    logout: async (_, __, { req, user }) => {
       try {
         const authHeader = req.headers.authorization;
         const token = authHeader?.replace('Bearer ', '') || '';
 
         if (!token) {
-          console.warn('⚠️ Logout: No hay token en la request');
           return false;
         }
 
         // Cerrar sesión en BD
         const closed = await closeSession(token);
 
-        if (closed) {
-          console.log('✅ Logout: Sesión cerrada correctamente');
-          return true;
-        } else {
-          console.warn('⚠️ Logout: No se encontró sesión activa para cerrar');
-          return false;
+        if (closed && user) {
+          pdfLogger.logLogout(user.name);
+          // // console.log(`✅ Usuario cerró sesión: ${user.name}`);
         }
+
+        return closed;
       } catch (error) {
         console.error('❌ Error en logout:', error);
         return false;
@@ -1266,15 +1246,12 @@ const resolvers = {
 
         if (result.rows.length > 0) {
           const closedSession = result.rows[0];
-          console.log(`🔐 Admin ${user.name} cerró sesión remota: Session ID ${closedSession.id}, User ID ${closedSession.user_id}`);
 
           // PASO 1: Forzar logout inmediato del usuario (WebSocket en tiempo real)
           websocketService.emitSessionClosed(closedSession.user_id, closedSession.id);
-          console.log(`📡 WebSocket: Enviado evento session:closed al User ID ${closedSession.user_id}`);
 
           // PASO 2: Notificar actualización del panel de sesiones al admin
           websocketService.emitSessionsUpdated({ action: 'session_closed', sessionId: closedSession.id });
-          console.log(`📡 WebSocket: Enviado evento sessions:updated (session_closed)`);
 
           return true;
         } else {
@@ -1410,7 +1387,13 @@ const resolvers = {
 
       if (!user) throw new Error('No autenticado');
 
-      const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
+      const docResult = await query(
+        `SELECT d.*, dt.code as document_type_code
+         FROM documents d
+         JOIN document_types dt ON d.document_type_id = dt.id
+         WHERE d.id = $1`,
+        [documentId]
+      );
       if (docResult.rows.length === 0) throw new Error('Documento no encontrado');
 
       const doc = docResult.rows[0];
@@ -1454,71 +1437,28 @@ const resolvers = {
       const hasExistingSigners = existingSignersResult.rows.length > 0;
       const isOwner = doc.uploaded_by === user.id;
       const ownerInNewSigners = userIds.includes(user.id);
+      const isFacturaVenta = doc.document_type_code === 'FV';
 
-      if (hasExistingSigners && isOwner && ownerInNewSigners) {
-        console.log(`👤 Propietario agregándose como firmante - reorganizando posiciones...`);
+      console.log(`🔍 DEBUG: document_type_code='${doc.document_type_code}', isFacturaVenta=${isFacturaVenta}`);
 
-        await query(
-          `UPDATE document_signers
-           SET order_position = order_position + 1
-           WHERE document_id = $1`,
-          [documentId]
-        );
+      // ========== LÓGICA ESPECIAL PARA DOCUMENTOS FV ==========
+      if (isFacturaVenta) {
+        console.log(`📄 Documento FV detectado - respetando orden basado en roles`);
 
-        const ownerAssignment = userAssignments.find(sa => sa.userId === user.id);
-        const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
+        // Para documentos FV, respetar el orden del array signerAssignments
+        for (let i = 0; i < userAssignments.length; i++) {
+          const assignment = userAssignments[i];
+          const roles = normalizeRoles(assignment);
+          const orderPosition = i + 1; // Usar índice + 1 como posición
 
-        await query(
-          `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-           VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])
-           ON CONFLICT (document_id, user_id) DO NOTHING`,
-          [
-            documentId,
-            user.id,
-            true,
-            ownerRoles.roleIds[0] || null, // Mantener compatibilidad legacy
-            ownerRoles.roleNames[0] || null, // Mantener compatibilidad legacy
-            ownerRoles.roleIds,
-            ownerRoles.roleNames
-          ]
-        );
-
-        // Auto-firmar al propietario SOLO si es NEGOCIADOR
-        const isNegociador = ownerRoles.roleNames && ownerRoles.roleNames.includes('Negociador');
-        if (isNegociador) {
-          await query(
-            `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
-             VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
-             ON CONFLICT (document_id, signer_id) DO UPDATE
-             SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
-            [documentId, user.id]
-          );
-          console.log(`✅ Auto-firma aplicada al propietario NEGOCIADOR (posición 1)`);
-        } else {
-          await query(
-            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-             VALUES ($1, $2, 'pending', 'digital')
-             ON CONFLICT (document_id, signer_id) DO NOTHING`,
-            [documentId, user.id]
-          );
-          console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
-        }
-
-        const otherUserIds = userIds.filter(id => id !== user.id);
-        const maxPosition = existingSignersResult.rows.length + 1; // +1 porque el propietario ya está en posición 1
-
-        for (let i = 0; i < otherUserIds.length; i++) {
-          const assignment = userAssignments.find(sa => sa.userId === otherUserIds[i]);
-          const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
-
+          // Insertar firmante en su posición correcta según el array
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
-             ON CONFLICT (document_id, user_id) DO NOTHING`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])`,
             [
               documentId,
-              otherUserIds[i],
-              maxPosition + i,
+              assignment.userId,
+              orderPosition,
               true,
               roles.roleIds[0] || null,
               roles.roleNames[0] || null,
@@ -1527,54 +1467,49 @@ const resolvers = {
             ]
           );
 
-          await query(
-            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-             VALUES ($1, $2, 'pending', 'digital')
-             ON CONFLICT (document_id, signer_id) DO NOTHING`,
-            [documentId, otherUserIds[i]]
-          );
+          // Determinar si debe autofirmar: SOLO si es propietario Y está en posición 1 Y es Negociador
+          const isThisUserOwner = assignment.userId === user.id;
+          const isFirstPosition = orderPosition === 1;
+          const isNegociador = roles.roleNames && roles.roleNames.includes('Negociador');
+
+          if (isThisUserOwner && isFirstPosition && isNegociador) {
+            // Autofirmar
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+               VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
+              [documentId, user.id]
+            );
+          } else {
+            // Pendiente
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+               VALUES ($1, $2, 'pending', 'digital')`,
+              [documentId, assignment.userId]
+            );
+          }
         }
-      } else if (hasExistingSigners) {
-        const maxPosition = Math.max(...existingSignersResult.rows.map(r => r.order_position));
 
-        for (let i = 0; i < userIds.length; i++) {
-          const assignment = userAssignments.find(sa => sa.userId === userIds[i]);
-          const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
-
-          await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
-             ON CONFLICT (document_id, user_id) DO NOTHING`,
-            [
-              documentId,
-              userIds[i],
-              maxPosition + i + 1,
-              true,
-              roles.roleIds[0] || null,
-              roles.roleNames[0] || null,
-              roles.roleIds,
-              roles.roleNames
-            ]
-          );
-
-          await query(
-            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-             VALUES ($1, $2, 'pending', 'digital')
-             ON CONFLICT (document_id, signer_id) DO NOTHING`,
-            [documentId, userIds[i]]
-          );
-        }
       } else {
-        // No hay firmantes existentes - primera asignación
-        let startPosition = 1;
+        // ========== LÓGICA PARA OTROS TIPOS DE DOCUMENTOS (NO FV) ==========
+        // Mantener comportamiento actual: propietario siempre primero
 
-        if (isOwner && ownerInNewSigners) {
+        if (hasExistingSigners && isOwner && ownerInNewSigners) {
+          console.log(`👤 Propietario agregándose como firmante - reorganizando posiciones...`);
+
+          await query(
+            `UPDATE document_signers
+             SET order_position = order_position + 1
+             WHERE document_id = $1`,
+            [documentId]
+          );
+
           const ownerAssignment = userAssignments.find(sa => sa.userId === user.id);
           const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
 
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])`,
+             VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])
+             ON CONFLICT (document_id, user_id) DO NOTHING`,
             [
               documentId,
               user.id,
@@ -1591,47 +1526,151 @@ const resolvers = {
           if (isNegociador) {
             await query(
               `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
-               VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
+               VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
+               ON CONFLICT (document_id, signer_id) DO UPDATE
+               SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
               [documentId, user.id]
             );
             console.log(`✅ Auto-firma aplicada al propietario NEGOCIADOR (posición 1)`);
           } else {
             await query(
               `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-               VALUES ($1, $2, 'pending', 'digital')`,
+               VALUES ($1, $2, 'pending', 'digital')
+               ON CONFLICT (document_id, signer_id) DO NOTHING`,
               [documentId, user.id]
             );
-            console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
+            // console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
           }
 
-          startPosition = 2;
-        }
+          const otherUserIds = userIds.filter(id => id !== user.id);
+          const maxPosition = existingSignersResult.rows.length + 1;
 
-        const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
-        for (let i = 0; i < otherUserIds.length; i++) {
-          const assignment = userAssignments.find(sa => sa.userId === otherUserIds[i]);
-          const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
+          for (let i = 0; i < otherUserIds.length; i++) {
+            const assignment = userAssignments.find(sa => sa.userId === otherUserIds[i]);
+            const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
 
-          await query(
-            `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])`,
-            [
-              documentId,
-              otherUserIds[i],
-              startPosition + i,
-              true,
-              roles.roleIds[0] || null,
-              roles.roleNames[0] || null,
-              roles.roleIds,
-              roles.roleNames
-            ]
-          );
+            await query(
+              `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+               VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
+               ON CONFLICT (document_id, user_id) DO NOTHING`,
+              [
+                documentId,
+                otherUserIds[i],
+                maxPosition + i,
+                true,
+                roles.roleIds[0] || null,
+                roles.roleNames[0] || null,
+                roles.roleIds,
+                roles.roleNames
+              ]
+            );
 
-          await query(
-            `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-             VALUES ($1, $2, 'pending', 'digital')`,
-            [documentId, otherUserIds[i]]
-          );
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+               VALUES ($1, $2, 'pending', 'digital')
+               ON CONFLICT (document_id, signer_id) DO NOTHING`,
+              [documentId, otherUserIds[i]]
+            );
+          }
+        } else if (hasExistingSigners) {
+          const maxPosition = Math.max(...existingSignersResult.rows.map(r => r.order_position));
+
+          for (let i = 0; i < userIds.length; i++) {
+            const assignment = userAssignments.find(sa => sa.userId === userIds[i]);
+            const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
+
+            await query(
+              `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+               VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
+               ON CONFLICT (document_id, user_id) DO NOTHING`,
+              [
+                documentId,
+                userIds[i],
+                maxPosition + i + 1,
+                true,
+                roles.roleIds[0] || null,
+                roles.roleNames[0] || null,
+                roles.roleIds,
+                roles.roleNames
+              ]
+            );
+
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+               VALUES ($1, $2, 'pending', 'digital')
+               ON CONFLICT (document_id, signer_id) DO NOTHING`,
+              [documentId, userIds[i]]
+            );
+          }
+        } else {
+          // No hay firmantes existentes - primera asignación
+          let startPosition = 1;
+
+          if (isOwner && ownerInNewSigners) {
+            const ownerAssignment = userAssignments.find(sa => sa.userId === user.id);
+            const ownerRoles = ownerAssignment ? normalizeRoles(ownerAssignment) : { roleIds: [], roleNames: [] };
+
+            await query(
+              `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+               VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])`,
+              [
+                documentId,
+                user.id,
+                true,
+                ownerRoles.roleIds[0] || null,
+                ownerRoles.roleNames[0] || null,
+                ownerRoles.roleIds,
+                ownerRoles.roleNames
+              ]
+            );
+
+            // Auto-firmar al propietario SOLO si es NEGOCIADOR
+            const isNegociador = ownerRoles.roleNames && ownerRoles.roleNames.includes('Negociador');
+            if (isNegociador) {
+              await query(
+                `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+                 VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
+                [documentId, user.id]
+              );
+              console.log(`✅ Auto-firma aplicada al propietario NEGOCIADOR (posición 1)`);
+            } else {
+              await query(
+                `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+                 VALUES ($1, $2, 'pending', 'digital')`,
+                [documentId, user.id]
+              );
+              // console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
+            }
+
+            startPosition = 2;
+          }
+
+          const otherUserIds = ownerInNewSigners ? userIds.filter(id => id !== user.id) : userIds;
+          for (let i = 0; i < otherUserIds.length; i++) {
+            const assignment = userAssignments.find(sa => sa.userId === otherUserIds[i]);
+            const roles = assignment ? normalizeRoles(assignment) : { roleIds: [], roleNames: [] };
+
+            await query(
+              `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
+               VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])`,
+              [
+                documentId,
+                otherUserIds[i],
+                startPosition + i,
+                true,
+                roles.roleIds[0] || null,
+                roles.roleNames[0] || null,
+                roles.roleIds,
+                roles.roleNames
+              ]
+            );
+
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type)
+               VALUES ($1, $2, 'pending', 'digital')`,
+              [documentId, otherUserIds[i]]
+            );
+          }
         }
       }
 
@@ -1648,7 +1687,7 @@ const resolvers = {
           const { roleIds, roleNames } = normalizeRoles(grupoAssignment);
           currentMaxPos++;
 
-          console.log(`📋 Agregando grupo de causación: ${grupoAssignment.grupoCodigo} en posición ${currentMaxPos}`);
+          // console.log(`📋 Agregando grupo de causación: ${grupoAssignment.grupoCodigo} en posición ${currentMaxPos}`);
 
           await query(
             `INSERT INTO document_signers (
@@ -1668,7 +1707,7 @@ const resolvers = {
             ]
           );
 
-          console.log(`✅ Grupo ${grupoAssignment.grupoCodigo} agregado en posición ${currentMaxPos}`);
+          // console.log(`✅ Grupo ${grupoAssignment.grupoCodigo} agregado en posición ${currentMaxPos}`);
         }
       }
 
@@ -1847,7 +1886,7 @@ const resolvers = {
                 );
 
                 if (insertResult.rows.length > 0) {
-                  console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
+                  // // console.log(`✅ Notificación creada para primer firmante pendiente (user_id: ${firstSignerId})`);
 
                   // Emitir evento WebSocket con información completa del actor
                   websocketService.emitNotificationCreated(firstSignerId, {
@@ -1877,7 +1916,7 @@ const resolvers = {
                         });
                         console.log(`📧 Correo enviado al primer firmante: ${signer.email}`);
                       } else {
-                        console.log(`⏭️ Notificaciones desactivadas para: ${signer.email}`);
+                        // // console.log(`⏭️ Notificaciones desactivadas para: ${signer.email}`);
                       }
                     }
                   } catch (emailError) {
@@ -1885,7 +1924,7 @@ const resolvers = {
                   }
                 }
               } else {
-                console.log(`⏭️ Primer firmante es el creador del documento (user_id: ${firstSignerId}), se autofirmará sin notificación`);
+                // // console.log(`⏭️ Primer firmante es el creador del documento (user_id: ${firstSignerId}), se autofirmará sin notificación`);
               }
             }
           }
@@ -1940,7 +1979,7 @@ const resolvers = {
         if (hasExistingSigners) {
           console.log(`🔄 Actualizando página de portada para documento ${documentId}...`);
         } else {
-          console.log(`📋 Generando página de portada para documento ${documentId}...`);
+          // console.log(`📋 Generando página de portada para documento ${documentId}...`);
         }
 
         const docInfoResult = await query(
@@ -2011,7 +2050,7 @@ const resolvers = {
         // file_path ya incluye "uploads/" en su valor
         let pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
-        console.log(`📂 Ruta del PDF: ${pdfPath}`);
+        // console.log(`📂 Ruta del PDF: ${pdfPath}`);
 
         // ========== GENERAR PDF DEL TEMPLATE DE FACTURA SI APLICA ==========
         const isFVDocument = docInfo.document_type_code === 'FV';
@@ -2035,22 +2074,21 @@ const resolvers = {
             const templatePdfPath = pdfPath.replace('.pdf', '_template.pdf');
             await fs.writeFile(templatePdfPath, templatePdfBuffer);
 
-            console.log(`✅ PDF de plantilla generado: ${templatePdfPath}`);
 
             const originalPdfPath = pdfPath;
             const mergedPdfPath = pdfPath.replace('.pdf', '_merged.pdf');
 
             // Los backups ya se hicieron al subir los archivos, aquí solo fusionamos
-            console.log(`📋 Fusionando plantilla con documento original...`);
+            // console.log(`📋 Fusionando plantilla con documento original...`);
             await mergePDFs([templatePdfPath, originalPdfPath], mergedPdfPath);
 
-            console.log(`✅ PDFs fusionados: ${mergedPdfPath}`);
+            // console.log(`✅ PDFs fusionados: ${mergedPdfPath}`);
 
             await fs.unlink(originalPdfPath);
             await fs.rename(mergedPdfPath, originalPdfPath);
             await cleanupTempFiles([templatePdfPath]);
 
-            console.log(`✅ PDF original reemplazado con PDF fusionado`);
+            // console.log(`✅ PDF original reemplazado con PDF fusionado`);
 
             pdfPath = originalPdfPath;
           } catch (templateError) {
@@ -2060,17 +2098,13 @@ const resolvers = {
 
         // Preparar información del documento para la portada
         let cia = null;
-        console.log('🔍 Metadata type:', typeof docInfo.metadata);
-        console.log('🔍 Metadata value:', docInfo.metadata);
 
         if (docInfo.metadata && typeof docInfo.metadata === 'object') {
           cia = docInfo.metadata.cia || null;
-          console.log('📦 CIA extraída de metadata (objeto):', cia);
         } else if (docInfo.metadata && typeof docInfo.metadata === 'string') {
           try {
             const parsedMetadata = JSON.parse(docInfo.metadata);
             cia = parsedMetadata.cia || null;
-            console.log('📦 CIA extraída de metadata (string parseado):', cia);
           } catch (e) {
             console.warn('⚠️ No se pudo parsear metadata como JSON');
           }
@@ -2085,16 +2119,11 @@ const resolvers = {
           cia: cia
         };
 
-        console.log('🏢 CIA para PDF (assignSigners):', cia);
-        console.log('📄 Document Info completo:', documentInfo);
-
         // Si ya existían firmantes, actualizar la página; si no, crear nueva
         if (hasExistingSigners) {
           await updateSignersPage(pdfPath, signers, documentInfo);
-          console.log('✅ Página de portada actualizada exitosamente');
         } else {
           await addCoverPageWithSigners(pdfPath, signers, documentInfo);
-          console.log('✅ Página de portada generada exitosamente');
         }
       } catch (coverError) {
         console.error('❌ Error al generar/actualizar página de portada:', coverError);
@@ -2144,7 +2173,7 @@ const resolvers = {
           [id]
         );
 
-        console.log(`🗑️ Todas las notificaciones del documento eliminadas`);
+        // console.log(`🗑️ Todas las notificaciones del documento eliminadas`);
 
         // Emitir evento WebSocket para eliminar notificaciones en frontend
         websocketService.emitNotificationDeleted(id, null);
@@ -2162,7 +2191,7 @@ const resolvers = {
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
-          console.log(`🗑️ Archivo eliminado: ${filePath}`);
+          // console.log(`🗑️ Archivo eliminado: ${filePath}`);
         }
       } catch (err) {
         console.error('Error al eliminar archivo:', err);
@@ -2172,7 +2201,7 @@ const resolvers = {
       if (doc.original_pdf_backup) {
         try {
           const backupPaths = JSON.parse(doc.original_pdf_backup);
-          console.log(`🗑️ Eliminando ${backupPaths.length} archivo(s) de backup...`);
+          // console.log(`🗑️ Eliminando ${backupPaths.length} archivo(s) de backup...`);
 
           for (let i = 0; i < backupPaths.length; i++) {
             const backupRelativePath = backupPaths[i].replace(/^uploads\//, '');
@@ -2181,7 +2210,7 @@ const resolvers = {
             try {
               if (fs.existsSync(backupFullPath)) {
                 fs.unlinkSync(backupFullPath);
-                console.log(`   ✅ Backup ${i + 1}/${backupPaths.length} eliminado: ${path.basename(backupFullPath)}`);
+                // console.log(`   ✅ Backup ${i + 1}/${backupPaths.length} eliminado: ${path.basename(backupFullPath)}`);
               } else {
                 console.log(`   ⚠️ Backup ${i + 1}/${backupPaths.length} no encontrado: ${path.basename(backupFullPath)}`);
               }
@@ -2190,7 +2219,7 @@ const resolvers = {
             }
           }
 
-          console.log(`✅ Backups eliminados exitosamente`);
+          // console.log(`✅ Backups eliminados exitosamente`);
         } catch (parseError) {
           console.error('⚠️ Error al parsear backups para eliminar:', parseError.message);
         }
@@ -2243,7 +2272,7 @@ const resolvers = {
             );
             const causacionSigned = parseInt(causacionSignedResult.rows[0].causacion_signed || 0);
 
-            console.log(`🔍 [DELETE] Estado de causación:`);
+            // console.log(`🔍 [DELETE] Estado de causación:`);
             console.log(`   - Firmantes del grupo de causación: ${causacionSigned}`);
 
             // Si alguien del grupo de causación firmó, el documento ya está CAUSADO
@@ -2258,7 +2287,7 @@ const resolvers = {
                   {},
                   { headers: { 'Content-Type': 'application/json' } }
                 );
-                console.log(`✅ Factura ${doc.consecutivo} desmarcada EN-PROCESO (documento eliminado antes de causación)`);
+                // console.log(`✅ Factura ${doc.consecutivo} desmarcada EN-PROCESO (documento eliminado antes de causación)`);
               } catch (desmarcarError) {
                 console.error(`❌ Error al desmarcar factura:`, desmarcarError.message);
               }
@@ -2393,7 +2422,7 @@ const resolvers = {
                 const backupPdfDoc = await PDFDoc.load(backupBytes);
                 const backupPages = backupPdfDoc.getPageCount();
 
-                console.log(`   ✅ Backup ${i + 1}/${backupPathsArray.length}:`);
+                // console.log(`   ✅ Backup ${i + 1}/${backupPathsArray.length}:`);
                 console.log(`      - Archivo: ${path.basename(backupFullPath)}`);
                 console.log(`      - Tamaño: ${Math.round(backupStats.size / 1024)} KB`);
                 console.log(`      - Páginas: ${backupPages}`);
@@ -2662,7 +2691,7 @@ const resolvers = {
           if (firmante.grupoCodigo) {
             const { roleNames } = normalizeRoles(firmante);
 
-            console.log(`📋 Agregando grupo de causación: ${firmante.grupoCodigo} en posición ${orderPosition}`);
+            // console.log(`📋 Agregando grupo de causación: ${firmante.grupoCodigo} en posición ${orderPosition}`);
 
             await client.query(
               `INSERT INTO document_signers (
@@ -2680,7 +2709,7 @@ const resolvers = {
               ]
             );
 
-            console.log(`✅ Grupo ${firmante.grupoCodigo} agregado`);
+            // console.log(`✅ Grupo ${firmante.grupoCodigo} agregado`);
             continue;
           }
 
@@ -2773,7 +2802,7 @@ const resolvers = {
                   );
                   console.log(`📧 Correo enviado a: ${signerUser.email} (firmante NUEVO)`);
                 } else {
-                  console.log(`⏭️ Notificaciones desactivadas para: ${signerUser.email}`);
+                  // // console.log(`⏭️ Notificaciones desactivadas para: ${signerUser.email}`);
                 }
               }
             } catch (emailError) {
@@ -2876,13 +2905,9 @@ const resolvers = {
           cia: parsedTemplateData.cia || null
         };
 
-        console.log('🏢 CIA para PDF:', documentInfo.cia);
-
         // Agregar informe de firmantes al final (el PDF fusionado NO tiene informe todavía)
-        console.log('📋 Agregando informe de firmantes al PDF fusionado...');
         const { addCoverPageWithSigners } = require('../utils/pdfCoverPage');
         await addCoverPageWithSigners(tempMergedPath, signers, documentInfo);
-        console.log('✅ Informe de firmantes agregado correctamente');
 
         // Reemplazar el archivo original con el fusionado
         await fs.copyFile(tempMergedPath, currentPdfPath);
@@ -3130,7 +3155,7 @@ const resolvers = {
 
                   console.log(`✅ Correo de rechazo enviado al creador: ${creator.email}`);
                 } else {
-                  console.log(`⏭️ Notificaciones desactivadas para el creador: ${creator.email}`);
+                  // console.log(`⏭️ Notificaciones desactivadas para el creador: ${creator.email}`);
                 }
               }
             } catch (emailError) {
@@ -3146,7 +3171,6 @@ const resolvers = {
 
       // ========== ACTUALIZAR PÁGINA DE FIRMANTES ==========
       try {
-        console.log(`📋 Actualizando página de firmantes para documento ${documentId}...`);
 
         const docInfoResult = await query(
           `SELECT d.*, u.name as uploader_name, dt.name as document_type_name, dt.code as document_type_code
@@ -3246,7 +3270,6 @@ const resolvers = {
           } else {
             // Para otros documentos, actualizar inmediatamente
             await updateSignersPage(pdfPath, signers, documentInfo);
-            console.log('✅ Página de firmantes actualizada después de rechazar');
 
             // Agregar sello "RECHAZADO" en esquina superior izquierda
             try {
@@ -3313,7 +3336,6 @@ const resolvers = {
 
           // Solo regenerar si es tipo FV y tiene metadata (plantilla)
           if (doc.code === 'FV' && doc.metadata) {
-            console.log(`🔄 Regenerando plantilla FV con marca de agua RECHAZADO para documento ${documentId}...`);
 
             const parsedTemplateData = typeof doc.metadata === 'object' ? doc.metadata : JSON.parse(doc.metadata);
 
@@ -3669,30 +3691,6 @@ const resolvers = {
       // ========== LOS BACKUPS NUNCA SE ELIMINAN ==========
       // Los archivos originales deben mantenerse SIEMPRE
       // Solo se eliminan cuando se elimina el documento completo (en deleteDocument)
-      console.log('📦 Los backups de PDFs originales se mantienen intactos');
-
-      // Debug: Listar todos los firmantes y firmas
-      const debugSigners = await query(`
-        SELECT
-          ds.id as ds_id,
-          ds.user_id,
-          ds.is_causacion_group,
-          ds.grupo_codigo,
-          ds.order_position,
-          u.name as user_name,
-          cg.nombre as grupo_nombre,
-          s.id as signature_id,
-          s.signer_id,
-          s.status as signature_status
-        FROM document_signers ds
-        LEFT JOIN users u ON ds.user_id = u.id
-        LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
-        LEFT JOIN signatures s ON s.document_id = ds.document_id
-        WHERE ds.document_id = $1
-        ORDER BY ds.order_position
-      `, [documentId]);
-
-      console.log('📋 [DEBUG] Firmantes y firmas del documento:', JSON.stringify(debugSigners.rows, null, 2));
 
       // Contar estado basado en document_signers (incluye grupos de causación)
       const signersCountResult = await query(
@@ -3738,14 +3736,6 @@ const resolvers = {
       const pending = totalSigners - signed - rejected;
       const total = totalSigners;
 
-      console.log('🔍 [STATUS CHECK] Verificación de estado del documento:', {
-        documentId,
-        total: totalSigners,
-        signed,
-        rejected,
-        pending
-      });
-
       let newStatus = 'pending';
       let shouldSetCompletedAt = false;
 
@@ -3764,7 +3754,6 @@ const resolvers = {
         newStatus = 'pending';
       }
 
-      console.log(`📊 [STATUS CHECK] Estado calculado: ${newStatus} (completedAt: ${shouldSetCompletedAt})`);
 
       if (shouldSetCompletedAt) {
         await query(
@@ -3795,8 +3784,6 @@ const resolvers = {
           const hasMetadata = docInfo.metadata && typeof docInfo.metadata === 'object' && Object.keys(docInfo.metadata).length > 0;
 
           if (isFVDocument && hasMetadata) {
-            console.log('📋 Regenerando plantilla FV con firmas actualizadas...');
-
             const templateData = typeof docInfo.metadata === 'string'
               ? JSON.parse(docInfo.metadata)
               : docInfo.metadata;
@@ -3805,12 +3792,9 @@ const resolvers = {
             const firmasActuales = await obtenerFirmasDocumento(documentId, templateData);
 
             // Obtener retenciones activas del documento
-            console.log(`🔍 docInfo.retention_data RAW:`, docInfo.retention_data);
             const retentionData = docInfo.retention_data
               ? (typeof docInfo.retention_data === 'string' ? JSON.parse(docInfo.retention_data) : docInfo.retention_data).filter(r => r.activa)
               : [];
-            console.log(`📦 Retenciones activas a pasar al PDF:`, retentionData);
-            console.log(`📊 Cantidad de retenciones activas:`, retentionData.length);
 
             // Regenerar plantilla con firmas
             const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, retentionData);
@@ -3830,7 +3814,6 @@ const resolvers = {
             if (docInfo.original_pdf_backup) {
               try {
                 const backupPathsArray = JSON.parse(docInfo.original_pdf_backup);
-                console.log(`📦 Cargando ${backupPathsArray.length} archivo(s) de backup...`);
 
                 for (let i = 0; i < backupPathsArray.length; i++) {
                   const relPath = backupPathsArray[i];
@@ -3840,7 +3823,6 @@ const resolvers = {
                   try {
                     await fs.access(backupFullPath);
                     backupFilePaths.push(backupFullPath);
-                    console.log(`   ✅ Backup ${i + 1}/${backupPathsArray.length}: ${path.basename(backupFullPath)}`);
                   } catch (accessError) {
                     console.error(`   ❌ Backup ${i + 1}/${backupPathsArray.length} NO ENCONTRADO: ${backupFullPath}`);
                   }
@@ -3848,8 +3830,6 @@ const resolvers = {
 
                 if (backupFilePaths.length === 0) {
                   console.error('❌ CRÍTICO: No se encontró ningún backup de PDF original');
-                } else {
-                  console.log(`✅ ${backupFilePaths.length} de ${backupPathsArray.length} backups cargados exitosamente`);
                 }
               } catch (error) {
                 console.error('❌ Error al cargar backups:', error.message);
@@ -3962,7 +3942,6 @@ const resolvers = {
             await fs.unlink(tempPlanillaPath);
             await fs.unlink(tempMergedPath);
 
-            console.log('✅ Plantilla FV regenerada con firmas actualizadas');
           }
         }
       } catch (regenerateError) {
@@ -4128,7 +4107,6 @@ const resolvers = {
                   );
 
                   if (insertResult.rows.length > 0) {
-                    console.log(`✅ Notificación creada para siguiente firmante: ${nextSigner.name}`);
 
                     // Obtener información del creador del documento para el evento
                     const creatorInfo2 = await query('SELECT id, name, email FROM users WHERE id = $1', [doc.uploaded_by]);
@@ -4212,7 +4190,7 @@ const resolvers = {
 
                   console.log(`✅ Correo de documento completado enviado al creador: ${creator.email}`);
                 } else {
-                  console.log(`⏭️ Notificaciones desactivadas para el creador: ${creator.email}`);
+                  // console.log(`⏭️ Notificaciones desactivadas para el creador: ${creator.email}`);
                 }
               }
             } catch (emailError) {
@@ -4228,7 +4206,6 @@ const resolvers = {
 
       // ========== ACTUALIZAR PÁGINA DE FIRMANTES ==========
       try {
-        console.log(`📋 Actualizando página de firmantes para documento ${documentId}...`);
 
         const docInfoResult = await query(
           `SELECT d.*, u.name as uploader_name, dt.name as document_type_name
@@ -4320,7 +4297,6 @@ const resolvers = {
 
           await updateSignersPage(pdfPath, signers, documentInfo);
 
-          console.log('✅ Página de firmantes actualizada después de firmar');
 
           // Verificar si tiene retenciones activas (puede haberse perdido el sello al actualizar páginas)
           const hasActiveRetentions = await checkIfDocumentHasActiveRetentions(documentId);
@@ -4430,7 +4406,6 @@ const resolvers = {
       }
 
       // ========== PROCESAR RETENCIONES MÚLTIPLES SI SE PROPORCIONARON ==========
-      console.log(`🔍 [DEBUG] Parámetros de retención recibidos (JSON):`, retentions);
 
       // Parsear retenciones desde JSON
       let parsedRetentions = null;
@@ -4630,9 +4605,7 @@ const resolvers = {
                           console.log(`📦 ✅ Retenciones activas después de retener (${activeRetentions.length}):`, activeRetentions);
 
                           // Regenerar PDF con retenciones
-                          console.log(`🔄 Llamando a generateFacturaTemplatePDF con ${activeRetentions.length} retenciones...`);
                           const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
-                          console.log(`✅ PDF de plantilla generado (${templatePdfBuffer.length} bytes)`);
 
                           // Guardar PDF en archivo temporal
                           const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
@@ -4663,7 +4636,7 @@ const resolvers = {
                                 try {
                                   await fs.access(backupFullPath);
                                   backupFilePaths.push(backupFullPath);
-                                  console.log(`   ✅ Backup encontrado: ${path.basename(backupFullPath)}`);
+                                  // console.log(`   ✅ Backup encontrado: ${path.basename(backupFullPath)}`);
                                 } catch (e) {
                                   console.warn(`   ⚠️ Backup no encontrado: ${backupFullPath}`);
                                 }
@@ -4812,7 +4785,6 @@ const resolvers = {
         signerId: user.id,
         status: newStatus
       };
-      console.log(`🔔 [WEBSOCKET] Emitiendo evento de firma:`, wsData);
       websocketService.emitDocumentSigned(documentId, wsData);
 
       // Verificar si el documento está completamente firmado y sin retenciones
@@ -5601,20 +5573,13 @@ const resolvers = {
 
       // Asignar role_codes a cada signer usando los mapas (sin queries adicionales)
       for (const signer of signersResult.rows) {
-        console.log(`🔍 [signatures resolver] Procesando signer: user_id=${signer.user_id}, assigned_role_ids=${JSON.stringify(signer.assigned_role_ids)}, role_names=${JSON.stringify(signer.role_names)}`);
-
         if (signer.assigned_role_ids && signer.assigned_role_ids.length > 0) {
           // Usar assigned_role_ids si está disponible
-          console.log(`  ➡️ Usando assigned_role_ids`);
           signer.role_codes = signer.assigned_role_ids.map(id => roleIdToCodeMap[id]).filter(code => code);
-          console.log(`  ✅ role_codes obtenidos: ${JSON.stringify(signer.role_codes)}`);
         } else if (signer.role_names && signer.role_names.length > 0) {
           // Fallback: buscar por role_name (compatibilidad con documentos antiguos)
-          console.log(`  ➡️ Fallback: usando role_names`);
           signer.role_codes = signer.role_names.map(name => roleNameToCodeMap[name]).filter(code => code);
-          console.log(`  ✅ role_codes obtenidos (fallback): ${JSON.stringify(signer.role_codes)}`);
         } else {
-          console.log(`  ❌ No assigned_role_ids ni role_names disponibles`);
           signer.role_codes = [];
         }
       }
@@ -5702,13 +5667,6 @@ const resolvers = {
               _is_group_pending: true
             };
 
-            console.log(`📦 [signatures] Grupo pendiente creado:`, {
-              grupo_codigo: virtualGroupSignature.grupo_codigo,
-              grupo_nombre: virtualGroupSignature.grupo_nombre,
-              members: virtualGroupSignature.members,
-              order_position: virtualGroupSignature.order_position
-            });
-
             results.push(virtualGroupSignature);
           }
         } else {
@@ -5721,7 +5679,6 @@ const resolvers = {
 
           if (userSignature.rows.length > 0) {
             const sig = userSignature.rows[0];
-            console.log(`🔍 [signatures] Usuario ${signer.user_name}: status=${sig.status}, role_names from DS=${JSON.stringify(signer.role_names)}, role_name from DS=${signer.role_name}`);
             results.push({
               ...sig,
               order_position: signer.order_position,
@@ -5754,12 +5711,6 @@ const resolvers = {
           }
         }
       }
-
-      console.log(`📊 [signatures] Total de firmas devueltas: ${results.length}`);
-      console.log(`📋 [signatures] Grupos de causación pendientes:`, results.filter(r => r.isCausacionGroup && r.status === 'pending').map(r => ({
-        grupo: r.grupo_codigo,
-        members: r.members
-      })));
 
       return results;
     },
@@ -5857,7 +5808,6 @@ const resolvers = {
     members: (parent) => {
       // Si es un grupo de causación pendiente, devolver los miembros
       if (parent.members && Array.isArray(parent.members)) {
-        console.log(`🔍 [Signature.members resolver] Devolviendo ${parent.members.length} miembros para grupo ${parent.grupo_codigo}`);
         return parent.members;
       }
       return null;

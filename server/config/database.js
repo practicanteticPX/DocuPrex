@@ -34,13 +34,6 @@ pool.on('error', (err) => {
 });
 
 /**
- * Evento de conexión del pool
- */
-pool.on('connect', () => {
-  console.log('🔗 Nueva conexión establecida con PostgreSQL');
-});
-
-/**
  * Verifica la conexión a la base de datos
  */
 async function testConnection() {

@@ -215,11 +215,6 @@ router.get('/search/:numeroControl', async (req, res) => {
       });
     }
 
-    console.log('📋 Factura encontrada:', JSON.stringify(facturaData, null, 2));
-    console.log('🏢 CIA:', facturaData.cia);
-    console.log('📅 fecha_factura:', facturaData.fecha_factura);
-    console.log('📅 fecha_entrega:', facturaData.fecha_entrega);
-
     const response = {
       numero_control: facturaData.numero_control,
       cia: facturaData.cia,
@@ -273,8 +268,6 @@ router.post('/marcar-en-proceso/:numeroControl', async (req, res) => {
         message: 'No se encontró la factura para actualizar'
       });
     }
-
-    console.log(`✅ Factura ${numeroControl} marcada como en_proceso`);
 
     return res.status(200).json({
       success: true,
@@ -368,7 +361,7 @@ router.post('/desmarcar-en-proceso/:numeroControl', async (req, res) => {
       });
     }
 
-    console.log(`✅ Factura ${numeroControl} desmarcada de en_proceso`);
+    // console.log(`✅ Factura ${numeroControl} desmarcada de en_proceso`);
 
     return res.status(200).json({
       success: true,
