@@ -10,9 +10,7 @@ function startSessionCleanupService() {
   // Ejecutar inmediatamente al iniciar el servidor
   cleanupExpiredSessions()
     .then(count => {
-      if (count > 0) {
-        console.log(`🧹 Limpieza inicial: ${count} sesiones expiradas marcadas como inactivas`);
-      }
+      console.log(`🧹 Limpieza inicial: ${count} sesiones expiradas marcadas como inactivas`);
     })
     .catch(err => {
       console.error('❌ Error en limpieza inicial de sesiones:', err);
@@ -22,9 +20,7 @@ function startSessionCleanupService() {
   setInterval(async () => {
     try {
       const count = await cleanupExpiredSessions();
-      if (count > 0) {
-        console.log(`🧹 Limpieza automática: ${count} sesiones expiradas marcadas como inactivas`);
-      }
+      console.log(`🧹 Limpieza automática: ${count} sesiones expiradas marcadas como inactivas`);
     } catch (error) {
       console.error('❌ Error en limpieza automática de sesiones:', error);
     }

@@ -17,8 +17,8 @@ export default defineConfig({
     allowedHosts: [
       'docuprex.com',
       'www.docuprex.com',
-      '192.168.0.30',
-      'localhost'
+      'localhost',
+      '.local' // Permite cualquier dominio .local
     ],
     hmr: {
       // Configuración del HMR para que funcione con dominio y diferentes hosts
@@ -54,8 +54,8 @@ export default defineConfig({
     allowedHosts: [
       'docuprex.com',
       'www.docuprex.com',
-      '192.168.0.30',
-      'localhost'
+      'localhost',
+      '.local' // Permite cualquier dominio .local
     ],
     proxy: {
       '/graphql': {

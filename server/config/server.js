@@ -4,6 +4,26 @@
  */
 
 require('dotenv').config();
+const os = require('os');
+
+/**
+ * Detecta la IP local de la máquina automáticamente
+ * @returns {string} IP local o localhost como fallback
+ */
+const getLocalIp = () => {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // IPv4, no interna, no loopback
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+};
+
+const LOCAL_IP = getLocalIp();
 
 /**
  * Configuración del servidor
@@ -18,21 +38,21 @@ const serverConfig = {
   // Entorno
   env: process.env.NODE_ENV || 'development',
 
-  // Backend URL completa
-  backendUrl: process.env.BACKEND_URL || 'http://192.168.0.30:5001',
+  // Backend URL completa (detecta IP automáticamente)
+  backendUrl: process.env.BACKEND_URL || `http://${LOCAL_IP}:5001`,
 
-  // Frontend URL
-  frontendUrl: process.env.FRONTEND_URL || 'http://192.168.0.30:5173',
+  // Frontend URL (detecta IP automáticamente)
+  frontendUrl: process.env.FRONTEND_URL || `http://${LOCAL_IP}:5173`,
 
-  // Hosts permitidos
+  // Hosts permitidos (incluye IP detectada dinámicamente)
   allowedHosts: process.env.ALLOWED_HOSTS
     ? process.env.ALLOWED_HOSTS.split(',')
-    : ['localhost', '192.168.0.30', 'docuprex.com'],
+    : ['localhost', LOCAL_IP, 'docuprex.com'],
 
-  // CORS origins permitidos
+  // CORS origins permitidos (incluye IP detectada dinámicamente)
   corsOrigins: process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
-    : ['http://192.168.0.30:5173', 'http://localhost:5173', 'https://docuprex.com', 'https://www.docuprex.com'],
+    : [`http://${LOCAL_IP}:5173`, 'http://localhost:5173', 'https://docuprex.com', 'https://www.docuprex.com'],
 
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',

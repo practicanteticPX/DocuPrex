@@ -87,11 +87,33 @@ function App() {
     setUser(userData)
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    setIsAuthenticated(false)
-    setUser(null)
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('token');
+
+      // Cerrar sesión en el backend
+      if (token) {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            query: `mutation { logout }`
+          })
+        });
+        console.log('✅ Sesión cerrada en el backend');
+      }
+    } catch (error) {
+      console.error('⚠️ Error cerrando sesión en backend (continuando logout local):', error);
+    } finally {
+      // Limpiar localStorage independientemente del resultado
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setIsAuthenticated(false);
+      setUser(null);
+    }
   }
 
   // Monitorear el estado del servidor y desloguear si se detecta un reinicio

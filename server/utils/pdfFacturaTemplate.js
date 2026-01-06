@@ -19,9 +19,10 @@ const { generateFacturaHTML } = require('./facturaTemplateHTML');
 async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected = false, retentionData = []) {
   let browser = null;
   let page = null;
+  const operationId = `pdf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   try {
-    console.log('📋 Generando PDF de plantilla de factura (HTML → PDF)...');
+    console.log(`📋 [${operationId}] Generando PDF de plantilla de factura (HTML → PDF)...`);
     console.log('🔍 Retenciones a incluir en PDF:', retentionData);
 
     const htmlContent = generateFacturaHTML({
@@ -44,7 +45,9 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
     });
 
     // Obtener browser del pool (reutiliza instancias para velocidad)
+    console.log(`🔍 [${operationId}] Solicitando browser del pool...`);
     browser = await puppeteerPool.getBrowser();
+    console.log(`✅ [${operationId}] Browser obtenido del pool`);
 
     page = await browser.newPage();
 
@@ -73,17 +76,32 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
       }
     });
 
-    console.log('✅ PDF de plantilla generado correctamente (página grande)');
+    console.log(`✅ [${operationId}] PDF de plantilla generado correctamente (${Buffer.byteLength(pdfBuffer)} bytes)`);
     return pdfBuffer;
 
   } catch (error) {
-    console.error('❌ Error generando PDF de plantilla:', error);
+    console.error(`❌ [${operationId}] Error generando PDF de plantilla:`, error);
     throw new Error(`Error al generar PDF de plantilla: ${error.message}`);
   } finally {
-    // CRITICAL: Cerrar la página para liberar memoria
-    // NO cerrar el browser porque pertenece al pool
+    // CRITICAL: Cerrar la página y devolver browser al pool
+    // Cada operación en su propio try-catch para garantizar que ambas se ejecuten
     if (page) {
-      await page.close();
+      try {
+        await page.close();
+        console.log(`🗑️ [${operationId}] Página cerrada correctamente`);
+      } catch (closeError) {
+        console.error(`⚠️ [${operationId}] Error cerrando página (no crítico):`, closeError.message);
+      }
+    }
+
+    if (browser) {
+      try {
+        await puppeteerPool.releaseBrowser(browser);
+        console.log(`✅ [${operationId}] Browser liberado al pool correctamente`);
+      } catch (releaseError) {
+        console.error(`❌ [${operationId}] Error CRÍTICO liberando browser:`, releaseError);
+        // Este es crítico porque el browser se queda bloqueado en el pool
+      }
     }
   }
 }

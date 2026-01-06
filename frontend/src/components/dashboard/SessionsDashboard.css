@@ -159,85 +159,104 @@
   font-family: 'Google Sans', sans-serif;
 }
 
-/* Sessions Count */
-.sessions-count {
+/* Sessions Count - Nuevo estilo */
+.sessions-count-new {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   margin-bottom: 24px;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
-  border: 1px solid #C7D2FE;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
   border-radius: 10px;
 }
 
-.sessions-count-number {
-  font-size: 32px;
-  font-weight: 700;
-  color: #3B82F6;
-  font-family: 'Google Sans', sans-serif;
-  line-height: 1;
+.sessions-count-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.sessions-count-label {
+.sessions-count-icon {
+  width: 20px;
+  height: 20px;
+  color: #6B7280;
+}
+
+.sessions-count-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sessions-count-text strong {
   font-size: 14px;
-  color: #4B5563;
+  font-weight: 600;
+  color: #1F2937;
   font-family: 'Google Sans', sans-serif;
-  font-weight: 500;
 }
 
-.sessions-refresh-btn {
-  margin-left: auto;
-  background-color: white;
-  border: 2px solid #C7D2FE;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: #3B82F6;
-  transition: all 0.15s ease;
+.sessions-count-status {
+  font-size: 12px;
+  color: #10B981;
+  font-weight: 500;
+  font-family: 'Google Sans', sans-serif;
+}
+
+.sessions-refresh-btn-new {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 8px 16px;
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #6B7280;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Google Sans', sans-serif;
+  transition: all 0.15s ease;
 }
 
-.sessions-refresh-btn:hover:not(:disabled) {
+.sessions-refresh-btn-new:hover:not(:disabled) {
   background-color: #F9FAFB;
-  border-color: #A5B4FC;
+  border-color: #D1D5DB;
 }
 
-.sessions-refresh-btn:disabled {
+.sessions-refresh-btn-new:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.sessions-refresh-btn svg {
+.sessions-refresh-btn-new svg {
   width: 16px;
   height: 16px;
 }
 
-/* Table */
-.sessions-table-container {
+/* Table - Nuevo estilo */
+.sessions-table-container-new {
   overflow-x: auto;
   border: 1px solid #E5E7EB;
   border-radius: 10px;
   background-color: white;
 }
 
-.sessions-table {
+.sessions-table-new {
   width: 100%;
   border-collapse: collapse;
   font-family: 'Google Sans', sans-serif;
 }
 
-.sessions-table thead {
-  background: linear-gradient(to bottom, #F9FAFB 0%, #F3F4F6 100%);
-  border-bottom: 2px solid #E5E7EB;
+.sessions-table-new thead {
+  background: #F9FAFB;
+  border-bottom: 1px solid #E5E7EB;
 }
 
-.sessions-table thead th {
-  padding: 14px 16px;
+.sessions-table-new thead th {
+  padding: 12px 16px;
   text-align: left;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #6B7280;
   text-transform: uppercase;
@@ -245,87 +264,98 @@
   white-space: nowrap;
 }
 
-.sessions-table tbody tr {
+.sessions-table-new tbody tr {
   border-bottom: 1px solid #F0F1F3;
   transition: all 0.15s ease;
 }
 
-.sessions-table tbody tr:hover {
-  background-color: #F9FAFB;
+.sessions-table-new tbody tr:hover {
+  background-color: #FAFBFC;
 }
 
-.sessions-table tbody tr:last-child {
+.sessions-table-new tbody tr:last-child {
   border-bottom: none;
 }
 
-.sessions-table tbody tr.session-expiring {
-  background-color: #FEF2F2;
-}
-
-.sessions-table tbody tr.session-expiring:hover {
-  background-color: #FEE2E2;
-}
-
-.sessions-table tbody td {
+.sessions-table-new tbody td {
   padding: 16px;
   font-size: 14px;
   color: #1F2937;
+  vertical-align: middle;
+}
+
+/* Usuario con avatar */
+.session-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Google Sans', sans-serif;
+  flex-shrink: 0;
 }
 
 .session-user-name {
-  font-weight: 600;
+  font-weight: 500;
   color: #1F2937;
-}
-
-.session-email {
-  color: #6B7280;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .session-time {
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  color: #4B5563;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: #6B7280;
   white-space: nowrap;
 }
 
-.session-elapsed {
-  font-weight: 500;
-  color: #3B82F6;
-  white-space: nowrap;
-}
-
-.session-remaining {
-  font-weight: 600;
-  color: #10B981;
-  white-space: nowrap;
-  display: flex;
+/* Time badges */
+.session-time-badge {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-.session-remaining.warning {
-  color: #EF4444;
-}
-
-.expiring-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  background-color: #FEF2F2;
-  border: 1px solid #FCA5A5;
-  border-radius: 4px;
-  font-size: 10px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  color: #DC2626;
-  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.session-time-badge.elapsed {
+  background-color: #D1FAE5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+}
+
+.session-time-badge.elapsed svg {
+  width: 14px;
+  height: 14px;
+  color: #059669;
+}
+
+.session-time-badge.remaining {
+  background-color: transparent;
+  color: #1F2937;
+  font-weight: 600;
+  padding: 6px 0;
 }
 
 .session-actions {
   text-align: right;
 }
 
-.session-close-btn {
+.session-close-btn-new {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -333,26 +363,24 @@
   font-size: 13px;
   font-weight: 500;
   color: white;
-  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  background: #EF4444;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
   font-family: 'Google Sans', sans-serif;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
 }
 
-.session-close-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+.session-close-btn-new:hover:not(:disabled) {
+  background: #DC2626;
 }
 
-.session-close-btn:disabled {
+.session-close-btn-new:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  box-shadow: none;
 }
 
-.session-close-btn svg {
+.session-close-btn-new svg {
   width: 14px;
   height: 14px;
 }
@@ -389,72 +417,6 @@
 .sessions-btn-close:hover {
   background-color: #F9FAFB;
   border-color: #CBD5E1;
-}
-
-/* Responsive */
-@media (max-width: 1200px) {
-  .sessions-table {
-    font-size: 13px;
-  }
-
-  .sessions-table thead th {
-    padding: 12px 12px;
-    font-size: 11px;
-  }
-
-  .sessions-table tbody td {
-    padding: 14px 12px;
-    font-size: 13px;
-  }
-}
-
-@media (max-width: 768px) {
-  .sessions-modal-header {
-    padding: 24px;
-  }
-
-  .sessions-modal-header h2 {
-    font-size: 20px;
-  }
-
-  .sessions-modal-body {
-    padding: 24px;
-  }
-
-  .sessions-modal-footer {
-    padding: 20px 24px;
-  }
-
-  .sessions-count {
-    padding: 12px 16px;
-  }
-
-  .sessions-count-number {
-    font-size: 24px;
-  }
-
-  .sessions-table-container {
-    overflow-x: scroll;
-  }
-
-  .sessions-table {
-    min-width: 700px;
-  }
-
-  .sessions-table thead th {
-    padding: 10px 8px;
-    font-size: 10px;
-  }
-
-  .sessions-table tbody td {
-    padding: 12px 8px;
-    font-size: 12px;
-  }
-
-  .session-close-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-  }
 }
 
 /* Modal de Confirmación */
@@ -588,17 +550,75 @@
 }
 
 .confirm-btn-confirm {
-  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  background: #EF4444;
   color: white;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
 }
 
 .confirm-btn-confirm:hover {
-  background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  background: #DC2626;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .sessions-table-new {
+    font-size: 13px;
+  }
+
+  .sessions-table-new thead th {
+    padding: 12px 12px;
+    font-size: 11px;
+  }
+
+  .sessions-table-new tbody td {
+    padding: 14px 12px;
+    font-size: 13px;
+  }
 }
 
 @media (max-width: 768px) {
+  .sessions-modal-header {
+    padding: 24px;
+  }
+
+  .sessions-modal-header h2 {
+    font-size: 20px;
+  }
+
+  .sessions-modal-body {
+    padding: 24px;
+  }
+
+  .sessions-modal-footer {
+    padding: 20px 24px;
+  }
+
+  .sessions-count-new {
+    padding: 12px 16px;
+  }
+
+  .sessions-table-container-new {
+    overflow-x: scroll;
+  }
+
+  .sessions-table-new {
+    min-width: 700px;
+  }
+
+  .sessions-table-new thead th {
+    padding: 10px 8px;
+    font-size: 10px;
+  }
+
+  .sessions-table-new tbody td {
+    padding: 12px 8px;
+    font-size: 12px;
+  }
+
+  .session-close-btn-new {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
   .confirm-modal-content {
     max-width: 95%;
     margin: 0 16px;

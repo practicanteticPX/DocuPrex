@@ -23,21 +23,14 @@ const CLOSE_SESSION_MUTATION = `
   }
 `;
 
-/**
- * Dashboard de sesiones activas (Solo Admin)
- * Permite ver todas las sesiones activas del sistema y cerrarlas remotamente
- * TIEMPO REAL: Actualiza automáticamente vía WebSocket
- *
- * SEGURIDAD: Solo visible para e.zuluaga@prexxa.com.co
- */
 function SessionsDashboard({ isOpen, onClose, socket }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [closingSessionId, setClosingSessionId] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, sessionId: null, userName: '' });
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
-  // Cargar sesiones activas
   const fetchSessions = async () => {
     try {
       setLoading(true);
@@ -52,28 +45,21 @@ function SessionsDashboard({ isOpen, onClose, socket }) {
     }
   };
 
-  // Abrir modal de confirmación
   const handleOpenConfirmModal = (sessionId, userName) => {
     setConfirmModal({ isOpen: true, sessionId, userName });
   };
 
-  // Cancelar cierre de sesión
   const handleCancelClose = () => {
     setConfirmModal({ isOpen: false, sessionId: null, userName: '' });
   };
 
-  // Confirmar cierre de sesión remota
   const handleConfirmClose = async () => {
     const { sessionId, userName } = confirmModal;
 
     try {
       setClosingSessionId(sessionId);
       setConfirmModal({ isOpen: false, sessionId: null, userName: '' });
-
-      console.log(`🔐 Cerrando sesión ${sessionId} del usuario ${userName}...`);
       await graphqlClient.mutate(CLOSE_SESSION_MUTATION, { sessionId });
-
-      console.log(`✅ Sesión ${sessionId} cerrada exitosamente`);
     } catch (err) {
       console.error('❌ Error cerrando sesión:', err);
       setError(err.message || 'Error al cerrar la sesión');
@@ -82,16 +68,14 @@ function SessionsDashboard({ isOpen, onClose, socket }) {
     }
   };
 
-  // Cargar sesiones al abrir el modal y conectar WebSocket
   useEffect(() => {
     if (isOpen) {
       fetchSessions();
 
-      // Escuchar eventos de WebSocket en TIEMPO REAL
       if (socket) {
         const handleSessionsUpdated = (data) => {
           console.log('📡 Sesiones actualizadas (WebSocket):', data);
-          fetchSessions(); // Recargar inmediatamente
+          fetchSessions();
         };
 
         socket.on('sessions:updated', handleSessionsUpdated);
@@ -103,7 +87,61 @@ function SessionsDashboard({ isOpen, onClose, socket }) {
     }
   }, [isOpen, socket]);
 
-  // Formatear fecha
+  // Bloquear scroll vertical cuando el modal está abierto
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isOpen]);
+
+  // Actualizar tiempo cada segundo para mostrar en tiempo real
+  useEffect(() => {
+    if (isOpen) {
+      const interval = setInterval(() => {
+        setCurrentTime(Date.now());
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [isOpen]);
+
+  const getInitials = (name) => {
+    if (!name) return '??';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const formatTime = (hours) => {
+    const totalSeconds = Math.floor(hours * 3600);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const calculateElapsedTime = (loginTime) => {
+    const login = new Date(loginTime);
+    const now = currentTime;
+    const diffMs = now - login.getTime();
+    const hours = diffMs / (1000 * 60 * 60);
+    return formatTime(hours);
+  };
+
+  const calculateRemainingTime = (loginTime) => {
+    const login = new Date(loginTime);
+    const now = currentTime;
+    const diffMs = now - login.getTime();
+    const elapsedHours = diffMs / (1000 * 60 * 60);
+    const remainingHours = Math.max(0, 8 - elapsedHours);
+    return formatTime(remainingHours);
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleString('es-CO', {
@@ -112,7 +150,8 @@ function SessionsDashboard({ isOpen, onClose, socket }) {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
+      second: '2-digit',
+      hour12: true
     });
   };
 
@@ -153,19 +192,27 @@ function SessionsDashboard({ isOpen, onClose, socket }) {
           ) : sessions.length === 0 ? (
             <div className="sessions-empty">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.3503 17.623 3.8507 18.1676 4.55231C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89317 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               <p>No hay sesiones activas en este momento</p>
             </div>
           ) : (
             <>
-              <div className="sessions-count">
-                <span className="sessions-count-number">{sessions.length}</span>
-                <span className="sessions-count-label">
-                  {sessions.length === 1 ? 'sesión activa' : 'sesiones activas'}
-                </span>
+              <div className="sessions-count-new">
+                <div className="sessions-count-badge">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="sessions-count-icon">
+                    <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="sessions-count-text">
+                    <strong>Sesiones Activas</strong>
+                    <span className="sessions-count-status">● {sessions.length} en curso</span>
+                  </span>
+                </div>
                 <button
-                  className="sessions-refresh-btn"
+                  className="sessions-refresh-btn-new"
                   onClick={fetchSessions}
                   disabled={loading}
                   title="Actualizar lista"
@@ -173,49 +220,59 @@ function SessionsDashboard({ isOpen, onClose, socket }) {
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M4 4V9H4.58152M19.9381 11C19.446 7.05369 16.0796 4 12 4C8.64262 4 5.76829 6.06817 4.58152 9M4.58152 9H9M20 20V15H19.4185M19.4185 15C18.2317 17.9318 15.3574 20 12 20C7.92038 20 4.55399 16.9463 4.06189 13M19.4185 15H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
+                  Actualizar
                 </button>
               </div>
 
-              <div className="sessions-table-container">
-                <table className="sessions-table">
+              <div className="sessions-table-container-new">
+                <table className="sessions-table-new">
                   <thead>
                     <tr>
-                      <th>Usuario</th>
-                      <th>Email</th>
-                      <th>Inicio de Sesión</th>
-                      <th>Tiempo Transcurrido</th>
-                      <th>Tiempo Restante</th>
-                      <th>Acción</th>
+                      <th>USUARIO</th>
+                      <th>INICIO DE SESIÓN</th>
+                      <th>TIEMPO TRANSCURRIDO</th>
+                      <th>TIEMPO RESTANTE</th>
+                      <th>ACCIÓN</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sessions.map((session) => (
-                      <tr key={session.id} className={session.hoursRemaining < 1 ? 'session-expiring' : ''}>
-                        <td className="session-user-name">{session.userName}</td>
-                        <td className="session-email">{session.userEmail}</td>
-                        <td className="session-time">{formatDate(session.loginTime)}</td>
-                        <td className="session-elapsed">
-                          {session.hoursElapsed.toFixed(2)} h
+                      <tr key={session.id}>
+                        <td>
+                          <div className="session-user-info">
+                            <div className="session-avatar">
+                              {getInitials(session.userName)}
+                            </div>
+                            <span className="session-user-name">{session.userName}</span>
+                          </div>
                         </td>
-                        <td className={`session-remaining ${session.hoursRemaining < 1 ? 'warning' : ''}`}>
-                          {session.hoursRemaining.toFixed(2)} h
-                          {session.hoursRemaining < 1 && (
-                            <span className="expiring-badge">¡Expirando!</span>
-                          )}
+                        <td className="session-time">{formatDate(session.loginTime)}</td>
+                        <td>
+                          <div className="session-time-badge elapsed">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                              <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                            {calculateElapsedTime(session.loginTime)}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="session-time-badge remaining">
+                            {calculateRemainingTime(session.loginTime)}
+                          </div>
                         </td>
                         <td className="session-actions">
                           <button
-                            className="session-close-btn"
+                            className="session-close-btn-new"
                             onClick={() => handleOpenConfirmModal(session.id, session.userName)}
                             disabled={closingSessionId === session.id}
-                            title="Cerrar esta sesión remotamente"
                           >
                             {closingSessionId === session.id ? (
                               <span className="btn-loading">...</span>
                             ) : (
                               <>
                                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9M16 17L21 12M21 12L16 7M21 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                 </svg>
                                 Cerrar
                               </>
@@ -238,7 +295,6 @@ function SessionsDashboard({ isOpen, onClose, socket }) {
         </div>
       </div>
 
-      {/* Modal de Confirmación Personalizado */}
       {confirmModal.isOpen && (
         <div className="confirm-modal-overlay" onClick={handleCancelClose}>
           <div className="confirm-modal-content" onClick={(e) => e.stopPropagation()}>
