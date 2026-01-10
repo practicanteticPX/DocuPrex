@@ -1390,7 +1390,7 @@ const resolvers = {
       const docResult = await query(
         `SELECT d.*, dt.code as document_type_code
          FROM documents d
-         JOIN document_types dt ON d.document_type_id = dt.id
+         LEFT JOIN document_types dt ON d.document_type_id = dt.id
          WHERE d.id = $1`,
         [documentId]
       );
@@ -1982,6 +1982,7 @@ const resolvers = {
           // console.log(`📋 Generando página de portada para documento ${documentId}...`);
         }
 
+        console.log(`🔍 assignSigners: Buscando documento ID=${documentId}...`);
         const docInfoResult = await query(
           `SELECT d.*, u.name as uploader_name, dt.name as document_type_name, dt.code as document_type_code
           FROM documents d
@@ -1991,9 +1992,12 @@ const resolvers = {
           [documentId]
         );
 
+        console.log(`   📊 Resultado de búsqueda: ${docInfoResult.rows.length} fila(s)`);
         if (docInfoResult.rows.length === 0) {
+          console.error(`❌ assignSigners: Documento ID=${documentId} NO ENCONTRADO en la base de datos`);
           throw new Error('Documento no encontrado');
         }
+        console.log(`✅ assignSigners: Documento ID=${documentId} encontrado - Título: "${docInfoResult.rows[0].title}"`);
 
         const docInfo = docInfoResult.rows[0];
 

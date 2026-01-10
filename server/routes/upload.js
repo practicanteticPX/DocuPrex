@@ -129,7 +129,11 @@ router.post('/upload', authenticate, (req, res) => {
       // Registrar en logs
       pdfLogger.logDocumentCreated(req.user.name, document.title);
 
-      console.log(`âœ… Documento subido: ${document.title}`);
+      console.log(`✅ Documento subido exitosamente:`);
+      console.log(`   📄 ID: ${document.id}`);
+      console.log(`   📝 Título: ${document.title}`);
+      console.log(`   🏷️  Tipo: ${document.document_type_id || 'sin tipo'}`);
+      console.log(`   👤 Subido por: ${req.user.name} (ID: ${req.user.id})`);
 
       res.json({
         success: true,
@@ -226,10 +230,15 @@ router.post('/upload-multiple', authenticate, (req, res) => {
         // Registrar en logs
         pdfLogger.logDocumentCreated(req.user.name, document.title);
 
+        console.log(`✅ Documento ${created.length + 1} subido exitosamente:`);
+        console.log(`   📄 ID: ${document.id}`);
+        console.log(`   📝 Título: ${document.title}`);
+        console.log(`   🏷️  Tipo: ${document.document_type_id || 'sin tipo'}`);
+
         created.push(document);
       }
 
-      console.log(`âœ” Documentos subidos: ${created.length}`);
+      console.log(`✅ Total de documentos subidos: ${created.length}`);
       return res.json({
         success: true,
         message: `Se subieron ${created.length} documento(s) exitosamente`,

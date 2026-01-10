@@ -5,6 +5,196 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2026-01-09 - Rediseño de Stepper para Documentos FV (Legalización de Facturas)
+
+#### Changes Implemented:
+
+1. **Nuevos Pasos del Stepper para FV:**
+   - **ANTES:** `['Buscar factura', 'Diligenciar planilla', 'Enviar']`
+   - **DESPUÉS:** `['Buscar factura', 'Cargar documentos', 'Enviar']`
+   - **Razón:** El paso 2 ahora refleja correctamente que se están cargando documentos (descripción + archivos), no solo diligenciando la plantilla
+
+1.1. **Textos Específicos para Pantalla de Búsqueda de Factura:**
+   - **Título:** "Nuevo documento" → "Buscar factura" (solo cuando `FV + !templateCompleted`)
+   - **Subtítulo:** "Completa los detalles y sube tu archivo para firmar" → "Busca la factura por consecutivo y diligencia la planilla"
+   - **Espaciado:** Ajustado margen del divisor a `-0.5rem 0 1rem 0` (margen superior negativo para pegar la línea al selector)
+   - **Alcance:** SOLO aplica en la pantalla de búsqueda de factura, no afecta otras pantallas ni tipos de documento
+
+1.2. **Simplificación de Label "Tipo de documento":**
+   - **ANTES:** "Tipo de documento (opcional)"
+   - **DESPUÉS:** "Tipo de documento"
+   - **Razón:** Limpieza de interfaz, el "(opcional)" es redundante ya que el campo no es requerido
+
+1.3. **Textos de Pantalla de Firmantes (activeStep === 1):**
+   - **Título:**
+     - **FV:** "Firmantes del documento"
+     - **Otros (SA, sin tipo, etc.):** "Añadir firmantes"
+   - **Subtítulo:**
+     - **FV:** "Los siguientes firmantes fueron extraídos de la planilla."
+     - **SA:** "Selecciona los usuarios que deben firmar este documento y su rol."
+     - **Otros:** "Selecciona los usuarios que deben firmar este documento. El orden es importante."
+   - **Info Box FV:** ELIMINADO (anteriormente mostraba "Los firmantes fueron extraídos automáticamente de la plantilla de factura y no pueden ser modificados.")
+   - **Razón:**
+     - **FV:** Los textos "Añadir" y "Selecciona" no aplican donde los firmantes vienen automáticamente. Es una pantalla de revisión.
+     - **SA:** Enfatiza la importancia de asignar roles (requisito específico de SA)
+     - **Otros:** Enfatiza el orden de firma
+
+1.4. **Textos de Pantalla de Resumen de Envío (activeStep === 2):**
+   - **Título:**
+     - **ANTES:** "Nuevo documento" (para todos los tipos)
+     - **DESPUÉS:** "Resumen del envío" (para TODOS los tipos)
+   - **Subtítulo:**
+     - **ANTES:** "Completa los detalles y sube tu archivo para firmar."
+     - **DESPUÉS:** "Verifica que la información sea correcta antes de enviar."
+   - **Razón:** La pantalla final es de confirmación/revisión para todos los tipos de documento. Los textos anteriores eran incorrectos ya que el usuario ya completó todos los detalles en pasos anteriores.
+   - **Alcance:** TODOS los tipos de documento (FV, SA, sin tipo, etc.)
+
+1.5. **Ajustes de Espaciado en FacturaSearch:**
+   - **Archivo:** `FacturaSearch.css`
+   - **`.factura-search-header` margin-bottom:** `0.75rem` → `0`
+   - **`.factura-search-label` margin-bottom:** `0.5rem` → `0.375rem`
+   - **Razón:** Alinear el espaciado del buscador de facturas con el mismo gap visual del selector de tipo de documento
+   - **Resultado:** El buscador queda más pegado al divisor, con espaciado consistente
+
+2. **Lógica de Display Step Inteligente:**
+   - Implementada función `getDisplayStep()` que calcula qué paso visual mostrar en el stepper
+   - **Comportamiento:**
+     - `activeStep = 0` + FV + `!templateCompleted` → Muestra Paso 1 "Buscar factura"
+     - `activeStep = 0` + FV + `templateCompleted` → Muestra Paso 2 "Cargar documentos"
+     - `activeStep = 1 o 2` + FV → Muestra Paso 3 "Enviar"
+   - **Resultado:** El stepper refleja correctamente el progreso del usuario en el flujo FV
+
+3. **Stepper Visual Dinámico:**
+   - Reemplazado stepper hardcodeado por versión dinámica que mapea sobre el array `steps`
+   - **ANTES:** Tres divs hardcodeados con "Cargar documentos", "Añadir firmantes", "Enviar"
+   - **DESPUÉS:** `steps.map()` que renderiza dinámicamente según el tipo de documento
+   - Usa `displayStep` en lugar de `activeStep` para la activación visual
+
+4. **Títulos y Textos Dinámicos para FV:**
+   - **Título del formulario:**
+     - `FV + templateCompleted` → "Cargar documentos"
+     - Otros casos → "Nuevo documento"
+   - **Texto de la sección de archivos:**
+     - `FV` → "¿Qué documentos se cargarán?"
+     - Otros → "¿Qué documento se firmará?"
+
+#### Files Modified:
+
+1. **`frontend/src/components/dashboard/Dashboard.jsx`**
+   - **Línea 615:** Cambiado array de steps para FV: `'Diligenciar planilla'` → `'Cargar documentos'`
+   - **Líneas 620-636:** Agregada función `getDisplayStep()` y variable `displayStep` para lógica inteligente del stepper
+   - **Líneas 4701-4709:** Stepper visual convertido a dinámico con `.map()` usando `displayStep`
+     - **Fix:** Usado `<div style={{ display: 'contents' }}>` en lugar de `<React.Fragment>` para evitar error "React is not defined"
+     - **Razón:** Dashboard.jsx usa imports específicos (`useState`, `useEffect`) sin importar React directamente
+   - **Líneas 4719-4734:** Título y subtítulo dinámicos con cuatro estados:
+     - `activeStep === 2` (cualquier tipo) → "Resumen del envío" + "Verifica que la información sea correcta antes de enviar."
+     - `activeStep === 0` + `FV + !templateCompleted` → "Buscar factura" + "Busca la factura por consecutivo y diligencia la planilla"
+     - `activeStep === 0` + `FV + templateCompleted` → "Cargar documentos" + "Completa los detalles y sube tu archivo para firmar"
+     - Otros casos → "Nuevo documento" + "Completa los detalles y sube tu archivo para firmar"
+   - **Línea 4771:** Eliminado texto "(opcional)" del label "Tipo de documento"
+   - **Línea 4796:** Margen del divisor ajustado a `-0.5rem 0 1rem 0` (margen superior negativo para pegar línea al selector)
+   - **Línea 4844:** **BUG FIX CRÍTICO** - Restaurada visualización de campos título/descripción para "Sin tipo específico"
+     - **ANTES:** `!templateCompleted && selectedDocumentType && selectedDocumentType.code !== 'FV'`
+     - **DESPUÉS:** `!templateCompleted && (!selectedDocumentType || selectedDocumentType.code !== 'FV')`
+     - **Problema:** La condición anterior requería que `selectedDocumentType` existiera, dejando fuera el caso de "Sin tipo específico" (`null`)
+     - **Solución:** Agregada condición `!selectedDocumentType` para cubrir documentos sin tipo
+   - **Líneas 4905-4909:** Texto de pregunta dinámico para FV vs otros tipos
+   - **Líneas 5022-5031:** Título y subtítulo dinámicos para pantalla de firmantes (activeStep === 1)
+     - Título: "Firmantes del documento" para FV, "Añadir firmantes" para otros
+     - Subtítulo: "Los siguientes firmantes fueron extraídos de la planilla." para FV, texto original para otros
+   - **Líneas 5121-5128:** **ELIMINADO** Info box específico de FV que mostraba mensaje sobre firmantes extraídos de plantilla
+
+2. **`frontend/src/components/dashboard/FacturaSearch.css`**
+   - **Línea 6:** `.factura-search-header` margin-bottom: `0.75rem` → `0`
+   - **Línea 14:** `.factura-search-label` margin-bottom: `0.5rem` → `0.375rem`
+   - **Resultado:** Buscador de facturas alineado verticalmente con selector de tipo de documento
+
+#### Technical Implementation Details:
+
+**Función `getDisplayStep()`:**
+```javascript
+const getDisplayStep = () => {
+  if (selectedDocumentType?.code === 'FV') {
+    if (activeStep === 0 && templateCompleted) {
+      return 1; // Show "Cargar documentos" step (step 2)
+    }
+    if (activeStep === 0 && !templateCompleted) {
+      return 0; // Show "Buscar factura" step (step 1)
+    }
+    if (activeStep >= 1) {
+      return 2; // Show "Enviar" step (step 3)
+    }
+  }
+  return activeStep; // Default behavior for non-FV documents
+};
+```
+
+**Stepper Dinámico:**
+```javascript
+{steps.map((step, index) => (
+  <div key={index} style={{ display: 'contents' }}>
+    <div className="firmapro-stepper-item">
+      <div className={`stepper-number ${displayStep >= index ? 'active' : ''}`}>{index + 1}</div>
+      <span className={`stepper-label ${displayStep >= index ? 'active' : ''}`}>{step}</span>
+    </div>
+    {index < steps.length - 1 && <div className="stepper-line"></div>}
+  </div>
+))}
+```
+*Nota: Usamos `<div style={{ display: 'contents' }}>` en lugar de `<React.Fragment>` porque Dashboard.jsx no importa React directamente. La propiedad CSS `display: contents` hace que el div actúe como si no existiera en el layout, similar a un Fragment.*
+
+#### Benefits:
+
+1. **UX Mejorada:** El usuario ve claramente en qué paso del proceso se encuentra
+2. **Claridad Semántica:** Los nombres de los pasos reflejan exactamente lo que el usuario hace
+3. **Mantenibilidad:** Stepper dinámico facilita cambios futuros en los pasos
+4. **Consistencia:** Textos y títulos alineados con el flujo real de FV
+5. **Reducción de Redundancia:** Eliminado info box redundante que repetía información ya presente en el subtítulo
+6. **Precisión de Lenguaje:** "Firmantes del documento" y "fueron extraídos" son más precisos que "Añadir firmantes" cuando el usuario no puede agregar
+
+#### Testing Recommendations:
+
+1. **Flujo FV Completo:**
+   - Seleccionar tipo "Legalización de Factura"
+   - **VERIFICAR:** Título cambia a "Buscar factura"
+   - **VERIFICAR:** Subtítulo es "Busca la factura por consecutivo y diligencia la planilla"
+   - **VERIFICAR:** Paso 1 "Buscar factura" está activo en el stepper
+   - **VERIFICAR:** Divisor tiene menos espacio (buscador más cerca del selector)
+   - Completar plantilla
+   - **VERIFICAR:** Paso 2 "Cargar documentos" se activa automáticamente
+   - **VERIFICAR:** Título cambia a "Cargar documentos"
+   - **VERIFICAR:** Subtítulo vuelve a "Completa los detalles y sube tu archivo para firmar"
+   - **VERIFICAR:** Texto "¿Qué documentos se cargarán?"
+   - Agregar descripción y subir archivos
+   - Dar clic en "Continuar" para ir a pantalla de firmantes
+   - **VERIFICAR:** Título es "Firmantes del documento" (no "Añadir firmantes")
+   - **VERIFICAR:** Subtítulo es "Los siguientes firmantes fueron extraídos de la planilla."
+   - **VERIFICAR:** NO aparece info box azul sobre firmantes automáticos
+   - **VERIFICAR:** Lista de firmantes visible con roles asignados
+   - **VERIFICAR:** NO hay buscador de usuarios (sección oculta)
+   - **VERIFICAR:** NO hay botones de eliminar en las tarjetas de firmantes
+   - Continuar al siguiente paso
+   - **VERIFICAR:** Paso 3 "Enviar" se activa
+
+2. **Flujo No-FV (Control):**
+   - Seleccionar otro tipo de documento (SA, etc.)
+   - Verificar que los pasos son: "Cargar documentos", "Añadir firmantes", "Enviar"
+   - Verificar que el comportamiento no cambió
+
+3. **Flujo Sin Tipo Específico (Bug Fix):**
+   - Seleccionar "Sin tipo específico" en el dropdown
+   - **VERIFICAR:** Campo "Título del documento" aparece (sin prefijo)
+   - **VERIFICAR:** Campo "Descripción (opcional)" aparece
+   - **VERIFICAR:** Placeholder es "Concepto del documento..."
+   - **RESULTADO ESPERADO:** Todos los campos necesarios visibles y funcionales
+
+#### Next Steps:
+
+- Monitorear feedback del usuario sobre la nueva experiencia del stepper
+- Considerar aplicar patrón similar a otros tipos de documento si lo requieren
+
+---
+
 ### Session: 2025-12-12 - Correcciones en Edición de Plantillas FV e Informe de Firmas
 
 #### Problems Fixed:

@@ -158,6 +158,18 @@ function Dashboard({ user, onLogout }) {
   // Estado para checkbox "Yo voy a firmar este documento"
   const [willSignDocument, setWillSignDocument] = useState(false);
 
+  // Estados para wizard SA (Solicitud de Anticipo) - Asignación paso a paso de roles
+  // ORDEN IMPORTANTE: Tesorería SIEMPRE va al final (después de Gerencia si aplica)
+  const [saWizardStep, setSaWizardStep] = useState(0); // 0-4 para los 5 roles
+  const [saUserSearchQuery, setSaUserSearchQuery] = useState(''); // Búsqueda de usuarios en wizard SA
+  const saRoles = [
+    { name: 'Solicitante', required: true },
+    { name: 'Aprobador', required: true },
+    { name: 'Negociaciones', required: false },
+    { name: 'Gerencia', required: false },
+    { name: 'Tesorería', required: true } // SIEMPRE último
+  ];
+
   // Estados para filtros de "Documentos pendientes"
   const [pendingDocsSearchTerm, setPendingDocsSearchTerm] = useState('');
 
@@ -599,9 +611,29 @@ function Dashboard({ user, onLogout }) {
   // Estado para modal de posición inválida
 
   // Estados para Stepper funcional de MUI (3 pasos)
-  const steps = ['Cargar documentos', 'Añadir firmantes', 'Enviar'];
+  const steps = selectedDocumentType?.code === 'FV'
+    ? ['Buscar factura', 'Cargar documentos', 'Enviar']
+    : ['Cargar documentos', 'Añadir firmantes', 'Enviar'];
   const [activeStep, setActiveStep] = useState(0);
   const [completed, setCompleted] = useState({});
+
+  // Calculate display step for stepper visualization
+  // For FV documents: show step 2 ("Cargar documentos") when templateCompleted even if activeStep is 0
+  const getDisplayStep = () => {
+    if (selectedDocumentType?.code === 'FV') {
+      if (activeStep === 0 && templateCompleted) {
+        return 1; // Show "Cargar documentos" step (step 2)
+      }
+      if (activeStep === 0 && !templateCompleted) {
+        return 0; // Show "Buscar factura" step (step 1)
+      }
+      if (activeStep >= 1) {
+        return 2; // Show "Enviar" step (step 3)
+      }
+    }
+    return activeStep; // Default behavior for non-FV documents
+  };
+  const displayStep = getDisplayStep();
 
   // Funciones del Stepper
   const totalSteps = () => steps.length;
@@ -708,8 +740,27 @@ function Dashboard({ user, onLogout }) {
       setSelectedFactura(null);
       setDocumentTitle('');
       setDocumentDescription('');
+      setSaWizardStep(0); // Reset wizard SA
+      setSaUserSearchQuery(''); // Reset search in wizard SA
       console.log('🔙 Volviendo al selector de tipos de documento');
       return;
+    }
+
+    // Si retrocedemos desde paso 1 (firmantes) con documento SA
+    if (activeStep === 1 && selectedDocumentType?.code === 'SA') {
+      // Si el wizard está completado, volver al último paso del wizard en lugar de resetear
+      if (saWizardStep >= saRoles.length) {
+        console.log('🔙 Wizard SA completado - Volviendo al último paso para editar');
+        setSaWizardStep(saRoles.length - 1); // Volver al último paso (Tesorería)
+        setSaUserSearchQuery(''); // Limpiar búsqueda
+        return; // NO retroceder de activeStep, quedarse en paso 1
+      }
+
+      // Si el wizard no está completado, resetear todo
+      console.log('🔙 Retrocediendo a paso 0 - Reseteando firmantes seleccionados y wizard SA');
+      setSaWizardStep(0);
+      setSelectedSigners([]);
+      setSaUserSearchQuery('');
     }
 
     // Si estamos en paso 1 o superior, simplemente volver al paso anterior
@@ -758,7 +809,51 @@ function Dashboard({ user, onLogout }) {
         }
         return selectedFiles && selectedFiles.length > 0 && documentTitle.trim().length > 0;
       case 1: // Añadir firmantes
-        return selectedSigners && selectedSigners.length > 0;
+        // Validación básica: al menos un firmante
+        if (!selectedSigners || selectedSigners.length === 0) {
+          return false;
+        }
+
+        // Validación específica para SA: Roles obligatorios + opcionales
+        if (selectedDocumentType?.code === 'SA' && documentTypeRoles && documentTypeRoles.length > 0) {
+          // Todos los firmantes deben tener un rol asignado
+          const allHaveRoles = selectedSigners.every(s => {
+            return typeof s === 'object' && s.roleId !== null && s.roleId !== undefined;
+          });
+
+          if (!allHaveRoles) {
+            return false;
+          }
+
+          // Obtener nombres de roles asignados
+          const assignedRoleNames = selectedSigners
+            .filter(s => typeof s === 'object' && s.roleName)
+            .map(s => s.roleName);
+
+          // Verificar que no haya roles duplicados
+          const uniqueRoleNames = new Set(assignedRoleNames);
+          if (assignedRoleNames.length !== uniqueRoleNames.size) {
+            return false; // Hay roles duplicados
+          }
+
+          // Roles obligatorios para SA
+          const requiredRoles = ['Solicitante', 'Aprobador', 'Tesorería'];
+          const hasAllRequired = requiredRoles.every(role => assignedRoleNames.includes(role));
+
+          if (!hasAllRequired) {
+            return false; // Faltan roles obligatorios
+          }
+
+          // Mínimo 3 firmantes (los obligatorios), máximo 5 (obligatorios + opcionales)
+          if (selectedSigners.length < 3 || selectedSigners.length > 5) {
+            return false;
+          }
+
+          return true;
+        }
+
+        // Para otros tipos de documentos: solo verificar que haya firmantes
+        return true;
       case 2: // Enviar
         return true;
       default:
@@ -2114,65 +2209,111 @@ function Dashboard({ user, onLogout }) {
     setSelectedSigners(prev => prev.filter(s =>
       typeof s === 'object' ? s.userId !== signerId : s !== signerId
     ));
+
+    // Si es documento SA y se elimina un firmante, resetear wizard para empezar de nuevo
+    if (selectedDocumentType?.code === 'SA') {
+      setSaWizardStep(0);
+      setSelectedSigners([]); // Limpiar todos los firmantes para empezar el wizard desde cero
+      setSaUserSearchQuery(''); // Reset search in wizard SA
+    }
   };
 
   /**
    * Actualizar el rol asignado a un firmante
    * Soporta múltiples roles para tipo FV (Legalización de Facturas)
    */
+  /**
+   * Ordenar firmantes de SA según el orden de roles obligatorio
+   * Orden: Solicitante -> Aprobador -> Negociaciones (opcional) -> Gerencia (opcional) -> Tesorería (SIEMPRE último)
+   */
+  const sortSASigners = (signers) => {
+    const roleOrder = {
+      'Solicitante': 1,
+      'Aprobador': 2,
+      'Negociaciones': 3,
+      'Gerencia': 4,
+      'Tesorería': 5 // SIEMPRE último
+    };
+
+    return [...signers].sort((a, b) => {
+      const roleA = typeof a === 'object' ? a.roleName : null;
+      const roleB = typeof b === 'object' ? b.roleName : null;
+
+      // Firmantes sin rol van al final
+      if (!roleA && !roleB) return 0;
+      if (!roleA) return 1;
+      if (!roleB) return -1;
+
+      const orderA = roleOrder[roleA] || 999;
+      const orderB = roleOrder[roleB] || 999;
+
+      return orderA - orderB;
+    });
+  };
+
   const updateSignerRole = (signerId, roleId, roleName) => {
     const isFV = selectedDocumentType && selectedDocumentType.code === 'FV';
+    const isSA = selectedDocumentType && selectedDocumentType.code === 'SA';
 
-    setSelectedSigners(prev => prev.map(s => {
-      const userId = typeof s === 'object' ? s.userId : s;
-      if (userId === signerId) {
-        // Para tipo FV: soportar múltiples roles (hasta 3)
-        if (isFV) {
-          const currentObj = typeof s === 'object' ? s : { userId: signerId, roleIds: [], roleNames: [] };
-          const roleIds = currentObj.roleIds || [];
-          const roleNames = currentObj.roleNames || [];
+    setSelectedSigners(prev => {
+      const updated = prev.map(s => {
+        const userId = typeof s === 'object' ? s.userId : s;
+        if (userId === signerId) {
+          // Para tipo FV: soportar múltiples roles (hasta 3)
+          if (isFV) {
+            const currentObj = typeof s === 'object' ? s : { userId: signerId, roleIds: [], roleNames: [] };
+            const roleIds = currentObj.roleIds || [];
+            const roleNames = currentObj.roleNames || [];
 
-          // Toggle del rol: si ya está, quitarlo; si no, agregarlo
-          const roleIndex = roleIds.indexOf(roleId);
-          if (roleIndex >= 0) {
-            // Quitar el rol
-            return {
-              userId: signerId,
-              roleIds: roleIds.filter((_, i) => i !== roleIndex),
-              roleNames: roleNames.filter((_, i) => i !== roleIndex)
-            };
-          } else {
-            // Agregar el rol (máximo 3)
-            if (roleIds.length >= 3) {
-              setRoleErrorPopup({ message: 'Un firmante no puede tener más de 3 roles' });
-              return s;
+            // Toggle del rol: si ya está, quitarlo; si no, agregarlo
+            const roleIndex = roleIds.indexOf(roleId);
+            if (roleIndex >= 0) {
+              // Quitar el rol
+              return {
+                userId: signerId,
+                roleIds: roleIds.filter((_, i) => i !== roleIndex),
+                roleNames: roleNames.filter((_, i) => i !== roleIndex)
+              };
+            } else {
+              // Agregar el rol (máximo 3)
+              if (roleIds.length >= 3) {
+                setRoleErrorPopup({ message: 'Un firmante no puede tener más de 3 roles' });
+                return s;
+              }
+              return {
+                userId: signerId,
+                roleIds: [...roleIds, roleId],
+                roleNames: [...roleNames, roleName]
+              };
             }
+          } else {
+            // Para otros tipos (SA): un solo rol
+            // Si se está quitando el rol (roleId null), mantener como objeto con roleId: null
+            if (!roleId) {
+              return {
+                userId: signerId,
+                roleId: null,
+                roleName: null
+              };
+            }
+            // Asignar o actualizar rol
             return {
               userId: signerId,
-              roleIds: [...roleIds, roleId],
-              roleNames: [...roleNames, roleName]
+              roleId: roleId,
+              roleName: roleName
             };
           }
-        } else {
-          // Para otros tipos (SA): un solo rol
-          // Si se está quitando el rol (roleId null), mantener como objeto con roleId: null
-          if (!roleId) {
-            return {
-              userId: signerId,
-              roleId: null,
-              roleName: null
-            };
-          }
-          // Asignar o actualizar rol
-          return {
-            userId: signerId,
-            roleId: roleId,
-            roleName: roleName
-          };
         }
+        return s;
+      });
+
+      // Para SA: reordenar automáticamente según roles
+      if (isSA) {
+        return sortSASigners(updated);
       }
-      return s;
-    }));
+
+      return updated;
+    });
   };
 
   /**
@@ -2653,8 +2794,12 @@ function Dashboard({ user, onLogout }) {
       if (uploadResponse.data.success && (uploadResponse.data.document || uploadResponse.data.documents)) {
         const documents = uploadResponse.data.documents || [uploadResponse.data.document];
 
+        console.log(`✅ Upload exitoso. Documentos recibidos:`, documents.map(d => ({ id: d.id, title: d.title })));
+
         // Asignar firmantes a cada documento creado
         for (const doc of documents) {
+          console.log(`🔄 Asignando firmantes al documento ID=${doc.id} (${doc.title})`);
+
           // Preparar signerAssignments según el tipo de documento
           const signerAssignments = selectedSigners.map(s => {
             if (typeof s === 'object') {
@@ -4392,7 +4537,7 @@ function Dashboard({ user, onLogout }) {
                     }
 
                     .credits-button-magic:hover .gradient-layer-credits {
-                      opacity: 0.35;
+                      opacity: 0.8;
                     }
 
                     .rotating-gradient-credits {
@@ -4404,9 +4549,9 @@ function Dashboard({ user, onLogout }) {
                       background: conic-gradient(
                         from 0deg,
                         transparent 0deg,
-                        rgba(139, 92, 246, 0.4) 90deg,
-                        rgba(59, 130, 246, 0.4) 180deg,
-                        rgba(16, 185, 129, 0.4) 270deg,
+                        rgba(102, 126, 234, 0.4) 90deg,
+                        rgba(118, 75, 162, 0.4) 180deg,
+                        rgba(102, 126, 234, 0.4) 270deg,
                         transparent 360deg
                       );
                       animation: rotate-gradient-credits 4s linear infinite;
@@ -4553,20 +4698,15 @@ function Dashboard({ user, onLogout }) {
               {/* Stepper Horizontal Personalizado - 3 Pasos */}
               <div className="firmapro-stepper">
                 <div className="firmapro-stepper-items">
-                  <div className="firmapro-stepper-item">
-                    <div className={`stepper-number ${activeStep >= 0 ? 'active' : ''}`}>1</div>
-                    <span className={`stepper-label ${activeStep >= 0 ? 'active' : ''}`}>Cargar documentos</span>
-                  </div>
-                  <div className="stepper-line"></div>
-                  <div className="firmapro-stepper-item">
-                    <div className={`stepper-number ${activeStep >= 1 ? 'active' : ''}`}>2</div>
-                    <span className={`stepper-label ${activeStep >= 1 ? 'active' : ''}`}>Añadir firmantes</span>
-                  </div>
-                  <div className="stepper-line"></div>
-                  <div className="firmapro-stepper-item">
-                    <div className={`stepper-number ${activeStep >= 2 ? 'active' : ''}`}>3</div>
-                    <span className={`stepper-label ${activeStep >= 2 ? 'active' : ''}`}>Enviar</span>
-                  </div>
+                  {steps.map((step, index) => (
+                    <div key={index} style={{ display: 'contents' }}>
+                      <div className="firmapro-stepper-item">
+                        <div className={`stepper-number ${displayStep >= index ? 'active' : ''}`}>{index + 1}</div>
+                        <span className={`stepper-label ${displayStep >= index ? 'active' : ''}`}>{step}</span>
+                      </div>
+                      {index < steps.length - 1 && <div className="stepper-line"></div>}
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -4576,8 +4716,24 @@ function Dashboard({ user, onLogout }) {
                   <div className="zapsign-header">
                     <div className="header-content">
                       <div>
-                        <h2 className="zapsign-title">Nuevo documento</h2>
-                        <p className="zapsign-subtitle">Completa los detalles y sube tu archivo para firmar.</p>
+                        <h2 className="zapsign-title">
+                          {activeStep === 2
+                            ? 'Resumen del envío'
+                            : selectedDocumentType?.code === 'FV' && !templateCompleted
+                            ? 'Buscar factura'
+                            : selectedDocumentType?.code === 'FV' && templateCompleted
+                            ? 'Cargar documentos'
+                            : 'Nuevo documento'}
+                        </h2>
+                        {!(activeStep === 2 && selectedDocumentType?.code === 'SA') && (
+                          <p className="zapsign-subtitle">
+                            {activeStep === 2
+                              ? 'Verifica que la información sea correcta antes de enviar.'
+                              : selectedDocumentType?.code === 'FV' && !templateCompleted
+                              ? 'Busca la factura por consecutivo y diligencia la planilla'
+                              : 'Completa los detalles y sube tu archivo para firmar.'}
+                          </p>
+                        )}
                       </div>
                       <button type="button" className="help-button" onClick={() => setShowHelpModal(true)}>
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4614,16 +4770,46 @@ function Dashboard({ user, onLogout }) {
                   {/* Paso 0: Cargar documentos */}
                   {activeStep === 0 && (
                     <>
-                      {/* Para FV: Solo mostrar buscador cuando NO está completada la plantilla */}
+                      {/* Mostrar selector de tipo siempre cuando NO esté completada la plantilla */}
+                      {!templateCompleted && (
+                        <div className="form-group">
+                          <label htmlFor="document-type">
+                            Tipo de documento
+                          </label>
+                          <DocumentTypeSelector
+                            documentTypes={documentTypes}
+                            selectedDocumentType={selectedDocumentType}
+                            onDocumentTypeChange={(type) => {
+                              setSelectedDocumentType(type);
+                              setDocumentTypeRoles(type?.roles || []);
+                              setSelectedSigners([]);
+                              setTemplateCompleted(false);
+                              setFacturaTemplateData(null);
+                              setSelectedFactura(null);
+                            }}
+                            disabled={uploading || loadingDocumentTypes}
+                          />
+                        </div>
+                      )}
+
+                      {/* Para FV: Mostrar buscador después del selector con línea divisoria */}
                       {selectedDocumentType?.code === 'FV' && !templateCompleted ? (
-                        <FacturaSearch
-                          onFacturaSelect={(factura) => {
-                            setDocumentTitle('');
-                            setSelectedFactura(factura);
-                            setShowFacturaTemplate(true);
-                            console.log('Factura seleccionada:', factura);
-                          }}
-                        />
+                        <>
+                          <div style={{
+                            width: '100%',
+                            height: '1px',
+                            backgroundColor: '#e5e7eb',
+                            margin: '-0.5rem 0 1rem 0'
+                          }}></div>
+                          <FacturaSearch
+                            onFacturaSelect={(factura) => {
+                              setDocumentTitle('');
+                              setSelectedFactura(factura);
+                              setShowFacturaTemplate(true);
+                              console.log('Factura seleccionada:', factura);
+                            }}
+                          />
+                        </>
                       ) : selectedDocumentType?.code === 'FV' && templateCompleted ? (
                         <>
                           {/* Botón para editar la planilla de factura */}
@@ -4667,29 +4853,9 @@ function Dashboard({ user, onLogout }) {
                             />
                           </div>
                         </>
-                      ) : (
+                      ) : !templateCompleted && (!selectedDocumentType || selectedDocumentType.code !== 'FV') ? (
                         <>
-                          {/* Selector de tipo de documento para documentos no-FV */}
-                          <div className="form-group">
-                            <label htmlFor="document-type">
-                              Tipo de documento <span>(opcional)</span>
-                            </label>
-                            <DocumentTypeSelector
-                              documentTypes={documentTypes}
-                              selectedDocumentType={selectedDocumentType}
-                              onDocumentTypeChange={(type) => {
-                                setSelectedDocumentType(type);
-                                setDocumentTypeRoles(type?.roles || []);
-                                setSelectedSigners([]);
-                                setTemplateCompleted(false);
-                                setFacturaTemplateData(null);
-                                setSelectedFactura(null);
-                              }}
-                              disabled={uploading || loadingDocumentTypes}
-                            />
-                          </div>
-
-                          {/* Título y descripción para documentos no-FV */}
+                          {/* Título y descripción para documentos no-FV O sin tipo (el selector ya está arriba) */}
                           <div className="form-group">
                             <label htmlFor="document-title">
                               Título del documento
@@ -4743,12 +4909,16 @@ function Dashboard({ user, onLogout }) {
                             />
                           </div>
                         </>
-                      )}
+                      ) : null}
 
                       {/* Sección: ¿Qué documento se firmará? - Solo mostrar si NO es FV sin plantilla */}
                       {!(selectedDocumentType?.code === 'FV' && !templateCompleted) && (
                         <div className="zapsign-section">
-                        <h3 className="section-question">¿Qué documento se firmará?</h3>
+                        <h3 className="section-question">
+                          {selectedDocumentType?.code === 'FV'
+                            ? '¿Qué documentos se cargarán?'
+                            : '¿Qué documento se firmará?'}
+                        </h3>
 
                         <div
                           className={`zapsign-upload-area ${isDragging ? 'dragging' : ''} ${(selectedFiles && selectedFiles.length > 0) ? 'has-files' : ''}`}
@@ -4855,10 +5025,22 @@ function Dashboard({ user, onLogout }) {
                         <div className="signers-single-column">
                           {/* Header de la sección */}
                           <div className="signers-header">
-                            <h2 className="signers-main-title">Añadir firmantes</h2>
-                            <p className="signers-subtitle">
-                              Selecciona los usuarios que deben firmar este documento. El orden es importante.
-                            </p>
+                            <h2 className="signers-main-title">
+                              {selectedDocumentType?.code === 'FV'
+                                ? 'Firmantes del documento'
+                                : selectedDocumentType?.code === 'SA' && saWizardStep >= saRoles.length
+                                ? 'Firmantes del documento'
+                                : 'Añadir firmantes'}
+                            </h2>
+                            {!(selectedDocumentType?.code === 'SA' && saWizardStep >= saRoles.length) && (
+                              <p className="signers-subtitle">
+                                {selectedDocumentType?.code === 'FV'
+                                  ? 'Los siguientes firmantes fueron extraídos de la planilla.'
+                                  : selectedDocumentType?.code === 'SA'
+                                  ? 'Selecciona los usuarios que deben firmar este documento y su rol.'
+                                  : 'Selecciona los usuarios que deben firmar este documento. El orden es importante.'}
+                              </p>
+                            )}
                           </div>
 
                           {/* Mensaje de error específico para este paso */}
@@ -4871,8 +5053,8 @@ function Dashboard({ user, onLogout }) {
                             </div>
                           )}
 
-                          {/* Switch: Voy a firmar este documento - Oculto para FV */}
-                          {selectedDocumentType?.code !== 'FV' && (
+                          {/* Switch: Voy a firmar este documento - Oculto para FV y SA (SA tiene su propio wizard) */}
+                          {selectedDocumentType?.code !== 'FV' && selectedDocumentType?.code !== 'SA' && (
                             <div
                               onClick={() => !uploading && handleWillSignToggle(!willSignDocument)}
                               style={{
@@ -4948,17 +5130,319 @@ function Dashboard({ user, onLogout }) {
 
                             return (
                               <>
-                                {isFacturaDocument && (
-                                  <div className="info-box-modern" style={{ marginBottom: '1.5rem' }}>
-                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    <p>Los firmantes fueron extraídos automáticamente de la plantilla de factura y no pueden ser modificados.</p>
-                                  </div>
-                                )}
-
                                 {/* Sección de usuarios disponibles - oculta para Legalización de Facturas */}
-                                {!isFacturaDocument && (
+                                {/* Para SA: Wizard paso a paso */}
+                                {selectedDocumentType?.code === 'SA' && saWizardStep < saRoles.length ? (
+                                  <div className="sa-wizard-section" style={{
+                                    backgroundColor: '#f9fafb',
+                                    border: '2px solid #e5e7eb',
+                                    borderRadius: '0.5rem',
+                                    padding: '1.5rem',
+                                    marginBottom: '1.5rem'
+                                  }}>
+                                    {/* Encabezado del paso actual */}
+                                    <div style={{ marginBottom: '1rem' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                        <span style={{
+                                          backgroundColor: '#9ca3af',
+                                          color: 'white',
+                                          width: '32px',
+                                          height: '32px',
+                                          borderRadius: '50%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontWeight: '600',
+                                          fontSize: '0.875rem'
+                                        }}>
+                                          {saWizardStep + 1}
+                                        </span>
+                                        <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#111827', margin: 0 }}>
+                                          Asignar {saRoles[saWizardStep].name}
+                                          {!saRoles[saWizardStep].required && <span style={{ color: '#6b7280', fontWeight: '400', fontSize: '0.875rem' }}> (Opcional)</span>}
+                                        </h3>
+                                      </div>
+                                      <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: 0 }}>
+                                        {saWizardStep === 0
+                                          ? 'Quien solicita el anticipo'
+                                          : saWizardStep === 1
+                                          ? 'Quien aprueba el anticipo'
+                                          : saWizardStep === 2
+                                          ? 'Selecciona el usuario representante de negociaciones o haz clic en "No aplica" para omitir esta firma'
+                                          : saWizardStep === 3
+                                          ? 'Selecciona el usuario o haz clic en "No aplica" para omitir esta firma'
+                                          : saRoles[saWizardStep].required
+                                          ? 'Selecciona un usuario para este rol obligatorio'
+                                          : 'Selecciona un usuario o haz clic en "No aplica" para omitir este rol'}
+                                      </p>
+                                    </div>
+
+                                    {/* Botón "Atrás" para retroceder paso a paso en el wizard */}
+                                    {saWizardStep > 0 && (
+                                      <div style={{ marginBottom: '1rem' }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!uploading) {
+                                              console.log('🔙 Wizard SA: Retrocediendo del paso', saWizardStep + 1, 'al paso', saWizardStep);
+                                              setSaWizardStep(prev => prev - 1);
+                                              setSelectedSigners(prev => prev.slice(0, -1)); // Remover último firmante
+                                              setSaUserSearchQuery(''); // Limpiar búsqueda
+                                            }
+                                          }}
+                                          disabled={uploading}
+                                          style={{
+                                            width: '100%',
+                                            padding: '0.75rem',
+                                            backgroundColor: 'white',
+                                            border: '2px solid #d1d5db',
+                                            borderRadius: '0.375rem',
+                                            color: '#374151',
+                                            fontWeight: '500',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '0.5rem'
+                                          }}
+                                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f9fafb'; e.currentTarget.style.borderColor = '#9ca3af'; }}
+                                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#d1d5db'; }}
+                                        >
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                          </svg>
+                                          Atrás (editar paso anterior)
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {/* Opción "Yo voy a firmar" - Solo para Solicitante (paso 1) */}
+                                    {saWizardStep === 0 && (
+                                      <div style={{ marginBottom: '1rem' }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!uploading && user && user.id) {
+                                              const role = documentTypeRoles.find(r => r.roleName === 'Solicitante');
+                                              if (role) {
+                                                setSelectedSigners([{
+                                                  userId: user.id,
+                                                  roleId: role.id,
+                                                  roleName: role.roleName
+                                                }]);
+                                                setSaWizardStep(1);
+                                                setSaUserSearchQuery(''); // Limpiar búsqueda al avanzar al siguiente paso
+                                              }
+                                            }
+                                          }}
+                                          disabled={uploading}
+                                          style={{
+                                            width: '100%',
+                                            padding: '1rem',
+                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                            border: 'none',
+                                            borderRadius: '0.5rem',
+                                            color: 'white',
+                                            fontWeight: '600',
+                                            fontSize: '1rem',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '0.5rem'
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+                                          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                                        >
+                                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M12.5 7C12.5 9.20914 10.7091 11 8.5 11C6.29086 11 4.5 9.20914 4.5 7C4.5 4.79086 6.29086 3 8.5 3C10.7091 3 12.5 4.79086 12.5 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            <path d="M20 8V14M23 11H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                          </svg>
+                                          Yo voy a firmar (Soy el solicitante)
+                                        </button>
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.75rem',
+                                          margin: '1rem 0',
+                                          color: '#9ca3af',
+                                          fontSize: '0.875rem'
+                                        }}>
+                                          <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+                                          <span>O selecciona otro usuario</span>
+                                          <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Lista de usuarios disponibles */}
+                                    <div style={{ marginBottom: '1rem' }}>
+                                      <h4 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.75rem' }}>
+                                        {saWizardStep === 0 ? 'Otros usuarios' : 'Usuarios disponibles'}
+                                      </h4>
+
+                                      {/* Buscador de usuarios en wizard SA */}
+                                      <div className="search-input-wrapper" style={{ marginBottom: '0.75rem' }}>
+                                        <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                          <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        </svg>
+                                        <input
+                                          type="text"
+                                          className="signers-search-input"
+                                          placeholder="Buscar por nombre o correo"
+                                          value={saUserSearchQuery}
+                                          onChange={(e) => setSaUserSearchQuery(e.target.value)}
+                                          disabled={uploading}
+                                        />
+                                        {saUserSearchQuery && (
+                                          <button
+                                            type="button"
+                                            className="search-clear-btn"
+                                            onClick={() => setSaUserSearchQuery('')}
+                                          >
+                                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                            </svg>
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                        {getFilteredSignersForUpload()
+                                          .filter(s => {
+                                            // Excluir firmantes ya seleccionados
+                                            const isAlreadySelected = selectedSigners.some(ss => (typeof ss === 'object' ? ss.userId === s.id : ss === s.id));
+                                            // En paso 1 (Solicitante), excluir también al usuario actual
+                                            const isCurrentUserInStep1 = saWizardStep === 0 && user && s.id === user.id;
+
+                                            // Filtrar por búsqueda
+                                            const matchesSearch = saUserSearchQuery.trim() === '' ||
+                                              s.name.toLowerCase().includes(saUserSearchQuery.toLowerCase()) ||
+                                              s.email.toLowerCase().includes(saUserSearchQuery.toLowerCase());
+
+                                            // Filtros específicos por rol SA
+                                            const currentRoleName = saRoles[saWizardStep].name;
+                                            let matchesRoleRestriction = true;
+
+                                            if (currentRoleName === 'Negociaciones') {
+                                              // Solo mostrar el usuario "negociaciones"
+                                              matchesRoleRestriction = s.name.toLowerCase().includes('negociaciones') ||
+                                                                      s.email.toLowerCase().includes('negociaciones');
+                                            } else if (currentRoleName === 'Gerencia') {
+                                              // Solo mostrar el usuario "Juan Duque"
+                                              matchesRoleRestriction = s.name.toLowerCase().includes('juan duque') ||
+                                                                      s.name.toLowerCase() === 'juan duque';
+                                            } else if (currentRoleName === 'Tesorería') {
+                                              // Solo mostrar el usuario "Monica Bustamante"
+                                              matchesRoleRestriction = s.name.toLowerCase().includes('monica bustamante') ||
+                                                                      s.name.toLowerCase() === 'monica bustamante' ||
+                                                                      s.email.toLowerCase().includes('bustamante');
+                                            }
+
+                                            return !isAlreadySelected && !isCurrentUserInStep1 && matchesSearch && matchesRoleRestriction;
+                                          })
+                                          .map(signer => (
+                                            <div
+                                              key={signer.id}
+                                              onClick={() => {
+                                                if (!uploading) {
+                                                  const role = documentTypeRoles.find(r => r.roleName === saRoles[saWizardStep].name);
+                                                  if (role) {
+                                                    setSelectedSigners(prev => [...prev, {
+                                                      userId: signer.id,
+                                                      roleId: role.id,
+                                                      roleName: role.roleName
+                                                    }]);
+                                                    setSaWizardStep(prev => prev + 1);
+                                                    setSaUserSearchQuery(''); // Limpiar búsqueda al avanzar al siguiente paso
+                                                  }
+                                                }
+                                              }}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.75rem',
+                                                padding: '0.75rem',
+                                                backgroundColor: 'white',
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: '0.375rem',
+                                                cursor: 'pointer',
+                                                marginBottom: '0.5rem',
+                                                transition: 'all 0.15s'
+                                              }}
+                                              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                                              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'white'}
+                                            >
+                                              <div style={{
+                                                width: '40px',
+                                                height: '40px',
+                                                borderRadius: '50%',
+                                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                                color: 'white',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontWeight: '600',
+                                                fontSize: '0.875rem',
+                                                flexShrink: 0
+                                              }}>
+                                                {getInitials(signer.name, signer.email)}
+                                              </div>
+                                              <div style={{ flex: 1, minWidth: 0 }}>
+                                                <p style={{ fontWeight: '500', color: '#111827', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                  {signer.name}
+                                                </p>
+                                                <p style={{ fontSize: '0.875rem', color: '#6b7280', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                  {signer.email}
+                                                </p>
+                                              </div>
+                                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: '#9ca3af', flexShrink: 0 }}>
+                                                <path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                              </svg>
+                                            </div>
+                                          ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Botón "No aplica" para roles opcionales */}
+                                    {!saRoles[saWizardStep].required && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!uploading) {
+                                            setSaWizardStep(prev => prev + 1);
+                                            setSaUserSearchQuery(''); // Limpiar búsqueda al avanzar al siguiente paso
+                                          }
+                                        }}
+                                        disabled={uploading}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.75rem',
+                                          backgroundColor: 'white',
+                                          border: '2px solid #d1d5db',
+                                          borderRadius: '0.375rem',
+                                          color: '#374151',
+                                          fontWeight: '500',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s'
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f9fafb'; e.currentTarget.style.borderColor = '#9ca3af'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.borderColor = '#d1d5db'; }}
+                                      >
+                                        No aplica
+                                      </button>
+                                    )}
+
+                                    {/* Progreso del wizard */}
+                                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+                                      <p style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', margin: 0 }}>
+                                        Paso {saWizardStep + 1} de {saRoles.length}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ) : !isFacturaDocument && selectedDocumentType?.code !== 'SA' && (
                                   <div className="available-signers-section">
                             <h3 className="section-label">Usuarios disponibles</h3>
 
@@ -5046,14 +5530,20 @@ function Dashboard({ user, onLogout }) {
                             );
                           })()}
 
-                          {/* Sección de firmantes seleccionados */}
-                          {selectedSigners.length > 0 && (
+                          {/* Sección de firmantes seleccionados - Oculta durante wizard SA */}
+                          {selectedSigners.length > 0 && !(selectedDocumentType?.code === 'SA' && saWizardStep < saRoles.length) && (
                             <div className="selected-signers-section">
                               <div className="selected-header">
-                                <h3 className="section-label">Firmantes seleccionados</h3>
-                                <span className="signers-count">
-                                  {selectedSigners.length} {selectedSigners.length === 1 ? 'firmante' : 'firmantes'}
-                                </span>
+                                <h3 className="section-label">
+                                  {selectedDocumentType?.code === 'SA'
+                                    ? 'Firmantes del documento'
+                                    : 'Firmantes seleccionados'}
+                                </h3>
+                                {selectedDocumentType?.code !== 'SA' && (
+                                  <span className="signers-count">
+                                    {selectedSigners.length} {selectedSigners.length === 1 ? 'firmante' : 'firmantes'}
+                                  </span>
+                                )}
                               </div>
 
                               <div className="selected-signers-container">
@@ -5094,8 +5584,9 @@ function Dashboard({ user, onLogout }) {
                                   const isCurrentUser = user && user.id === signerId;
                                   const isFromTemplate = typeof signerItem === 'object' && signerItem.fromTemplate === true;
                                   const isFacturaDocument = selectedDocumentType?.code === 'FV';
-                                  const canDrag = !uploading && !isCurrentUser && !isFromTemplate && !isFacturaDocument;
-                                  const isLocked = isCurrentUser || isFromTemplate || isFacturaDocument;
+                                  const isSADocument = selectedDocumentType?.code === 'SA';
+                                  const canDrag = !uploading && !isCurrentUser && !isFromTemplate && !isFacturaDocument && !isSADocument;
+                                  const isLocked = isCurrentUser || isFromTemplate || isFacturaDocument || isSADocument;
 
                                   return (
                                     <div
@@ -5208,13 +5699,6 @@ function Dashboard({ user, onLogout }) {
                                     </div>
                                   );
                                 })}
-                              </div>
-
-                              <div className="info-box-modern">
-                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                                <p>Los firmantes deben firmar en orden secuencial según el número asignado.</p>
                               </div>
                             </div>
                           )}

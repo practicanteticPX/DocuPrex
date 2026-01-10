@@ -106,7 +106,13 @@ const DocumentTypeSelector = ({
           </li>
 
           {/* Document type options */}
-          {documentTypes.map((type) => (
+          {documentTypes
+            .sort((a, b) => {
+              // Ordenar: SA primero, luego FV
+              const order = { 'SA': 1, 'FV': 2 };
+              return (order[a.code] || 999) - (order[b.code] || 999);
+            })
+            .map((type) => (
             <li
               key={type.id}
               className={`doc-type-selector__option ${selectedDocumentType?.id === type.id ? 'doc-type-selector__option--selected' : ''}`}
@@ -116,11 +122,6 @@ const DocumentTypeSelector = ({
             >
               <div className="doc-type-selector__option-content">
                 <p className="doc-type-selector__option-name">{type.name}</p>
-                {type.description && (
-                  <p className="doc-type-selector__option-description">
-                    {type.description}
-                  </p>
-                )}
               </div>
             </li>
           ))}
