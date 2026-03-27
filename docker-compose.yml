@@ -26,7 +26,7 @@ services:
     ports:
       # Exponer solo en IP específica para usuarios remotos
       # NPM también puede acceder por nombre de contenedor (firmas_server) vía red Docker
-      - "192.168.0.30:5001:5001"
+      - "10.50.8.10:5001:5001"
     depends_on:
       - postgres-db
     environment:
@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
     ports:
       # Exponer solo en IP específica para usuarios remotos
-      - "192.168.0.30:5173:5173"
+      - "10.50.8.10:5173:5173"
     depends_on:
       - server
     # Volúmenes de desarrollo comentados (no necesarios en modo producción)

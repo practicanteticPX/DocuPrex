@@ -1947,13 +1947,13 @@ La funcionalidad de facturas fallaba con "Failed to fetch" porque las URLs del b
 
 #### Files Modified:
 1. **`frontend/src/components/dashboard/FacturaSearch.jsx`**
-   - Eliminada URL hardcodeada: `http://192.168.0.30:5001/api/facturas/search`
+   - Eliminada URL hardcodeada: `http://10.50.8.10:5001/api/facturas/search`
    - Agregado import de `BACKEND_HOST` desde `config/api.js`
    - Ahora usa URL din�mica: `${BACKEND_HOST}/api/facturas/search`
    - Funciona autom�ticamente con HTTP y HTTPS
 
 2. **`frontend/src/hooks/useSigners.js`**
-   - Eliminada URL hardcodeada: `http://192.168.0.30:5001/graphql`
+   - Eliminada URL hardcodeada: `http://10.50.8.10:5001/graphql`
    - Agregado import de `API_URL` desde `config/api.js`
    - Ahora usa URL din�mica: `API_URL`
    - Consistente con el resto de la aplicaci�n
@@ -1969,7 +1969,7 @@ La estrategia centralizada en [config/api.js](frontend/src/config/api.js) detect
 #### Result:
 ✅ La aplicaci�n ahora funciona correctamente tanto:
   - Por HTTPS: `https://docuprex.com`
-  - Por HTTP con IP: `http://192.168.0.30:5173`
+  - Por HTTP con IP: `http://10.50.8.10:5173`
   - Ambos protocolos comparten el mismo c�digo sin URLs hardcodeadas
 
 ### Session: 2025-12-02 (Parte 2) - Implementaci�n de Buscador de Facturas
