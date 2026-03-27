@@ -4,7 +4,7 @@ const typeDefs = gql`
   scalar Upload
 
   type User {
-    id: Int!
+    id: ID!
     name: String!
     email: String!
     role: String!
@@ -22,8 +22,8 @@ const typeDefs = gql`
   }
 
   type UserSession {
-    id: Int!
-    userId: Int!
+    id: ID!
+    userId: ID!
     userName: String!
     userEmail: String!
     loginTime: String!
@@ -33,7 +33,7 @@ const typeDefs = gql`
   }
 
   type Document {
-    id: Int!
+    id: ID!
     title: String!
     description: String
     fileName: String!
@@ -42,9 +42,9 @@ const typeDefs = gql`
     mimeType: String!
     status: String!
     uploadedBy: User!
-    uploadedById: Int!
+    uploadedById: ID!
     documentType: DocumentType
-    documentTypeId: Int
+    documentTypeId: ID
     consecutivo: String
     metadata: String
     templateData: String
@@ -66,9 +66,9 @@ const typeDefs = gql`
   type Signature {
     id: ID!
     document: Document
-    documentId: Int
+    documentId: ID
     signer: User
-    signerId: Int
+    signerId: ID
     signatureData: String
     signatureType: String
     ipAddress: String
@@ -94,13 +94,13 @@ const typeDefs = gql`
   }
 
   type GroupMember {
-    userId: Int!
+    userId: ID!
     activo: Boolean!
     userName: String!
   }
 
   type DocumentSigner {
-    userId: Int!
+    userId: ID!
     orderPosition: Int!
     isRequired: Boolean!
     user: User!
@@ -113,7 +113,7 @@ const typeDefs = gql`
   }
 
   type DocumentType {
-    id: Int!
+    id: ID!
     name: String!
     code: String!
     description: String
@@ -125,8 +125,8 @@ const typeDefs = gql`
   }
 
   type DocumentTypeRole {
-    id: Int!
-    documentTypeId: Int!
+    id: ID!
+    documentTypeId: ID!
     roleName: String!
     roleCode: String!
     orderPosition: Int!
@@ -136,14 +136,14 @@ const typeDefs = gql`
   }
 
   type Notification {
-    id: Int!
+    id: ID!
     user: User!
-    userId: Int!
+    userId: ID!
     type: String!
     document: Document
-    documentId: Int!
+    documentId: ID!
     actor: User
-    actorId: Int
+    actorId: ID
     documentTitle: String!
     isRead: Boolean!
     createdAt: String!
@@ -163,7 +163,7 @@ const typeDefs = gql`
   }
 
   input SignerAssignmentInput {
-    userId: Int
+    userId: ID
     # Campos legacy (mantener compatibilidad)
     roleId: Int
     roleName: String
@@ -176,7 +176,7 @@ const typeDefs = gql`
   }
 
   type NegotiationSigner {
-    id: Int!
+    id: ID!
     name: String!
     active: Boolean!
   }
@@ -187,7 +187,7 @@ const typeDefs = gql`
   }
 
   type CausacionGrupo {
-    id: Int!
+    id: ID!
     codigo: String!
     nombre: String!
     descripcion: String
@@ -197,9 +197,9 @@ const typeDefs = gql`
   }
 
   type CausacionIntegrante {
-    id: Int!
-    grupoId: Int!
-    userId: Int!
+    id: ID!
+    grupoId: ID!
+    userId: ID!
     user: User!
     cargo: String
     activo: Boolean!
@@ -225,12 +225,12 @@ const typeDefs = gql`
     # Usuarios
     me: User
     users: [User!]!
-    user(id: Int!): User
+    user(id: ID!): User
     availableSigners: [User!]!
 
     # Documentos
     documents: [Document!]!
-    document(id: Int!): Document
+    document(id: ID!): Document
     myDocuments: [Document!]!
     pendingDocuments: [Document!]!
     signedDocuments: [Document!]!
@@ -241,12 +241,12 @@ const typeDefs = gql`
 
     # Tipos de Documentos
     documentTypes: [DocumentType!]!
-    documentType(id: Int!): DocumentType
-    documentTypeRoles(documentTypeId: Int!): [DocumentTypeRole!]!
+    documentType(id: ID!): DocumentType
+    documentTypeRoles(documentTypeId: ID!): [DocumentTypeRole!]!
 
     # Firmas
-    signatures(documentId: Int!): [Signature!]!
-    documentSigners(documentId: Int!): [DocumentSigner!]!
+    signatures(documentId: ID!): [Signature!]!
+    documentSigners(documentId: ID!): [DocumentSigner!]!
     mySignatures: [Signature!]!
 
     # Notificaciones
@@ -272,31 +272,31 @@ const typeDefs = gql`
     logout: Boolean!
 
     # Usuarios
-    updateUser(id: Int!, name: String, email: String): User!
-    deleteUser(id: Int!): Boolean!
+    updateUser(id: ID!, name: String, email: String): User!
+    deleteUser(id: ID!): Boolean!
     updateEmailNotifications(enabled: Boolean!): User!
 
     # Documentos
-    uploadDocument(title: String!, description: String, documentTypeId: Int): UploadResponse!
-    updateDocument(id: Int!, title: String, description: String, status: String, documentTypeId: Int): Document!
-    deleteDocument(id: Int!): Boolean!
-    assignSigners(documentId: Int!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
-    updateFacturaTemplate(documentId: Int!, templateData: String!): UpdateFacturaTemplateResponse!
+    uploadDocument(title: String!, description: String, documentTypeId: ID): UploadResponse!
+    updateDocument(id: ID!, title: String, description: String, status: String, documentTypeId: ID): Document!
+    deleteDocument(id: ID!): Boolean!
+    assignSigners(documentId: ID!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
+    updateFacturaTemplate(documentId: ID!, templateData: String!): UpdateFacturaTemplateResponse!
 
     # Firmas
-    signDocument(documentId: Int!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String): Signature!
-    rejectDocument(documentId: Int!, reason: String, realSignerName: String): Boolean!
+    signDocument(documentId: ID!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String): Signature!
+    rejectDocument(documentId: ID!, reason: String, realSignerName: String): Boolean!
 
     # Retenciones
-    retainDocument(documentId: Int!, centroCostoIndex: Int!, retentionPercentage: Int!, retentionReason: String!): DocumentRetention!
-    releaseDocument(documentId: Int!, centroCostoIndex: Int!): Boolean!
+    retainDocument(documentId: ID!, centroCostoIndex: Int!, retentionPercentage: Int!, retentionReason: String!): DocumentRetention!
+    releaseDocument(documentId: ID!, centroCostoIndex: Int!): Boolean!
 
     # Notificaciones
-    markNotificationAsRead(notificationId: Int!): Notification!
+    markNotificationAsRead(notificationId: ID!): Notification!
     markAllNotificationsAsRead: Boolean!
 
     # Sesiones (solo para administradores)
-    closeUserSession(sessionId: Int!): Boolean!
+    closeUserSession(sessionId: ID!): Boolean!
   }
 `;
 

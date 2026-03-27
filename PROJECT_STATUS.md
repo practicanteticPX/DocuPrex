@@ -5,6 +5,13 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2026-03-27 - Fix GraphQL ID type mismatch on login
+
+- Cambiado `User.id` y todas las referencias de IDs en GraphQL de `Int` a `ID` en `server/graphql/schema.js`.
+- Ajustado `releaseDocument` matcher en `server/graphql/resolvers-db.js` para comparar IDs como `String` en vez de `parseInt`, soportando IDs UUID e integer.
+- Objetivo: evitar `Int cannot represent non-integer value` (`"53ccc89d-..."`) en login y query/resolvers relacionados.
+
+
 ### Session: 2026-01-09 - Rediseño de Stepper para Documentos FV (Legalización de Facturas)
 
 #### Changes Implemented:

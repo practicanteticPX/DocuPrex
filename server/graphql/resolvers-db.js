@@ -5238,7 +5238,7 @@ const resolvers = {
 
         // Find and deactivate retention - usando comparaciones robustas con conversión de tipos
         const retentionIndex = currentRetentions.findIndex(r => {
-          const userIdMatch = parseInt(r.userId) === parseInt(user.id);
+          const userIdMatch = String(r.userId) === String(user.id);
           const indexMatch = parseInt(r.centroCostoIndex) === parseInt(centroCostoIndex);
           const isActive = r.activa === true;
 
