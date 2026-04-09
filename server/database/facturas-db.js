@@ -1,4 +1,6 @@
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 /**
@@ -13,6 +15,13 @@ const facturasPool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
   allowExitOnIdle: false,
+  ssl: {
+    rejectUnauthorized: false, // Para desarrollo - cambiar a true en producción
+    // Si tienes certificados específicos, descomenta y configura:
+    // key: fs.readFileSync(path.join(__dirname, '../certs/client-key.pem')),
+    // cert: fs.readFileSync(path.join(__dirname, '../certs/client-cert.pem')),
+    // ca: fs.readFileSync(path.join(__dirname, '../certs/ca-cert.pem'))
+  }
 });
 
 facturasPool.on('error', (err, client) => {

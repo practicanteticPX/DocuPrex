@@ -5,6 +5,138 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2026-04-09 - Ejecutar Migración Pendiente: Agregar Tipo de Documento FV
+
+#### Problema:
+- El tipo de documento "Legalización de Facturas" (FV) no aparecía en la interfaz de usuario
+- Causa: La migración `002_add_legalizacion_facturas.sql` no había sido ejecutada en la BD
+
+#### Solución Implementada:
+
+1. **Ejecución de Migración 002:**
+   - ✅ Ejecutada migración `002_add_legalizacion_facturas.sql` en BD
+     - Agregado tipo de documento "Legalización de Facturas" (código: 'FV')
+     - Agregados 5 roles para FV: Responsable centro de costos, Responsable cuenta contable, Responsable negociaciones, Área financiera, Causación
+     - Actualizadas columnas `document_signers` para soportar arrays de roles (assigned_role_ids, role_names)
+
+2. **Verificación:**
+   - ✅ Confirmado que FV está presente en `document_types` con `is_active = true`
+   - ✅ Reiniciados servicios server y frontend para recargar tipos de documentos
+
+#### Archivos Modificados:
+- Ninguno (migración ejecutada directamente en BD)
+
+#### Technical Debt:
+- Ninguno agregado.
+
+### Session: 2026-04-09 - Configurar SSL para Conexiones a BD Externas
+
+#### Problema:
+- Error de conexión a BD externa SERV_QPREX: "sin cifrado"
+- PostgreSQL requiere conexiones SSL/TLS para conexiones remotas
+- Las bases de datos externas requieren certificados SSL
+
+#### Solución Implementada:
+
+1. **Configuración SSL en facturas-db.js:**
+   - ✅ Agregado parámetro `ssl: { rejectUnauthorized: false }` para permitir conexiones SSL
+   - ✅ Preparado código para certificados específicos (comentado)
+   - ✅ Agregado imports necesarios (fs, path)
+
+2. **Configuración SSL en cuentas-db.js:**
+   - ✅ Aplicado misma configuración SSL para consistencia
+   - ✅ Preparado para certificados específicos
+
+3. **Directorio de certificados:**
+   - ✅ Creado `server/certs/` para almacenar certificados SSL
+
+4. **Reinicio de servicios:**
+   - ✅ Reiniciado contenedor del server para aplicar cambios
+
+#### Archivos Modificados:
+- `server/database/facturas-db.js` - Configuración SSL agregada
+- `server/database/cuentas-db.js` - Configuración SSL agregada
+
+#### Próximos Pasos:
+- Si hay certificados disponibles, colocarlos en `server/certs/`:
+  - `client-key.pem` (clave privada del cliente)
+  - `client-cert.pem` (certificado del cliente)
+  - `ca-cert.pem` (certificado de la CA)
+- Descomentar las líneas de certificados en ambos archivos
+- Cambiar `rejectUnauthorized: true` para validación completa en producción
+
+#### Technical Debt:
+- Configuración SSL básica implementada (rejectUnauthorized: false para desarrollo)
+- Requiere certificados específicos para producción segura
+
+### Session: 2026-04-08 - Fix Database Schema: Agregar retention_data y causacion_integrantes
+
+#### Problema:
+- Error: `column d.retention_data does not exist` en queries de documentos retenidos
+- Error: `relation "causacion_integrantes" does not exist` en queries de documentos pendientes
+- Causa: Columnas y tablas no estaban presentes en el schema actual
+
+#### Solución Implementada:
+
+1. **Actualizaciones a tabla `documents`:**
+   - ✅ Agregada columna `retention_data` (JSONB, default: `[]`)
+     - Almacena array de retenciones: `[{userId, activa, motivo, fecha}]`
+     - Utilizada en queries: `signedDocuments`, `retainedDocuments`
+   - ✅ Agregada columna `original_pdf_backup` (VARCHAR)
+     - Permite respaldo de PDFs antes de cambios
+   - ✅ Índice GIN en `retention_data` para búsquedas eficientes
+
+2. **Creación de tablas de causación:**
+   - ✅ Tabla `causacion_grupos`
+     - Campos: `id, codigo, nombre, descripcion, activo, created_at, updated_at`
+     - Datos iniciales: "financiera" y "logistica"
+     - Índices: `codigo`, `activo`
+   - ✅ Tabla `causacion_integrantes`
+     - Campos: `id, grupo_id (FK), user_id (FK), cargo, activo, created_at, updated_at`
+     - UNIQUE constraint: (grupo_id, user_id)
+     - Utilizada en: `documentSigners`, `pendingDocuments`, etc.
+     - Índices: `grupo_id`, `user_id`, `activo`
+
+3. **Actualización a tabla `document_signers`:**
+   - ✅ Agregado `is_causacion_group` (BOOLEAN, default: false)
+     - Indica si el firmante es un grupo de causación o usuario individual
+   - ✅ Agregado `grupo_codigo` (VARCHAR 50)
+     - Referencia al código del grupo (financiera, logistica)
+   - ✅ Agregado `assigned_role_ids` (UUID[], default: '{}')
+     - Array de IDs de roles asignados para histórico
+   - ✅ Agregado `role_names` (TEXT[], default: '{}')
+     - Array de nombres de roles para trazabilidad
+   - ✅ Índices: `grupo_codigo`, `is_causacion_group`
+
+4. **Archivos Modificados:**
+   - `server/database/DATABASE_COMPLETE_SCHEMA.sql` - Schema actualizado con nuevas columnas y tablas
+   - `server/database/migrations/008_add_retention_and_causacion.sql` - Migración 1 ejecutada en BD
+   - `server/database/migrations/009_add_causacion_fields_to_document_signers.sql` - Migración 2 ejecutada en BD
+
+5. **Verificación:**
+   - ✅ Columna `retention_data` presente en `documents` (JSONB)
+   - ✅ Columna `original_pdf_backup` presente en `documents` (VARCHAR)
+   - ✅ Tabla `causacion_grupos` creada con 2 registros iniciales
+   - ✅ Tabla `causacion_integrantes` creada y vinculada con FK a users
+   - ✅ Campos de causación agregados a `document_signers`
+   - ✅ Todos los índices creados
+   - ✅ Queries de test ejecutadas exitosamente
+
+#### Queries Ahora Funcionales:
+- `retainedDocuments` - Documentos que tengo retenidos ✅
+- `signedDocuments` - Excluir documentos retenidos ✅
+- `pendingDocuments` - Mostrar documentos pendientes con soporte a grupos de causación ✅
+- `documentSigners` - Expandir miembros de grupos de causación ✅
+- `checkIfDocumentHasActiveRetentions` - Verificar retenciones activas ✅
+
+#### Technical Debt:
+- Ninguno agregado. Se completó satisfactoriamente la migración.
+
+#### Next Steps:
+- Si hay datos antiguos de documentos, verificar si algunos tienen retenciones que deben migrarse
+- Pruebas E2E de flows de retención y causación
+- Monitoreo de logs para asegurar que no hay queries fallidas
+
 ### Session: 2026-03-27 - Fix GraphQL ID type mismatch on login
 
 - Cambiado `User.id` y todas las referencias de IDs en GraphQL de `Int` a `ID` en `server/graphql/schema.js`.
