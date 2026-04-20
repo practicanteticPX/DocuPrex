@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs').promises;
 const { query, pool } = require('../database/db');
-const { authenticateUser } = require('../services/ldap');
+const { authenticateUser, getAllUsers } = require('../services/ldap');
 const { addCoverPageWithSigners, updateSignersPage } = require('../utils/pdfCoverPage');
 const {
   notificarAsignacionFirmante,
@@ -19,6 +19,157 @@ const websocketService = require('../services/websocket');
 const { createSession, validateSession, closeSession } = require('../utils/sessionManager');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
+let signaturesHasConsecutivoColumn = null;
+let signaturesHasRealSignerNameColumn = null;
+let negotiationSignersTableExists = null;
+let availableSignersLastSyncAt = 0;
+let availableSignersSyncPromise = null;
+const AVAILABLE_SIGNERS_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+async function checkSignaturesHasConsecutivoColumn() {
+  if (signaturesHasConsecutivoColumn !== null) {
+    return signaturesHasConsecutivoColumn;
+  }
+
+  try {
+    const result = await query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_name = 'signatures'
+         AND column_name = 'consecutivo'
+       LIMIT 1`
+    );
+
+    signaturesHasConsecutivoColumn = result.rows.length > 0;
+  } catch (error) {
+    console.error('Error verificando columna signatures.consecutivo:', error);
+    signaturesHasConsecutivoColumn = false;
+  }
+
+  return signaturesHasConsecutivoColumn;
+}
+
+async function checkSignaturesHasRealSignerNameColumn() {
+  if (signaturesHasRealSignerNameColumn !== null) {
+    return signaturesHasRealSignerNameColumn;
+  }
+
+  try {
+    const result = await query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_name = 'signatures'
+         AND column_name = 'real_signer_name'
+       LIMIT 1`
+    );
+
+    signaturesHasRealSignerNameColumn = result.rows.length > 0;
+  } catch (error) {
+    console.error('Error verificando columna signatures.real_signer_name:', error);
+    signaturesHasRealSignerNameColumn = false;
+  }
+
+  return signaturesHasRealSignerNameColumn;
+}
+
+async function getSignatureColumnSelects() {
+  const hasConsecutivoColumn = await checkSignaturesHasConsecutivoColumn();
+  const hasRealSignerNameColumn = await checkSignaturesHasRealSignerNameColumn();
+
+  return {
+    hasConsecutivoColumn,
+    hasRealSignerNameColumn,
+    consecutivoSelect: hasConsecutivoColumn ? 's.consecutivo' : 'NULL as consecutivo',
+    realSignerNameSelect: hasRealSignerNameColumn ? 's.real_signer_name' : 'NULL as real_signer_name',
+    signerNameSelect: hasRealSignerNameColumn
+      ? 'COALESCE(s.real_signer_name, signer_user.name) as real_signer_name'
+      : 'signer_user.name as real_signer_name'
+  };
+}
+
+async function checkNegotiationSignersTableExists() {
+  if (negotiationSignersTableExists !== null) {
+    return negotiationSignersTableExists;
+  }
+
+  try {
+    const result = await query(
+      `SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = 'negotiation_signers'
+       LIMIT 1`
+    );
+
+    negotiationSignersTableExists = result.rows.length > 0;
+  } catch (error) {
+    console.error('Error verificando tabla negotiation_signers:', error);
+    negotiationSignersTableExists = false;
+  }
+
+  return negotiationSignersTableExists;
+}
+
+async function syncAvailableSignersFromActiveDirectoryIfNeeded(force = false) {
+  const now = Date.now();
+
+  if (!force && availableSignersLastSyncAt && (now - availableSignersLastSyncAt) < AVAILABLE_SIGNERS_SYNC_INTERVAL_MS) {
+    return;
+  }
+
+  if (availableSignersSyncPromise) {
+    return availableSignersSyncPromise;
+  }
+
+  availableSignersSyncPromise = (async () => {
+    try {
+      const adUsers = await getAllUsers();
+
+      if (!Array.isArray(adUsers) || adUsers.length === 0) {
+        availableSignersLastSyncAt = Date.now();
+        return;
+      }
+
+      for (const adUser of adUsers) {
+        if (!adUser.email || !adUser.username || !adUser.name) {
+          continue;
+        }
+
+        const existingUser = await query(
+          'SELECT id FROM users WHERE email = $1 OR ad_username = $2 LIMIT 1',
+          [adUser.email, adUser.username]
+        );
+
+        if (existingUser.rows.length > 0) {
+          await query(
+            `UPDATE users
+             SET name = $1,
+                 email = $2,
+                 ad_username = $3,
+                 is_active = true,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4`,
+            [adUser.name, adUser.email, adUser.username, existingUser.rows[0].id]
+          );
+        } else {
+          await query(
+            `INSERT INTO users (name, email, ad_username, role, is_active, email_notifications)
+             VALUES ($1, $2, $3, 'user', true, true)`,
+            [adUser.name, adUser.email, adUser.username]
+          );
+        }
+      }
+
+      availableSignersLastSyncAt = Date.now();
+    } catch (error) {
+      console.error('Error sincronizando usuarios disponibles desde Active Directory:', error.message);
+    } finally {
+      availableSignersSyncPromise = null;
+    }
+  })();
+
+  return availableSignersSyncPromise;
+}
 
 /**
  * Helper: Verificar si un documento está completamente firmado
@@ -161,6 +312,8 @@ async function checkAndCleanupBackupsIfComplete(documentId) {
  */
 async function obtenerFirmasDocumento(documentId, templateData = null) {
   try {
+    const { realSignerNameSelect } = await getSignatureColumnSelects();
+
     // Si no se pasa templateData, obtenerlo del documento
     if (!templateData) {
       const docResult = await query(
@@ -179,7 +332,7 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
         ds.user_id,
         u.name as user_name,
         u.email,
-        s.real_signer_name,
+        ${realSignerNameSelect},
         s.status as signature_status,
         ds.role_names,
         ds.role_name
@@ -281,7 +434,7 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
     // Los grupos de causación se manejan aparte porque cualquier miembro puede firmar
     const causacionGroupResult = await query(
       `SELECT
-        s.real_signer_name,
+        ${realSignerNameSelect},
         u.name as signer_name,
         ds.grupo_codigo,
         cg.nombre as grupo_nombre
@@ -689,8 +842,8 @@ const resolvers = {
           s.signed_at as signature_signed_at,
           s.rejected_at as signature_rejected_at,
           s.rejection_reason as signature_rejection_reason,
-          s.consecutivo as signature_consecutivo,
-          s.real_signer_name as signature_real_signer_name,
+          NULL as signature_consecutivo,
+          NULL as signature_real_signer_name,
           s.created_at as signature_created_at
         FROM document_signers ds
         LEFT JOIN users u ON ds.user_id = u.id
@@ -724,8 +877,8 @@ const resolvers = {
             s.signed_at as signature_signed_at,
             s.rejected_at as signature_rejected_at,
             s.rejection_reason as signature_rejection_reason,
-            s.consecutivo as signature_consecutivo,
-            s.real_signer_name as signature_real_signer_name,
+            NULL as signature_consecutivo,
+            NULL as signature_real_signer_name,
             s.created_at as signature_created_at
           FROM causacion_integrantes ci
           LEFT JOIN users u ON ci.user_id = u.id
@@ -850,6 +1003,12 @@ const resolvers = {
     negotiationSigners: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
 
+      const hasNegotiationSignersTable = await checkNegotiationSignersTableExists();
+      if (!hasNegotiationSignersTable) {
+        console.warn('Tabla negotiation_signers no existe. Retornando lista vacia.');
+        return [];
+      }
+
       const result = await query(`
         SELECT id, name, active
         FROM negotiation_signers
@@ -866,6 +1025,14 @@ const resolvers = {
       console.log('🔍 Verificando cédula para:', name);
       console.log('🔢 Últimos 4 dígitos recibidos:', lastFourDigits, 'Tipo:', typeof lastFourDigits);
       console.log('👤 Usuario:', user.name);
+
+      const hasNegotiationSignersTable = await checkNegotiationSignersTableExists();
+      if (!hasNegotiationSignersTable) {
+        return {
+          valid: false,
+          message: 'La validacion de Negociaciones no esta configurada en esta base de datos. Falta crear la tabla negotiation_signers y cargar las cedulas autorizadas.'
+        };
+      }
 
       // Buscar el firmante en la base de datos
       const result = await query(`
@@ -936,6 +1103,7 @@ const resolvers = {
 
     availableSigners: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
+      await syncAvailableSignersFromActiveDirectoryIfNeeded();
 
       // Incluir al usuario actual para permitir autofirma
       // Excluir usuarios que no están en el directorio activo (por ejemplo, Administrador con email admin@prexxa.local)
@@ -943,6 +1111,7 @@ const resolvers = {
         SELECT id, name, email, role
         FROM users
         WHERE email != 'admin@prexxa.local'
+          AND is_active = true
         ORDER BY
           CASE WHEN id = $1 THEN 0 ELSE 1 END,
           name ASC
@@ -1438,6 +1607,7 @@ const resolvers = {
       const isOwner = doc.uploaded_by === user.id;
       const ownerInNewSigners = userIds.includes(user.id);
       const isFacturaVenta = doc.document_type_code === 'FV';
+      const reservedUserIds = new Set(userIds.filter(Boolean));
 
       console.log(`🔍 DEBUG: document_type_code='${doc.document_type_code}', isFacturaVenta=${isFacturaVenta}`);
 
@@ -1454,7 +1624,7 @@ const resolvers = {
           // Insertar firmante en su posición correcta según el array
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])`,
             [
               documentId,
               assignment.userId,
@@ -1508,7 +1678,7 @@ const resolvers = {
 
           await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-             VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])
+             VALUES ($1, $2, 1, $3, $4, $5, $6::uuid[], $7::text[])
              ON CONFLICT (document_id, user_id) DO NOTHING`,
             [
               documentId,
@@ -1520,27 +1690,15 @@ const resolvers = {
               ownerRoles.roleNames
             ]
           );
-
-          // Auto-firmar al propietario SOLO si es NEGOCIADOR
-          const isNegociador = ownerRoles.roleNames && ownerRoles.roleNames.includes('Negociador');
-          if (isNegociador) {
-            await query(
-              `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
-               VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
-               ON CONFLICT (document_id, signer_id) DO UPDATE
-               SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
-              [documentId, user.id]
-            );
-            console.log(`✅ Auto-firma aplicada al propietario NEGOCIADOR (posición 1)`);
-          } else {
-            await query(
-              `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-               VALUES ($1, $2, 'pending', 'digital')
-               ON CONFLICT (document_id, signer_id) DO NOTHING`,
-              [documentId, user.id]
-            );
-            // console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
-          }
+          // Para documentos no-FV, si el propietario queda primero debe quedar firmado.
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+             VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
+             ON CONFLICT (document_id, signer_id) DO UPDATE
+             SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
+            [documentId, user.id]
+          );
+          console.log(`Auto-firma aplicada al propietario en posicion 1`);
 
           const otherUserIds = userIds.filter(id => id !== user.id);
           const maxPosition = existingSignersResult.rows.length + 1;
@@ -1551,7 +1709,7 @@ const resolvers = {
 
             await query(
               `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-               VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
+               VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])
                ON CONFLICT (document_id, user_id) DO NOTHING`,
               [
                 documentId,
@@ -1581,7 +1739,7 @@ const resolvers = {
 
             await query(
               `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-               VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])
+               VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])
                ON CONFLICT (document_id, user_id) DO NOTHING`,
               [
                 documentId,
@@ -1612,7 +1770,7 @@ const resolvers = {
 
             await query(
               `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-               VALUES ($1, $2, 1, $3, $4, $5, $6::integer[], $7::text[])`,
+               VALUES ($1, $2, 1, $3, $4, $5, $6::uuid[], $7::text[])`,
               [
                 documentId,
                 user.id,
@@ -1623,24 +1781,13 @@ const resolvers = {
                 ownerRoles.roleNames
               ]
             );
-
-            // Auto-firmar al propietario SOLO si es NEGOCIADOR
-            const isNegociador = ownerRoles.roleNames && ownerRoles.roleNames.includes('Negociador');
-            if (isNegociador) {
-              await query(
-                `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
-                 VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
-                [documentId, user.id]
-              );
-              console.log(`✅ Auto-firma aplicada al propietario NEGOCIADOR (posición 1)`);
-            } else {
-              await query(
-                `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-                 VALUES ($1, $2, 'pending', 'digital')`,
-                [documentId, user.id]
-              );
-              // console.log(`ℹ️ Propietario agregado como pendiente (no es negociador)`);
-            }
+            // Para documentos no-FV, si el propietario queda primero debe quedar firmado.
+            await query(
+              `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+               VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
+              [documentId, user.id]
+            );
+            console.log(`Auto-firma aplicada al propietario en posicion 1`);
 
             startPosition = 2;
           }
@@ -1652,7 +1799,7 @@ const resolvers = {
 
             await query(
               `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
-               VALUES ($1, $2, $3, $4, $5, $6, $7::integer[], $8::text[])`,
+               VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])`,
               [
                 documentId,
                 otherUserIds[i],
@@ -1687,6 +1834,24 @@ const resolvers = {
           const { roleIds, roleNames } = normalizeRoles(grupoAssignment);
           currentMaxPos++;
 
+          const representativeResult = await query(`
+            SELECT ci.user_id
+            FROM causacion_integrantes ci
+            JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+            WHERE cg.codigo = $1
+              AND ci.activo = true
+              AND NOT (ci.user_id = ANY($2::uuid[]))
+            ORDER BY ci.created_at ASC NULLS LAST, ci.user_id ASC
+            LIMIT 1
+          `, [grupoAssignment.grupoCodigo, Array.from(reservedUserIds)]);
+
+          if (representativeResult.rows.length === 0) {
+            throw new Error(`El grupo de causación ${grupoAssignment.grupoCodigo} no tiene integrantes activos disponibles porque sus miembros ya están asignados individualmente en este documento`);
+          }
+
+          const representativeUserId = representativeResult.rows[0].user_id;
+          reservedUserIds.add(representativeUserId);
+
           // console.log(`📋 Agregando grupo de causación: ${grupoAssignment.grupoCodigo} en posición ${currentMaxPos}`);
 
           await query(
@@ -1695,9 +1860,10 @@ const resolvers = {
               assigned_role_id, role_name, assigned_role_ids, role_names,
               is_causacion_group, grupo_codigo
             )
-            VALUES ($1, NULL, $2, TRUE, $3, $4, $5::integer[], $6::text[], TRUE, $7)`,
+            VALUES ($1, $2, $3, TRUE, $4, $5, $6::uuid[], $7::text[], TRUE, $8)`,
             [
               documentId,
+              representativeUserId,
               currentMaxPos,
               roleIds[0] || null,
               roleNames[0] || null,
@@ -1708,6 +1874,28 @@ const resolvers = {
           );
 
           // console.log(`✅ Grupo ${grupoAssignment.grupoCodigo} agregado en posición ${currentMaxPos}`);
+        }
+      }
+
+      // Refuerzo de autofirma para documentos no-FV:
+      // si el creador quedó como firmante #1, debe quedar firmado aunque el frontend no alcance
+      // a ejecutar la autofirma o falle silenciosamente.
+      if (!isFacturaVenta && ownerInNewSigners) {
+        const firstSignerResult = await query(
+          `SELECT user_id
+           FROM document_signers
+           WHERE document_id = $1 AND order_position = 1 AND is_causacion_group = false`,
+          [documentId]
+        );
+
+        if (firstSignerResult.rows.length > 0 && firstSignerResult.rows[0].user_id === user.id) {
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
+             VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
+             ON CONFLICT (document_id, signer_id) DO UPDATE
+             SET status = 'signed', signed_at = CURRENT_TIMESTAMP`,
+            [documentId, user.id]
+          );
         }
       }
 
@@ -1787,11 +1975,26 @@ const resolvers = {
           const docTitle = docResult.rows[0].title;
           const creatorName = docResult.rows[0].creator_name;
 
-          // Determinar el PRIMER firmante en ORDEN de firma (puede ser usuario o grupo de causación)
+          // Determinar el PRIMER firmante pendiente en orden de firma
           const firstSignerResult = await query(
             `SELECT ds.user_id, ds.is_causacion_group, ds.grupo_codigo
              FROM document_signers ds
              WHERE ds.document_id = $1
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM signatures s
+                 WHERE s.document_id = ds.document_id
+                   AND (
+                     (ds.is_causacion_group = false AND s.signer_id = ds.user_id AND s.status IN ('signed', 'rejected'))
+                     OR
+                     (ds.is_causacion_group = true AND s.status IN ('signed', 'rejected') AND s.signer_id IN (
+                       SELECT ci.user_id
+                       FROM causacion_integrantes ci
+                       JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                       WHERE cg.codigo = ds.grupo_codigo AND ci.activo = true
+                     ))
+                   )
+               )
              ORDER BY ds.order_position ASC
              LIMIT 1`,
             [documentId]
@@ -1824,10 +2027,10 @@ const resolvers = {
                 // Crear notificación interna
                 const insertResult = await query(
                   `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-                   SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+                   SELECT $1::uuid, $2::varchar, $3::uuid, $4::uuid, $5::varchar
                    WHERE NOT EXISTS (
                      SELECT 1 FROM notifications
-                     WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+                     WHERE user_id = $1::uuid AND type = $2::varchar AND document_id = $3::uuid
                    )
                    RETURNING id`,
                   [member.id, 'signature_request', documentId, user.id, docTitle]
@@ -1876,10 +2079,10 @@ const resolvers = {
               if (firstSignerId !== user.id) {
                 const insertResult = await query(
                   `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-                   SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+                   SELECT $1::uuid, $2::varchar, $3::uuid, $4::uuid, $5::varchar
                    WHERE NOT EXISTS (
                      SELECT 1 FROM notifications
-                     WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+                     WHERE user_id = $1::uuid AND type = $2::varchar AND document_id = $3::uuid
                    )
                    RETURNING id`,
                   [firstSignerId, 'signature_request', documentId, user.id, docTitle]
@@ -2016,12 +2219,12 @@ const resolvers = {
             s.signed_at,
             s.rejected_at,
             s.rejection_reason,
-            s.consecutivo,
-            COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+            NULL as consecutivo,
+            signer_user.name as real_signer_name,
             signer_user.email as signer_email,
-            dr.retention_percentage,
-            dr.retention_reason,
-            dr.retained_at
+            NULL as retention_percentage,
+            NULL as retention_reason,
+            NULL as retained_at
           FROM document_signers ds
           LEFT JOIN users u ON ds.user_id = u.id
           LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -2035,9 +2238,6 @@ const resolvers = {
             ))
           )
           LEFT JOIN users signer_user ON s.signer_id = signer_user.id
-          LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
-            AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
-            AND dr.released_at IS NULL
           WHERE ds.document_id = $1
           ORDER BY ds.order_position ASC`,
           [documentId]
@@ -2630,6 +2830,7 @@ const resolvers = {
         const signersToRemove = [...currentUserIds].filter(id => !newSignerIds.has(id));
         const signersToAdd = [...newSignerIds].filter(id => !currentUserIds.has(id));
         const signersToKeep = [...newSignerIds].filter(id => currentUserIds.has(id));
+        const reservedUserIds = new Set(newSignerIds);
 
         console.log(`📊 Análisis de cambios en firmantes (usuarios):`);
         console.log(`  ✅ Mantener: ${signersToKeep.length} usuarios`);
@@ -2695,6 +2896,24 @@ const resolvers = {
           if (firmante.grupoCodigo) {
             const { roleNames } = normalizeRoles(firmante);
 
+            const representativeResult = await client.query(`
+              SELECT ci.user_id
+              FROM causacion_integrantes ci
+              JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+              WHERE cg.codigo = $1
+                AND ci.activo = true
+                AND NOT (ci.user_id = ANY($2::uuid[]))
+              ORDER BY ci.created_at ASC NULLS LAST, ci.user_id ASC
+              LIMIT 1
+            `, [firmante.grupoCodigo, Array.from(reservedUserIds)]);
+
+            if (representativeResult.rows.length === 0) {
+              throw new Error(`El grupo de causación ${firmante.grupoCodigo} no tiene integrantes activos disponibles porque sus miembros ya están asignados individualmente en este documento`);
+            }
+
+            const representativeUserId = representativeResult.rows[0].user_id;
+            reservedUserIds.add(representativeUserId);
+
             // console.log(`📋 Agregando grupo de causación: ${firmante.grupoCodigo} en posición ${orderPosition}`);
 
             await client.query(
@@ -2703,9 +2922,10 @@ const resolvers = {
                 role_name, role_names,
                 is_causacion_group, grupo_codigo
               )
-              VALUES ($1, NULL, $2, TRUE, $3, $4::text[], TRUE, $5)`,
+              VALUES ($1, $2, $3, TRUE, $4, $5::text[], TRUE, $6)`,
               [
                 documentId,
+                representativeUserId,
                 orderPosition,
                 roleNames[0] || null, // Legacy singular
                 roleNames,
@@ -2764,10 +2984,10 @@ const resolvers = {
             // Crear notificación (solo para firmantes NUEVOS)
             const notifResult = await client.query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-               SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+               SELECT $1::uuid, $2::varchar, $3::uuid, $4::uuid, $5::varchar
                WHERE NOT EXISTS (
                  SELECT 1 FROM notifications
-                 WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+                 WHERE user_id = $1::uuid AND type = $2::varchar AND document_id = $3::uuid
                )
                RETURNING id`,
               [userId, 'signature_request', documentId, user.id, doc.title]
@@ -2852,6 +3072,8 @@ const resolvers = {
           }
         });
 
+        const { consecutivoSelect, realSignerNameSelect } = await getSignatureColumnSelects();
+
         // Obtener todos los firmantes actualizados para la portada
         const signersForCover = await client.query(
           `SELECT
@@ -2868,8 +3090,8 @@ const resolvers = {
             s.signed_at,
             s.rejected_at,
             s.rejection_reason,
-            s.consecutivo,
-            s.real_signer_name,
+            ${consecutivoSelect},
+            ${realSignerNameSelect},
             signer_user.email as signer_email
           FROM document_signers ds
           LEFT JOIN users u ON ds.user_id = u.id
@@ -3046,8 +3268,8 @@ const resolvers = {
       const now = new Date().toISOString();
 
       await query(
-        'UPDATE signatures SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3, real_signer_name = $4 WHERE document_id = $5 AND signer_id = $6',
-        ['rejected', reason || '', now, realSignerName || null, documentId, user.id]
+        'UPDATE signatures SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3 WHERE document_id = $4 AND signer_id = $5',
+        ['rejected', reason || '', now, documentId, user.id]
       );
 
       const statusResult = await query(
@@ -3203,12 +3425,12 @@ const resolvers = {
                 s.signed_at,
                 s.rejected_at,
                 s.rejection_reason,
-                s.consecutivo,
-                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                NULL as consecutivo,
+                signer_user.name as real_signer_name,
                 signer_user.email as signer_email,
-                dr.retention_percentage,
-                dr.retention_reason,
-                dr.retained_at
+                NULL as retention_percentage,
+                NULL as retention_reason,
+                NULL as retained_at
             FROM document_signers ds
             LEFT JOIN users u ON ds.user_id = u.id
             LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -3222,9 +3444,6 @@ const resolvers = {
               ))
             )
             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
-            LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
-              AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
-              AND dr.released_at IS NULL
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
@@ -3346,8 +3565,9 @@ const resolvers = {
             // Obtener firmas actuales del documento
             const obtenerFirmasDocumento = async (documentId, templateData) => {
               const firmasMap = {};
+              const { realSignerNameSelect } = await getSignatureColumnSelects();
               const signersResult = await query(
-                `SELECT s.signer_id, s.status, s.real_signer_name, u.name
+                `SELECT s.signer_id, s.status, ${realSignerNameSelect}, u.name
                  FROM signatures s
                  JOIN users u ON s.signer_id = u.id
                  WHERE s.document_id = $1 AND s.status = 'signed'`,
@@ -3665,27 +3885,90 @@ const resolvers = {
         `SELECT * FROM signatures WHERE document_id = $1 AND signer_id = $2`,
         [documentId, user.id]
       );
+      const hasConsecutivoColumn = await checkSignaturesHasConsecutivoColumn();
+      const hasRealSignerNameColumn = await checkSignaturesHasRealSignerNameColumn();
 
       let result;
       if (existingSignature.rows.length > 0) {
-        result = await query(
-          `UPDATE signatures
-          SET status = 'signed',
-              signature_data = $1,
-              consecutivo = $2,
-              real_signer_name = $3,
-              signed_at = CURRENT_TIMESTAMP
-          WHERE document_id = $4 AND signer_id = $5
-          RETURNING *`,
-          [signatureData, consecutivo || null, effectiveRealSignerName, documentId, user.id]
-        );
+        if (hasConsecutivoColumn && hasRealSignerNameColumn) {
+          result = await query(
+            `UPDATE signatures
+            SET status = 'signed',
+                signature_data = $1,
+                consecutivo = $2,
+                real_signer_name = $3,
+                updated_at = CURRENT_TIMESTAMP,
+                signed_at = CURRENT_TIMESTAMP
+            WHERE document_id = $4 AND signer_id = $5
+            RETURNING *`,
+            [signatureData, consecutivo || null, effectiveRealSignerName, documentId, user.id]
+          );
+        } else if (hasConsecutivoColumn) {
+          result = await query(
+            `UPDATE signatures
+            SET status = 'signed',
+                signature_data = $1,
+                consecutivo = $2,
+                updated_at = CURRENT_TIMESTAMP,
+                signed_at = CURRENT_TIMESTAMP
+            WHERE document_id = $3 AND signer_id = $4
+            RETURNING *`,
+            [signatureData, consecutivo || null, documentId, user.id]
+          );
+        } else if (hasRealSignerNameColumn) {
+          result = await query(
+            `UPDATE signatures
+            SET status = 'signed',
+                signature_data = $1,
+                real_signer_name = $2,
+                updated_at = CURRENT_TIMESTAMP,
+                signed_at = CURRENT_TIMESTAMP
+            WHERE document_id = $3 AND signer_id = $4
+            RETURNING *`,
+            [signatureData, effectiveRealSignerName, documentId, user.id]
+          );
+        } else {
+          result = await query(
+            `UPDATE signatures
+            SET status = 'signed',
+                signature_data = $1,
+                updated_at = CURRENT_TIMESTAMP,
+                signed_at = CURRENT_TIMESTAMP
+            WHERE document_id = $2 AND signer_id = $3
+            RETURNING *`,
+            [signatureData, documentId, user.id]
+          );
+        }
       } else {
-        result = await query(
-          `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, consecutivo, real_signer_name, signed_at)
-          VALUES ($1, $2, 'signed', $3, 'digital', $4, $5, CURRENT_TIMESTAMP)
-          RETURNING *`,
-          [documentId, user.id, signatureData, consecutivo || null, effectiveRealSignerName]
-        );
+        if (hasConsecutivoColumn && hasRealSignerNameColumn) {
+          result = await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, signed_at, consecutivo, real_signer_name)
+            VALUES ($1, $2, 'signed', $3, 'digital', CURRENT_TIMESTAMP, $4, $5)
+            RETURNING *`,
+            [documentId, user.id, signatureData, consecutivo || null, effectiveRealSignerName]
+          );
+        } else if (hasConsecutivoColumn) {
+          result = await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, signed_at, consecutivo)
+            VALUES ($1, $2, 'signed', $3, 'digital', CURRENT_TIMESTAMP, $4)
+            RETURNING *`,
+            [documentId, user.id, signatureData, consecutivo || null]
+          );
+        } else if (hasRealSignerNameColumn) {
+          result = await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, signed_at, real_signer_name)
+            VALUES ($1, $2, 'signed', $3, 'digital', CURRENT_TIMESTAMP, $4)
+            RETURNING *`,
+            [documentId, user.id, signatureData, effectiveRealSignerName]
+          );
+        } else {
+          result = await query(
+            `INSERT INTO signatures (document_id, signer_id, status, signature_data, signature_type, signed_at)
+            VALUES ($1, $2, 'signed', $3, 'digital', CURRENT_TIMESTAMP)
+            RETURNING *`,
+            [documentId, user.id, signatureData]
+          );
+        }
       }
 
       if (result.rows.length === 0) {
@@ -3785,9 +4068,16 @@ const resolvers = {
         if (docInfoResult.rows.length > 0) {
           const docInfo = docInfoResult.rows[0];
           const isFVDocument = docInfo.document_type_code === 'FV';
-          const hasMetadata = docInfo.metadata && typeof docInfo.metadata === 'object' && Object.keys(docInfo.metadata).length > 0;
+          const hasMetadata = !!(
+            docInfo.metadata &&
+            (
+              (typeof docInfo.metadata === 'object' && Object.keys(docInfo.metadata).length > 0) ||
+              (typeof docInfo.metadata === 'string' && docInfo.metadata.trim() !== '')
+            )
+          );
 
           if (isFVDocument && hasMetadata) {
+            const { consecutivoSelect, signerNameSelect } = await getSignatureColumnSelects();
             const templateData = typeof docInfo.metadata === 'string'
               ? JSON.parse(docInfo.metadata)
               : docInfo.metadata;
@@ -3864,8 +4154,8 @@ const resolvers = {
                 s.signed_at,
                 s.rejected_at,
                 s.rejection_reason,
-                s.consecutivo,
-                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                ${consecutivoSelect},
+                ${signerNameSelect},
                 signer_user.email as signer_email
                FROM document_signers ds
                LEFT JOIN users u ON ds.user_id = u.id
@@ -4052,10 +4342,10 @@ const resolvers = {
                 for (const member of membersResult.rows) {
                   const insertResult = await query(
                     `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-                     SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+                     SELECT $1::uuid, $2::varchar, $3::uuid, $4::uuid, $5::varchar
                      WHERE NOT EXISTS (
                        SELECT 1 FROM notifications
-                       WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+                       WHERE user_id = $1::uuid AND type = $2::varchar AND document_id = $3::uuid
                      )
                      RETURNING id`,
                     [member.id, 'signature_request', documentId, doc.uploaded_by, doc.title]
@@ -4101,10 +4391,10 @@ const resolvers = {
 
                   const insertResult = await query(
                     `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-                     SELECT $1::integer, $2::varchar, $3::integer, $4::integer, $5::varchar
+                     SELECT $1::uuid, $2::varchar, $3::uuid, $4::uuid, $5::varchar
                      WHERE NOT EXISTS (
                        SELECT 1 FROM notifications
-                       WHERE user_id = $1::integer AND type = $2::varchar AND document_id = $3::integer
+                       WHERE user_id = $1::uuid AND type = $2::varchar AND document_id = $3::uuid
                      )
                      RETURNING id`,
                     [nextSigner.id, 'signature_request', documentId, doc.uploaded_by, doc.title]
@@ -4238,12 +4528,12 @@ const resolvers = {
                 s.signed_at,
                 s.rejected_at,
                 s.rejection_reason,
-                s.consecutivo,
-                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                NULL as consecutivo,
+                signer_user.name as real_signer_name,
                 signer_user.email as signer_email,
-                dr.retention_percentage,
-                dr.retention_reason,
-                dr.retained_at
+                NULL as retention_percentage,
+                NULL as retention_reason,
+                NULL as retained_at
             FROM document_signers ds
             LEFT JOIN users u ON ds.user_id = u.id
             LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
@@ -4257,9 +4547,6 @@ const resolvers = {
               ))
             )
             LEFT JOIN users signer_user ON s.signer_id = signer_user.id
-            LEFT JOIN document_retentions dr ON dr.document_id = ds.document_id
-              AND dr.retained_by = COALESCE(s.signer_id, ds.user_id)
-              AND dr.released_at IS NULL
             WHERE ds.document_id = $1
             ORDER BY ds.order_position ASC`,
             [documentId]
@@ -4657,6 +4944,7 @@ const resolvers = {
 
                             // Agregar informe de firmantes
                             console.log(`📄 Generando informe de firmantes...`);
+                            const { consecutivoSelect, signerNameSelect } = await getSignatureColumnSelects();
                             const signersForCover = await query(
                               `SELECT
                                 ds.user_id,
@@ -4672,8 +4960,8 @@ const resolvers = {
                                 s.signed_at,
                                 s.rejected_at,
                                 s.rejection_reason,
-                                s.consecutivo,
-                                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+                                ${consecutivoSelect},
+                                ${signerNameSelect},
                                 signer_user.email as signer_email
                                FROM document_signers ds
                                LEFT JOIN users u ON ds.user_id = u.id
@@ -5113,14 +5401,15 @@ const resolvers = {
           await mergePDFs(filesToMerge, tempMergedPath);
 
           // Obtener firmantes
+          const { consecutivoSelect, signerNameSelect } = await getSignatureColumnSelects();
           const signersResult = await query(
             `SELECT
               ds.user_id, ds.order_position, ds.role_name, ds.role_names,
               ds.is_causacion_group, ds.grupo_codigo,
               u.name as user_name, cg.nombre as grupo_nombre, u.email,
               COALESCE(s.status, 'pending') as status,
-              s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo,
-              COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+              s.signed_at, s.rejected_at, s.rejection_reason, ${consecutivoSelect},
+              ${signerNameSelect},
               signer_user.email as signer_email
             FROM document_signers ds
             LEFT JOIN users u ON ds.user_id = u.id
@@ -5321,14 +5610,15 @@ const resolvers = {
           await mergePDFs(filesToMerge, tempMergedPath);
 
           // Obtener firmantes
+          const { consecutivoSelect, signerNameSelect } = await getSignatureColumnSelects();
           const signersResult = await query(
             `SELECT
               ds.user_id, ds.order_position, ds.role_name, ds.role_names,
               ds.is_causacion_group, ds.grupo_codigo,
               u.name as user_name, cg.nombre as grupo_nombre, u.email,
               COALESCE(s.status, 'pending') as status,
-              s.signed_at, s.rejected_at, s.rejection_reason, s.consecutivo,
-              COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
+              s.signed_at, s.rejected_at, s.rejection_reason, ${consecutivoSelect},
+              ${signerNameSelect},
               signer_user.email as signer_email
             FROM document_signers ds
             LEFT JOIN users u ON ds.user_id = u.id
@@ -5849,11 +6139,13 @@ const resolvers = {
       if (!parent.actor_id) return null;
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.actor_id]);
       const actor = result.rows[0];
+      if (!actor) return null;
 
       // Si la notificación es de tipo 'document_signed', obtener el realSignerName de la firma
       if (parent.type === 'document_signed' && parent.document_id) {
+        const { realSignerNameSelect } = await getSignatureColumnSelects();
         const signatureResult = await query(
-          `SELECT real_signer_name FROM signatures
+          `SELECT ${realSignerNameSelect} FROM signatures
            WHERE document_id = $1 AND signer_id = $2 AND status = 'signed'
            ORDER BY signed_at DESC LIMIT 1`,
           [parent.document_id, parent.actor_id]

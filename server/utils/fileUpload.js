@@ -101,10 +101,20 @@ const storage = multer.diskStorage({
   }
 });
 
+const isPdfFile = (file) => {
+  if (!file) return false;
+
+  const mimeType = (file.mimetype || '').toLowerCase();
+  const originalName = (file.originalname || '').toLowerCase();
+
+  // Algunos navegadores o sistemas envían PDFs con mimetype vacío o genérico.
+  // Alineamos la validación con el frontend y aceptamos también por extensión.
+  return mimeType === 'application/pdf' || originalName.endsWith('.pdf');
+};
+
 // Filtro para aceptar solo PDFs
 const fileFilter = (req, file, cb) => {
-  // Aceptar solo PDFs
-  if (file.mimetype === 'application/pdf') {
+  if (isPdfFile(file)) {
     cb(null, true);
   } else {
     cb(new Error('Solo se permiten archivos PDF'), false);
@@ -137,4 +147,5 @@ module.exports = {
   normalizeUserName,
   normalizeFileName,
   getUserUploadDir,
+  isPdfFile,
 };

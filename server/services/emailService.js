@@ -35,23 +35,31 @@ transporter.verify(function (error, success) {
  */
 async function sendEmail({ to, subject, html, text }) {
   try {
+    const authenticatedSender = process.env.SMTP_USER;
+    const configuredSender = process.env.SMTP_FROM_EMAIL;
+    const fromAddress = authenticatedSender || configuredSender;
+
     const mailOptions = {
-      from: `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
+      from: `"${process.env.SMTP_FROM_NAME}" <${fromAddress}>`,
+      sender: fromAddress,
       to,
       subject,
       html,
       text: text || '', // Texto plano como alternativa
     };
 
+    if (configuredSender && configuredSender !== fromAddress) {
+      mailOptions.replyTo = configuredSender;
+    }
+
     const info = await transporter.sendMail(mailOptions);
-    console.log('✉️  Correo enviado:', info.messageId);
+    console.log('Correo enviado:', info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('❌ Error al enviar correo:', error);
-    return { success: false, error: error.message };
+    console.error('Error al enviar correo:', error);
+    throw error;
   }
 }
-
 /**
  * Notifica a un firmante que ha sido asignado a un documento
  * @param {Object} params - Parámetros de la notificación

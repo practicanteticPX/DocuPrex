@@ -83,8 +83,9 @@ export const getDownloadUrl = (documentId) => {
  * @param {number|string} documentId - ID del documento
  * @returns {string} URL de visualización
  */
-export const getViewUrl = (documentId) => {
-  return `${BACKEND_HOST}/api/view/${documentId}`;
+export const getViewUrl = (documentId, cacheBust = null) => {
+  const baseUrl = `${BACKEND_HOST}/api/view/${documentId}`;
+  return cacheBust ? `${baseUrl}?v=${encodeURIComponent(cacheBust)}` : baseUrl;
 };
 
 /**

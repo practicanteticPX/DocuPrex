@@ -16,18 +16,13 @@ INSERT INTO causacion_integrantes (grupo_id, user_id, cargo) VALUES
   -- Reemplazar 'CORREO_USUARIO' con el email real del usuario
   (
     (SELECT id FROM causacion_grupos WHERE codigo = 'financiera'),
-    (SELECT id FROM users WHERE email = 'm.bustamante@prexxa.com.co'),
-    'Causación'
+    (SELECT id FROM users WHERE email = 'l.riano@prexxa.com.co'),
+    'Causacion'
   ),
   (
     (SELECT id FROM causacion_grupos WHERE codigo = 'financiera'),
-    (SELECT id FROM users WHERE email = 'm.rendon@prexxa.com.co'),
-    'Causación'
-  ),
-  (
-    (SELECT id FROM causacion_grupos WHERE codigo = 'financiera'),
-    (SELECT id FROM users WHERE email = 'c.martinez@prexxa.com.co'),
-    'Causación'
+    (SELECT id FROM users WHERE email = 'a.martinez@prexxa.com.co'),
+    'Causacion'
   )
 ON CONFLICT (grupo_id, user_id) DO NOTHING;
 
@@ -39,18 +34,13 @@ INSERT INTO causacion_integrantes (grupo_id, user_id, cargo) VALUES
   -- Reemplazar 'CORREO_USUARIO' con el email real del usuario
   (
     (SELECT id FROM causacion_grupos WHERE codigo = 'logistica'),
-    (SELECT id FROM users WHERE email = 'juan.duque@prexxa.com.co'),
-    'Causación'
+    (SELECT id FROM users WHERE email = 'm.gonzalez@prexxa.com.co'),
+    'Causacion'
   ),
   (
     (SELECT id FROM causacion_grupos WHERE codigo = 'logistica'),
-    (SELECT id FROM users WHERE email = 'j.david@prexxa.com.co'),
-    'Causación'
-  ),
-  (
-    (SELECT id FROM causacion_grupos WHERE codigo = 'logistica'),
-    (SELECT id FROM users WHERE email = 'r.gil@prexxa.com.co'),
-    'Causación'
+    (SELECT id FROM users WHERE email = 'c.gomez@prexxa.com.co'),
+    'Causacion'
   )
 ON CONFLICT (grupo_id, user_id) DO NOTHING;
 

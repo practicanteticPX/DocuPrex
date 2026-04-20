@@ -25,6 +25,25 @@ const getLocalIp = () => {
 
 const LOCAL_IP = getLocalIp();
 
+const parseUrlList = (value) => {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+};
+
+const pickPrimaryUrl = (value, fallback) => {
+  const urls = parseUrlList(value);
+  if (urls.length === 0) return fallback;
+
+  // Preferir dominio público HTTPS si está configurado.
+  const httpsPublic = urls.find(url => /^https:\/\/(www\.)?docuprex\.com/i.test(url));
+  if (httpsPublic) return httpsPublic;
+
+  return urls[0];
+};
+
 /**
  * Configuración del servidor
  */
@@ -39,19 +58,19 @@ const serverConfig = {
   env: process.env.NODE_ENV || 'development',
 
   // Backend URL completa (detecta IP automáticamente)
-  backendUrl: process.env.BACKEND_URL || `http://${LOCAL_IP}:5001`,
+  backendUrl: pickPrimaryUrl(process.env.BACKEND_URL, `http://${LOCAL_IP}:5001`),
 
   // Frontend URL (detecta IP automáticamente)
-  frontendUrl: process.env.FRONTEND_URL || `http://${LOCAL_IP}:5173`,
+  frontendUrl: pickPrimaryUrl(process.env.FRONTEND_URL, `http://${LOCAL_IP}:5173`),
 
   // Hosts permitidos (incluye IP detectada dinámicamente)
   allowedHosts: process.env.ALLOWED_HOSTS
-    ? process.env.ALLOWED_HOSTS.split(',')
+    ? parseUrlList(process.env.ALLOWED_HOSTS)
     : ['localhost', LOCAL_IP, 'docuprex.com'],
 
   // CORS origins permitidos (incluye IP detectada dinámicamente)
   corsOrigins: process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',')
+    ? parseUrlList(process.env.CORS_ORIGINS)
     : [`http://${LOCAL_IP}:5173`, 'http://localhost:5173', 'https://docuprex.com', 'https://www.docuprex.com'],
 
   // JWT

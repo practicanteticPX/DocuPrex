@@ -263,54 +263,105 @@ async function authenticateUser(username, password) {
 }
 
 /**
+ * Obtiene todos los usuarios activos de Active Directory
+ * @returns {Promise<Array>} - Lista de usuarios con información básica
+ */
+async function getAllUsers() {
+  const client = createLdapClient();
+  try {
+    await bindAsService(client);
+    const filter = '(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))'; // Excluir usuarios deshabilitados
+    const searchBase = AD_SEARCH_BASE || AD_BASE_DN;
+
+    const opts = {
+      scope: 'sub',
+      filter: filter,
+      attributes: ['dn', 'cn', 'displayName', 'mail', 'userPrincipalName', 'sAMAccountName', 'employeeID', 'userAccountControl']
+    };
+
+    const entries = await new Promise((resolve, reject) => {
+      const list = [];
+      client.search(searchBase, opts, (err, res) => {
+        if (err) {
+          console.error(`❌ Error al iniciar búsqueda de usuarios:`, err.message);
+          return reject(err);
+        }
+        res.on('searchEntry', e => {
+          const entry = {
+            dn: String(e.objectName)
+          };
+
+          if (e.attributes) {
+            e.attributes.forEach(attr => {
+              const name = attr.type || attr.name;
+              const values = attr.values || attr.vals || [];
+              const processedValues = values.map(v =>
+                Buffer.isBuffer(v) ? v.toString('utf8') : String(v)
+              );
+              entry[name] = processedValues.length === 1 ? processedValues[0] : processedValues;
+            });
+          }
+
+          list.push(entry);
+        });
+        res.on('error', err => {
+          console.error(`❌ Error durante búsqueda de usuarios:`, err.message);
+          reject(err);
+        });
+        res.on('end', () => {
+          resolve(list);
+        });
+      });
+    });
+
+    // Filtrar usuarios válidos (con email y nombre)
+    const validUsers = entries.filter(user =>
+      user.mail &&
+      user.displayName &&
+      user.sAMAccountName &&
+      !user.sAMAccountName.toLowerCase().includes('admin') // Excluir cuentas admin
+    );
+
+    // Convertir a formato de usuario del sistema
+    const users = validUsers.map(user => ({
+      username: user.sAMAccountName,
+      name: user.displayName,
+      email: user.mail.toLowerCase(),
+      employeeID: user.employeeID || null,
+      dn: user.dn,
+      userPrincipalName: user.userPrincipalName
+    }));
+
+    console.log(`🔍 Encontrados ${users.length} usuarios válidos en Active Directory`);
+    return users;
+  } catch (error) {
+    console.error(`❌ Error en getAllUsers:`, error.message);
+    throw error;
+  } finally {
+    await unbindSafe(client);
+  }
+}
+
+/**
  * Prueba la conexión con el servidor LDAP
  * @returns {Promise<boolean>} - true si la conexión es exitosa
  */
 async function testConnection() {
-  return new Promise((resolve, reject) => {
-    const client = ldap.createClient({
-      url: LDAP_URL,
-      reconnect: false
-    });
-
-    // Intentar una búsqueda simple para verificar conectividad
-    const opts = {
-      filter: '(objectClass=*)',
-      scope: 'base',
-      attributes: ['namingContexts']
-    };
-
-    client.search('', opts, (err, res) => {
-      if (err) {
-        console.error('Error al probar conexión:', err.message);
-        client.unbind();
-        return reject(new Error('No se pudo conectar al servidor LDAP'));
-      }
-
-      res.on('searchEntry', () => {
-        console.log('✓ Conexión LDAP exitosa');
-      });
-
-      res.on('error', (searchErr) => {
-        console.error('Error en búsqueda de prueba:', searchErr.message);
-        client.unbind();
-        reject(new Error('Error al probar conexión LDAP'));
-      });
-
-      res.on('end', () => {
-        client.unbind();
-        resolve(true);
-      });
-    });
-
-    client.on('error', (err) => {
-      console.error('Error de conexión:', err.message);
-      reject(new Error('No se pudo conectar al servidor LDAP'));
-    });
-  });
+  const client = createLdapClient();
+  try {
+    await bindAsService(client);
+    console.log('✅ Conexión LDAP exitosa');
+    return true;
+  } catch (error) {
+    console.error('❌ Error al probar conexión LDAP:', error.message);
+    throw error;
+  } finally {
+    await unbindSafe(client);
+  }
 }
 
 module.exports = {
   authenticateUser,
-  testConnection
+  testConnection,
+  getAllUsers
 };

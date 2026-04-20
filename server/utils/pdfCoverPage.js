@@ -2,6 +2,24 @@ const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const fs = require('fs').promises;
 const path = require('path');
 
+function formatSignerRoleLabel(roleName) {
+  const raw = (roleName || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (raw.includes('solicit')) return 'Solicitante';
+  if (raw.includes('aprob')) return 'Aprobador';
+  if (raw.includes('negociador')) return 'Negociador';
+  if (raw.includes('negoci')) return 'Negociaciones';
+  if (raw.includes('gerencia')) return raw.includes('ejecut') ? 'Gerencia Ejecutiva' : 'Gerencia';
+  if (raw.includes('tesorer')) return 'Tesoreria';
+
+  return roleName || '';
+}
+
 /**
  * Genera una página de información de firmantes al final del PDF
  * Diseño moderno y limpio inspirado en la imagen de referencia
@@ -467,10 +485,10 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       let roleText = '';
       if (signer.role_names && Array.isArray(signer.role_names) && signer.role_names.length > 0) {
         // Usar el array de roles si existe (nuevo sistema)
-        roleText = ` - ${signer.role_names.join(' / ')}`;
+        roleText = ` - ${signer.role_names.map(formatSignerRoleLabel).join(' / ')}`;
       } else if (signer.role_name) {
         // Fallback al rol singular para compatibilidad (sistema antiguo)
-        roleText = ` - ${signer.role_name}`;
+        roleText = ` - ${formatSignerRoleLabel(signer.role_name)}`;
       }
 
       if (roleText) {

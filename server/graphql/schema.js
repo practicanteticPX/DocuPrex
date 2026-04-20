@@ -105,10 +105,10 @@ const typeDefs = gql`
     isRequired: Boolean!
     user: User!
     signature: Signature
-    assignedRoleId: Int
+    assignedRoleId: ID
     roleName: String
     # Nuevos campos para múltiples roles
-    assignedRoleIds: [Int!]
+    assignedRoleIds: [ID!]
     roleNames: [String!]
   }
 
@@ -165,10 +165,10 @@ const typeDefs = gql`
   input SignerAssignmentInput {
     userId: ID
     # Campos legacy (mantener compatibilidad)
-    roleId: Int
+    roleId: ID
     roleName: String
     # Nuevos campos para múltiples roles
-    roleIds: [Int!]
+    roleIds: [ID!]
     roleNames: [String!]
     # Campos para grupos de causación
     isCausacionGroup: Boolean

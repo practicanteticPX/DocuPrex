@@ -4,6 +4,52 @@ const path = require('path');
 require('dotenv').config();
 
 /**
+ * Función auxiliar para crear configuración SSL
+ * Estrategia: Intentar SSL con certificados → SSL sin certificados → Sin SSL
+ */
+function getSSLConfig() {
+  const certsPath = path.join(__dirname, '../certs');
+  const keyPath = path.join(certsPath, 'admin-key.pk8');
+  const certPath = path.join(certsPath, 'admin-cert.pem');
+  const caPath = path.join(certsPath, 'ca-cert.pem');
+
+  // Verificar si todos los certificados existen
+  if (fs.existsSync(keyPath) && fs.existsSync(certPath) && fs.existsSync(caPath)) {
+    console.log('✅ Certificados SSL encontrados para DB_QPREX - intentando SSL con certificados');
+    try {
+      const sslConfig = {
+        rejectUnauthorized: false, // Aceptar certificados self-signed
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+        ca: fs.readFileSync(caPath)
+      };
+
+      console.log('🔍 Probando conexión SSL con certificados...');
+      // Intentar crear un pool de prueba
+      const testPool = new Pool({
+        connectionString: process.env.CUENTAS_DATABASE_URL,
+        max: 1,
+        ssl: sslConfig
+      });
+
+      // Esperar un poco y cerrar
+      setTimeout(() => testPool.end().catch(() => {}), 1000);
+
+      console.log('✅ SSL con certificados parece viable - usando esta configuración');
+      return sslConfig;
+
+    } catch (error) {
+      console.warn('⚠️  SSL con certificados falló:', error.message);
+      console.warn('   Intentando SSL sin certificados...');
+      return { rejectUnauthorized: false };
+    }
+  } else {
+    console.warn('⚠️  Certificados SSL no encontrados - usando SSL sin certificados');
+    return { rejectUnauthorized: false };
+  }
+}
+
+/**
  * Pool de conexiones para Base de Datos Externa DB_QPREX
  * Esquema: public
  * Tabla principal: T_Master_Responsable_Cuenta
@@ -15,13 +61,7 @@ const cuentasPool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
   allowExitOnIdle: false,
-  ssl: {
-    rejectUnauthorized: false, // Para desarrollo - cambiar a true en producción
-    // Si tienes certificados específicos, descomenta y configura:
-    // key: fs.readFileSync(path.join(__dirname, '../certs/client-key.pem')),
-    // cert: fs.readFileSync(path.join(__dirname, '../certs/client-cert.pem')),
-    // ca: fs.readFileSync(path.join(__dirname, '../certs/ca-cert.pem'))
-  }
+  ssl: getSSLConfig()
 });
 
 cuentasPool.on('error', (err, client) => {

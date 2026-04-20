@@ -49,7 +49,7 @@ export const GET_RETAINED_DOCUMENTS = `
  * Mutation para retener un documento (llamada independiente, NO integrada en firma)
  */
 export const RETAIN_DOCUMENT = `
-  mutation RetainDocument($documentId: Int!, $retentionPercentage: Int!, $retentionReason: String!) {
+  mutation RetainDocument($documentId: ID!, $retentionPercentage: Int!, $retentionReason: String!) {
     retainDocument(documentId: $documentId, retentionPercentage: $retentionPercentage, retentionReason: $retentionReason) {
       id
       documentId
@@ -69,7 +69,7 @@ export const RETAIN_DOCUMENT = `
  * Mutation para liberar un documento retenido
  */
 export const RELEASE_DOCUMENT = `
-  mutation ReleaseDocument($documentId: Int!) {
+  mutation ReleaseDocument($documentId: ID!) {
     releaseDocument(documentId: $documentId)
   }
 `;

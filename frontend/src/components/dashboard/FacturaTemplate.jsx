@@ -231,12 +231,15 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
           throw new Error('No se encontró el tipo de documento FV');
         }
 
+        console.log('🔍 FV Type encontrado:', fvType);
+        console.log('🔍 ID del tipo FV:', fvType.id, 'tipo:', typeof fvType.id);
+
         // Luego obtener los roles para FV
         const rolesResponse = await axios.post(
           API_URL,
           {
             query: `
-              query DocumentTypeRoles($documentTypeId: Int!) {
+              query DocumentTypeRoles($documentTypeId: ID!) {
                 documentTypeRoles(documentTypeId: $documentTypeId) {
                   id
                   roleName
@@ -386,6 +389,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
   const handleAddFila = () => {
     const newId = Math.max(...filasControl.map(f => f.id), 0) + 1;
+
     setFilasControl([
       ...filasControl,
       {
@@ -960,51 +964,63 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
     try {
       const firmantes = [];
-      const firmantesMap = new Map(); // Usar Map en lugar de Set para agrupar roles
+      const responsablesContablesMap = new Map();
 
-      const agregarFirmante = (nombre, rol, cargo, email) => {
+      const agregarFirmante = (nombre, rol, cargo, email, extraData = {}) => {
         if (!nombre || !nombre.trim()) return;
 
-        const nombreKey = nombre.trim().toUpperCase(); // Usar solo el nombre como key
+        const nuevoFirmante = {
+          name: nombre.trim(),
+          role: rol,
+          cargo: cargo || '',
+          email: email || null,
+          ...extraData
+        };
 
-        if (firmantesMap.has(nombreKey)) {
-          // Si la persona ya existe, agregar el rol al array de roles
-          const firmante = firmantesMap.get(nombreKey);
-          if (Array.isArray(firmante.role)) {
-            // Si role ya es array, añadir el nuevo rol si no existe
-            if (!firmante.role.includes(rol)) {
-              firmante.role.push(rol);
-              console.log(`✅ Rol adicional agregado a ${nombre.trim()}: ${rol}`);
-            }
-          } else {
-            // Convertir a array si es string
-            const rolAnterior = firmante.role;
-            // Solo agregar si el rol es diferente al anterior
-            if (rolAnterior !== rol) {
-              firmante.role = [rolAnterior, rol];
-              console.log(`✅ Convertido a múltiples roles para ${nombre.trim()}: [${rolAnterior}, ${rol}]`);
-            } else {
-              console.log(`ℹ️  Rol duplicado ignorado para ${nombre.trim()}: ${rol}`);
-            }
-          }
-        } else {
-          // Nueva persona, crear entrada
-          const nuevoFirmante = {
-            name: nombre.trim(),
-            role: rol,
-            cargo: cargo || '',
-            email: email || null
-          };
-          firmantesMap.set(nombreKey, nuevoFirmante);
-          firmantes.push(nuevoFirmante);
-          console.log(`✅ Firmante agregado: ${nombre.trim()} - ${rol}`);
-        }
+        firmantes.push(nuevoFirmante);
+        console.log(`Firmante agregado: ${nombre.trim()} - ${Array.isArray(rol) ? rol.join(', ') : rol}`);
       };
 
+      const agregarResponsableContable = (nombre, rol, cargo, email) => {
+        if (!nombre || !nombre.trim()) return;
+
+        const nombreKey = nombre.trim().toUpperCase();
+
+        if (responsablesContablesMap.has(nombreKey)) {
+          const firmante = responsablesContablesMap.get(nombreKey);
+          const rolesActuales = Array.isArray(firmante.role) ? firmante.role : [firmante.role];
+
+          if (!rolesActuales.includes(rol)) {
+            firmante.role = [...rolesActuales, rol];
+            console.log(`Rol contable adicional agregado a ${nombre.trim()}: ${rol}`);
+          }
+
+          if (!firmante.cargo && cargo) {
+            firmante.cargo = cargo;
+          }
+
+          if (!firmante.email && email) {
+            firmante.email = email;
+          }
+
+          return;
+        }
+
+        responsablesContablesMap.set(nombreKey, {
+          name: nombre.trim(),
+          role: rol,
+          cargo: cargo || '',
+          email: email || null,
+          signingStageKey: 'RESPONSABLES_CONTABLES'
+        });
+        console.log(`Responsable contable agregado: ${nombre.trim()} - ${rol}`);
+      };
       // 1. Agregar Negociador
       console.log('📋 Agregando Negociador...');
       const roleNegociador = fvRoles['NEGOCIADOR']?.roleName || 'Negociador';
-      agregarFirmante(nombreNegociador, roleNegociador, cargoNegociador);
+      agregarFirmante(nombreNegociador, roleNegociador, cargoNegociador, null, {
+        signingStageKey: 'NEGOCIADOR'
+      });
 
       // 2. Agregar NEGOCIACIONES (OBLIGATORIO)
       console.log('📋 Obteniendo usuario NEGOCIACIONES...');
@@ -1021,7 +1037,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
         negociacionesData.data.nombre,
         roleNegociaciones,
         negociacionesData.data.cargo,
-        negociacionesData.data.email
+        negociacionesData.data.email,
+        {
+          signingStageKey: 'NEGOCIACIONES'
+        }
       );
 
       // 3. Agregar Responsables de Cuentas Contables y Centros de Costos
@@ -1031,12 +1050,18 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
       filasControl.forEach((fila, index) => {
         console.log(`   Fila ${index + 1}:`);
-        agregarFirmante(fila.respCentroCostos, roleRespCentroCost, fila.cargoCentroCostos);
-        agregarFirmante(fila.respCuentaContable, roleRespCuentaCont, fila.cargoCuentaContable);
+        agregarResponsableContable(fila.respCentroCostos, roleRespCentroCost, fila.cargoCentroCostos);
+        agregarResponsableContable(fila.respCuentaContable, roleRespCuentaCont, fila.cargoCuentaContable);
       });
+
+      firmantes.push(...Array.from(responsablesContablesMap.values()));
 
       // 4. Agregar Grupo de Causación (UN SOLO firmante genérico)
       console.log(`📋 Obteniendo grupo de causación: ${grupoCausacion}...`);
+
+      if (!grupoCausacion || grupoCausacion.trim() === '') {
+        throw new Error('Debe seleccionar un grupo de causación antes de guardar la plantilla.');
+      }
 
       const token = localStorage.getItem('token');
       const causacionResponse = await axios.post(
@@ -1100,6 +1125,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
         role: roleCausacion,  // Rol genérico: "Causación" (desde BD)
         cargo: 'Grupo de Causación',
         email: null,
+        signingStageKey: 'CAUSACION',
         grupoCodigo: grupoCausacion,  // Código: 'financiera' o 'logistica'
         grupoMiembros: miembrosFormateados  // Lista de miembros permitidos
       });
@@ -1913,3 +1939,4 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 };
 
 export default FacturaTemplate;
+

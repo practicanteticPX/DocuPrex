@@ -215,7 +215,7 @@ const Notifications = ({ onNotificationClick, socket }) => {
         API_URL,
         {
           query: `
-            mutation MarkNotificationAsRead($notificationId: Int!) {
+            mutation MarkNotificationAsRead($notificationId: ID!) {
               markNotificationAsRead(notificationId: $notificationId) {
                 id
                 isRead

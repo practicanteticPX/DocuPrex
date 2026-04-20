@@ -170,6 +170,237 @@ function Dashboard({ user, onLogout }) {
     { name: 'Tesorería', required: true } // SIEMPRE último
   ];
 
+  const normalizeRoleLabel = (value) => (
+    (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase()
+  );
+
+  const getSARoleKey = (value) => {
+    const raw = normalizeRoleLabel(value);
+
+    if (raw.includes('solicit')) return 'solicitante';
+    if (raw.includes('aprob')) return 'aprobador';
+    if (raw.includes('negociador')) return 'negociador';
+    if (raw.includes('negoci')) return 'negociaciones';
+    if (raw.includes('gerencia')) return raw.includes('ejecut') ? 'gerencia_ejecutiva' : 'gerencia';
+    if (raw.includes('tesorer')) return 'tesoreria';
+
+    return raw;
+  };
+
+  const formatSARoleLabel = (roleName) => {
+    const roleKey = getSARoleKey(roleName);
+
+    switch (roleKey) {
+      case 'solicitante':
+        return 'Solicitante';
+      case 'aprobador':
+        return 'Aprobador';
+      case 'negociador':
+        return 'Negociador';
+      case 'negociaciones':
+        return 'Negociaciones';
+      case 'gerencia':
+        return 'Gerencia';
+      case 'gerencia_ejecutiva':
+        return 'Gerencia Ejecutiva';
+      case 'tesoreria':
+        return 'Tesoreria';
+      default:
+        return roleName || '';
+    }
+  };
+
+  const getSARoleAliases = (roleName) => {
+    const normalized = getSARoleKey(roleName);
+
+    const aliases = {
+      solicitante: ['Solicitante'],
+      aprobador: ['Aprobador'],
+      negociaciones: ['Negociaciones'],
+      gerencia: ['Gerencia', 'Gerencia Ejecutiva'],
+      gerencia_ejecutiva: ['Gerencia', 'Gerencia Ejecutiva'],
+      tesoreria: ['Tesorería', 'Tesoreria']
+    };
+
+    return aliases[normalized] || [roleName];
+  };
+
+  const findSARoleDefinition = (roleName) => {
+    const aliases = getSARoleAliases(roleName).map(getSARoleKey);
+
+    return documentTypeRoles.find(role => {
+      const normalizedRoleName = getSARoleKey(role.roleName);
+      const normalizedRoleCode = getSARoleKey(role.roleCode);
+
+      return aliases.includes(normalizedRoleName) || aliases.includes(normalizedRoleCode);
+    }) || null;
+  };
+
+  const extractSARoleNames = (signer) => {
+    if (!signer || typeof signer !== 'object') return [];
+
+    if (Array.isArray(signer.roleNames) && signer.roleNames.length > 0) {
+      return signer.roleNames;
+    }
+
+    if (signer.roleName) {
+      return [signer.roleName];
+    }
+
+    return [];
+  };
+
+  const signerHasSARole = (signer, roleName) => {
+    const targetKey = getSARoleKey(roleName);
+    return extractSARoleNames(signer).some(name => getSARoleKey(name) === targetKey);
+  };
+
+  const upsertSARoleForSigner = (prevSigners, signer, role) => {
+    const signersWithoutRole = removeSARoleFromSelections(prevSigners, role.roleName);
+    const roleNames = [role.roleName].filter(Boolean);
+    const roleIds = [role.id].filter(Boolean);
+    let foundExistingSigner = false;
+
+    const updated = signersWithoutRole.map(existingSigner => {
+      if (typeof existingSigner !== 'object' || existingSigner.userId !== signer.id) {
+        return existingSigner;
+      }
+
+      foundExistingSigner = true;
+
+      const currentRoleNames = extractSARoleNames(existingSigner);
+      const currentRoleIds = Array.isArray(existingSigner.roleIds) && existingSigner.roleIds.length > 0
+        ? existingSigner.roleIds
+        : (existingSigner.roleId ? [existingSigner.roleId] : []);
+
+      const mergedRoleNames = [...currentRoleNames];
+      roleNames.forEach(name => {
+        if (!mergedRoleNames.some(existingName => getSARoleKey(existingName) === getSARoleKey(name))) {
+          mergedRoleNames.push(name);
+        }
+      });
+
+      const mergedRoleIds = [...currentRoleIds];
+      roleIds.forEach(id => {
+        if (!mergedRoleIds.includes(id)) {
+          mergedRoleIds.push(id);
+        }
+      });
+
+      return {
+        ...existingSigner,
+        userId: signer.id,
+        roleId: mergedRoleIds[0] || existingSigner.roleId || null,
+        roleName: mergedRoleNames[0] || existingSigner.roleName || null,
+        roleIds: mergedRoleIds,
+        roleNames: mergedRoleNames
+      };
+    });
+
+    if (!foundExistingSigner) {
+      updated.push({
+        userId: signer.id,
+        roleId: roleIds[0] || null,
+        roleName: roleNames[0] || null,
+        roleIds,
+        roleNames
+      });
+    }
+
+    return updated;
+  };
+
+  const getSAAssignedSignerForRole = (roleName) => {
+    const assignedSigner = selectedSigners.find(signer => (
+      typeof signer === 'object' && signerHasSARole(signer, roleName)
+    ));
+
+    if (!assignedSigner || typeof assignedSigner !== 'object') {
+      return null;
+    }
+
+    const signer = availableSigners.find(item => item.id === assignedSigner.userId);
+    if (!signer) {
+      return null;
+    }
+
+    return {
+      ...assignedSigner,
+      signer
+    };
+  };
+
+  const removeSARoleFromSelections = (prevSigners, roleName) => {
+    const targetKey = getSARoleKey(roleName);
+
+    return prevSigners
+      .map(signer => {
+        if (typeof signer !== 'object') {
+          return signer;
+        }
+
+        const currentRoleNames = extractSARoleNames(signer);
+        if (!currentRoleNames.some(name => getSARoleKey(name) === targetKey)) {
+          return signer;
+        }
+
+        const currentRoleIds = Array.isArray(signer.roleIds) && signer.roleIds.length > 0
+          ? signer.roleIds
+          : (signer.roleId ? [signer.roleId] : []);
+
+        const filteredRoleNames = [];
+        const filteredRoleIds = [];
+
+        currentRoleNames.forEach((name, index) => {
+          if (getSARoleKey(name) !== targetKey) {
+            filteredRoleNames.push(name);
+            if (currentRoleIds[index]) {
+              filteredRoleIds.push(currentRoleIds[index]);
+            }
+          }
+        });
+
+        if (filteredRoleNames.length === 0) {
+          return null;
+        }
+
+        return {
+          ...signer,
+          roleId: filteredRoleIds[0] || null,
+          roleName: filteredRoleNames[0] || null,
+          roleIds: filteredRoleIds,
+          roleNames: filteredRoleNames
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const matchesSAWizardRestriction = (signer, roleName) => {
+    const currentRoleName = getSARoleKey(roleName);
+    const signerName = normalizeRoleLabel(signer.name);
+    const signerEmail = normalizeRoleLabel(signer.email);
+
+    if (currentRoleName === 'negociaciones') {
+      return signerName.includes('negociaciones') || signerEmail.includes('negociaciones');
+    }
+
+    if (currentRoleName === 'gerencia' || currentRoleName === 'gerencia_ejecutiva') {
+      return signerName.includes('juan duque');
+    }
+
+    if (currentRoleName === 'tesoreria') {
+      return signerName.includes('monica bustamante') ||
+        signerName === 'monica bustamante' ||
+        signerEmail.includes('bustamante');
+    }
+
+    return true;
+  };
+
   // Estados para filtros de "Documentos pendientes"
   const [pendingDocsSearchTerm, setPendingDocsSearchTerm] = useState('');
 
@@ -229,7 +460,7 @@ function Dashboard({ user, onLogout }) {
 
   const developers = [
     { name: 'Esteban Zuluaga', role: 'Analista de Datos', photo: estebanPhoto },
-    { name: 'Jesús Bustamante', role: 'Practicante TIC', photo: jesusPhoto }
+    { name: 'Jesús Bustamante', role: 'Desarrollador de Software', photo: jesusPhoto }
   ];
 
   const switchDeveloper = () => {
@@ -685,7 +916,7 @@ function Dashboard({ user, onLogout }) {
     if (activeStep === 1 && selectedDocumentType && selectedDocumentType.code === 'SA') {
       const signersWithoutRoles = selectedSigners.filter(s => {
         if (typeof s === 'object') {
-          const hasRole = s.roleId && s.roleId !== null;
+          const hasRole = extractSARoleNames(s).length > 0;
           return !hasRole;
         }
         return true; // Si es solo ID, no tiene roles
@@ -818,7 +1049,7 @@ function Dashboard({ user, onLogout }) {
         if (selectedDocumentType?.code === 'SA' && documentTypeRoles && documentTypeRoles.length > 0) {
           // Todos los firmantes deben tener un rol asignado
           const allHaveRoles = selectedSigners.every(s => {
-            return typeof s === 'object' && s.roleId !== null && s.roleId !== undefined;
+            return typeof s === 'object' && extractSARoleNames(s).length > 0;
           });
 
           if (!allHaveRoles) {
@@ -827,18 +1058,20 @@ function Dashboard({ user, onLogout }) {
 
           // Obtener nombres de roles asignados
           const assignedRoleNames = selectedSigners
-            .filter(s => typeof s === 'object' && s.roleName)
-            .map(s => s.roleName);
+            .filter(s => typeof s === 'object')
+            .flatMap(s => extractSARoleNames(s));
 
           // Verificar que no haya roles duplicados
-          const uniqueRoleNames = new Set(assignedRoleNames);
+          const uniqueRoleNames = new Set(assignedRoleNames.map(getSARoleKey));
           if (assignedRoleNames.length !== uniqueRoleNames.size) {
             return false; // Hay roles duplicados
           }
 
           // Roles obligatorios para SA
-          const requiredRoles = ['Solicitante', 'Aprobador', 'Tesorería'];
-          const hasAllRequired = requiredRoles.every(role => assignedRoleNames.includes(role));
+          const hasAllRequired = ['Solicitante', 'Aprobador', 'Tesoreria'].every(requiredRole => {
+            const acceptedNames = getSARoleAliases(requiredRole).map(getSARoleKey);
+            return assignedRoleNames.some(roleName => acceptedNames.includes(getSARoleKey(roleName)));
+          });
 
           if (!hasAllRequired) {
             return false; // Faltan roles obligatorios
@@ -865,7 +1098,10 @@ function Dashboard({ user, onLogout }) {
    * Abrir el visor de PDF con el documento seleccionado
    */
   const handleViewDocument = (doc, isPending = false, isWaiting = false) => {
-    setViewingDocument(doc);
+    setViewingDocument({
+      ...doc,
+      pdfVersion: Date.now()
+    });
     setIsViewingPending(isPending);
     setIsWaitingTurn(isWaiting);
 
@@ -887,7 +1123,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetDocumentForUrl($documentId: Int!) {
+            query GetDocumentForUrl($documentId: ID!) {
               document(id: $documentId) {
                 id
                 title
@@ -1174,7 +1410,7 @@ function Dashboard({ user, onLogout }) {
       if (selectedDocumentType && selectedDocumentType.code === 'SA') {
         const signersWithoutRoles = selectedSigners.filter(s => {
           if (typeof s === 'object') {
-            const hasRole = s.roleId && s.roleId !== null;
+            const hasRole = extractSARoleNames(s).length > 0;
             return !hasRole;
           }
           return true;
@@ -1998,61 +2234,41 @@ function Dashboard({ user, onLogout }) {
    */
   const extractUniqueSignersFromTemplate = (templateData) => {
     if (!templateData || !templateData.firmantes || !Array.isArray(templateData.firmantes)) {
-      console.log('❌ No se pueden extraer firmantes: array firmantes no encontrado');
+      console.log('No se pueden extraer firmantes: array firmantes no encontrado');
       return [];
     }
 
-    console.log(`📋 Procesando ${templateData.firmantes.length} firmantes de la plantilla...`);
+    console.log(`Procesando ${templateData.firmantes.length} firmantes de la plantilla...`);
 
-    // Para FV, los roles vienen dinámicamente de la BD a través de FacturaTemplate
-    // No hacemos ningún mapeo hardcodeado aquí
-    const signerMap = new Map();
-
-    templateData.firmantes.forEach((firmante, index) => {
-      const { name, role, cargo, email, grupoMiembros, grupoCodigo } = firmante;
+    const result = templateData.firmantes.reduce((acc, firmante, index) => {
+      const { name, role, cargo, email, grupoMiembros, grupoCodigo, signingStageKey } = firmante;
 
       if (!name || !role) {
-        console.warn(`⚠️ Firmante ${index + 1} sin nombre o rol:`, firmante);
-        return;
+        console.warn(`Firmante ${index + 1} sin nombre o rol:`, firmante);
+        return acc;
       }
 
-      const key = name.trim();
-
-      // Normalizar role: si es array, usarlo; si es string, convertir a array
       const rolesArray = Array.isArray(role) ? role : [role];
+      const signerData = {
+        name: name.trim(),
+        cargo: cargo || '',
+        email: email || null,
+        roleNames: rolesArray,
+        signingStageKey: signingStageKey || `FV_STAGE_${index + 1}`
+      };
 
-      if (signerMap.has(key)) {
-        // Firmante ya existe, agregar roles adicionales
-        const existing = signerMap.get(key);
-        rolesArray.forEach(r => {
-          if (!existing.roleNames.includes(r)) {
-            existing.roleNames.push(r);
-          }
-        });
-      } else {
-        // Nuevo firmante - los nombres de roles vienen directamente de la BD
-        const signerData = {
-          name: name.trim(),
-          cargo: cargo || '',
-          email: email || null,
-          roleNames: rolesArray
-        };
-
-        // Si es un grupo de Causación, guardar lista de miembros permitidos
-        if (grupoMiembros && Array.isArray(grupoMiembros)) {
-          signerData.grupoMiembros = grupoMiembros;
-          signerData.grupoCodigo = grupoCodigo;  // Guardar el código del grupo
-          signerData.esGrupoCausacion = true;
-          console.log(`✅ Grupo ${rolesArray.join(', ')} (${grupoCodigo}): ${grupoMiembros.length} miembros permitidos`);
-        }
-
-        signerMap.set(key, signerData);
+      if (grupoMiembros && Array.isArray(grupoMiembros)) {
+        signerData.grupoMiembros = grupoMiembros;
+        signerData.grupoCodigo = grupoCodigo;
+        signerData.esGrupoCausacion = true;
+        console.log(`Grupo ${rolesArray.join(', ')} (${grupoCodigo}): ${grupoMiembros.length} miembros permitidos`);
       }
-    });
 
-    const result = Array.from(signerMap.values());
-    console.log(`✅ ${result.length} firmantes únicos extraídos con sus roles`);
+      acc.push(signerData);
+      return acc;
+    }, []);
 
+    console.log(`Total de firmantes extraidos respetando orden: ${result.length}`);
     return result;
   };
 
@@ -2232,20 +2448,25 @@ function Dashboard({ user, onLogout }) {
       'Aprobador': 2,
       'Negociaciones': 3,
       'Gerencia': 4,
+      'Gerencia Ejecutiva': 4,
+      'Tesoreria': 5,
       'Tesorería': 5 // SIEMPRE último
     };
 
     return [...signers].sort((a, b) => {
-      const roleA = typeof a === 'object' ? a.roleName : null;
-      const roleB = typeof b === 'object' ? b.roleName : null;
+      const roleNamesA = typeof a === 'object' ? extractSARoleNames(a) : [];
+      const roleNamesB = typeof b === 'object' ? extractSARoleNames(b) : [];
+      const orderA = roleNamesA.length > 0
+        ? Math.min(...roleNamesA.map(role => roleOrder[formatSARoleLabel(role)] || 999))
+        : 999;
+      const orderB = roleNamesB.length > 0
+        ? Math.min(...roleNamesB.map(role => roleOrder[formatSARoleLabel(role)] || 999))
+        : 999;
 
       // Firmantes sin rol van al final
-      if (!roleA && !roleB) return 0;
-      if (!roleA) return 1;
-      if (!roleB) return -1;
-
-      const orderA = roleOrder[roleA] || 999;
-      const orderB = roleOrder[roleB] || 999;
+      if (orderA === 999 && orderB === 999) return 0;
+      if (orderA === 999) return 1;
+      if (orderB === 999) return -1;
 
       return orderA - orderB;
     });
@@ -2329,16 +2550,16 @@ function Dashboard({ user, onLogout }) {
       // Si el documento es tipo SA (Solicitud de Anticipo), asignar rol de Solicitante
       if (selectedDocumentType && selectedDocumentType.code === 'SA') {
         // Buscar el rol "Solicitante" en los roles del tipo de documento
-        const solicitanteRole = documentTypeRoles.find(role =>
-          role.roleCode === 'SOLICITANTE' || role.roleName === 'Solicitante'
-        );
+        const solicitanteRole = findSARoleDefinition('Solicitante');
 
         if (solicitanteRole) {
           // Agregar con rol de Solicitante
           setSelectedSigners(prev => [{
             userId: user.id,
             roleId: solicitanteRole.id,
-            roleName: solicitanteRole.roleName
+            roleName: solicitanteRole.roleName,
+            roleIds: [solicitanteRole.id],
+            roleNames: [solicitanteRole.roleName]
           }, ...prev]);
         } else {
           // Agregar sin rol si no se encuentra el rol (no debería pasar)
@@ -2725,6 +2946,7 @@ function Dashboard({ user, onLogout }) {
 
     setUploading(true);
     setError('');
+    const createdDocumentIds = [];
 
     try {
       const token = localStorage.getItem('token');
@@ -2793,6 +3015,7 @@ function Dashboard({ user, onLogout }) {
 
       if (uploadResponse.data.success && (uploadResponse.data.document || uploadResponse.data.documents)) {
         const documents = uploadResponse.data.documents || [uploadResponse.data.document];
+        createdDocumentIds.push(...documents.map(d => d.id).filter(Boolean));
 
         console.log(`✅ Upload exitoso. Documentos recibidos:`, documents.map(d => ({ id: d.id, title: d.title })));
 
@@ -2809,6 +3032,10 @@ function Dashboard({ user, onLogout }) {
               if (s.roleId) {
                 assignment.roleId = s.roleId;
                 assignment.roleName = s.roleName;
+              }
+
+              if (s.roleIds && s.roleIds.length > 0) {
+                assignment.roleIds = s.roleIds;
               }
 
               // Para documentos con plantilla (FV): solo roleNames
@@ -2832,7 +3059,7 @@ function Dashboard({ user, onLogout }) {
             API_URL,
             {
               query: `
-                mutation AssignSigners($documentId: Int!, $signerAssignments: [SignerAssignmentInput!]!) {
+                mutation assignSigners($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
                   assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
                 }
               `,
@@ -2855,24 +3082,21 @@ function Dashboard({ user, onLogout }) {
             // Para FV: Solo autofirmar si es el Negociador (primer firmante con rol NEGOCIADOR)
             const firstSigner = selectedSigners[0];
             if (firstSigner && typeof firstSigner === 'object') {
-              const isNegociador = firstSigner.name && user.name &&
-                firstSigner.name.trim().toUpperCase() === user.name.trim().toUpperCase() &&
-                (
-                  (firstSigner.role && firstSigner.role.toLowerCase().includes('negociador')) ||
-                  (Array.isArray(firstSigner.roleNames) && firstSigner.roleNames.some(r => r.toLowerCase().includes('negociador')))
-                );
+              const roleNames = Array.isArray(firstSigner.roleNames) ? firstSigner.roleNames : [];
+              const isNegociador = firstSigner.userId === user.id &&
+                roleNames.some(r => getSARoleKey(r) === 'negociador');
               shouldAutoSign = isNegociador;
               console.log(`🔍 FV - Verificando autofirma: Usuario=${user.name}, PrimerFirmante=${firstSigner.name}, EsNegociador=${shouldAutoSign}`);
             }
           } else {
-            // Para otros tipos de documento (SA, etc.): autofirmar si el usuario está en la lista
-            shouldAutoSign = selectedSigners.some(s => {
-              if (typeof s === 'object') {
-                return s.userId === user.id;
-              } else {
-                return s === user.id;
-              }
-            });
+            // Para documentos sin la lógica especial de FV, solo intentar autofirma
+            // si el usuario actual quedó como primer firmante.
+            const firstSigner = selectedSigners[0];
+            if (typeof firstSigner === 'object') {
+              shouldAutoSign = firstSigner.userId === user.id;
+            } else {
+              shouldAutoSign = firstSigner === user.id;
+            }
           }
 
           if (user && user.id && shouldAutoSign) {
@@ -2881,7 +3105,7 @@ function Dashboard({ user, onLogout }) {
                 API_URL,
                 {
                   query: `
-                    mutation SignDocument($documentId: Int!, $signatureData: String!) {
+                    mutation signDocument($documentId: ID!, $signatureData: String!) {
                       signDocument(documentId: $documentId, signatureData: $signatureData) {
                         id
                         status
@@ -2959,8 +3183,10 @@ function Dashboard({ user, onLogout }) {
           const fileInput = document.getElementById('file-input');
           if (fileInput) fileInput.value = '';
 
-          // Recargar mis documentos
+          // Recargar listados afectados por la autofirma inicial
           loadMyDocuments();
+          loadSignedDocuments();
+          loadPendingDocuments();
 
           // Ocultar mensaje de éxito después de 5 segundos
           setTimeout(() => setUploadSuccess(false), 5000);
@@ -2970,6 +3196,34 @@ function Dashboard({ user, onLogout }) {
       }
     } catch (err) {
       console.error('Error en subida:', err);
+      if (createdDocumentIds.length > 0) {
+        console.warn(`Limpiando ${createdDocumentIds.length} documento(s) creados parcialmente...`);
+
+        try {
+          const token = localStorage.getItem('token');
+
+          for (const documentId of createdDocumentIds) {
+            try {
+              await axios.post(
+                API_URL,
+                {
+                  query: `
+                    mutation deleteDocument($id: ID!) {
+                      deleteDocument(id: $id)
+                    }
+                  `,
+                  variables: { id: documentId }
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+            } catch (cleanupError) {
+              console.error(`Error limpiando documento parcial ${documentId}:`, cleanupError);
+            }
+          }
+        } catch (cleanupBatchError) {
+          console.error('Error durante limpieza de documentos parciales:', cleanupBatchError);
+        }
+      }
       setError(
         err.response?.data?.message ||
         err.message ||
@@ -3147,8 +3401,8 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation SignDocument(
-              $documentId: Int!,
+            mutation signDocument(
+              $documentId: ID!,
               $signatureData: String!,
               $consecutivo: String,
               $realSignerName: String,
@@ -3254,10 +3508,18 @@ function Dashboard({ user, onLogout }) {
       // Limpiar consecutivo después de firmar
       setConsecutivo('');
 
-      // Recargar todas las listas: pendientes, firmados y retenidos
+      // Recargar todas las listas relevantes para evitar UI desfasada
       await loadPendingDocuments();
       await loadSignedDocuments();
+      await loadMyDocuments();
       await loadRetainedDocuments();
+
+      // Forzar recarga del PDF en el visor si el documento sigue abierto.
+      setViewingDocument(prev => (
+        prev && String(prev.id) === String(docId)
+          ? { ...prev, pdfVersion: Date.now() }
+          : prev
+      ));
     } catch (err) {
       console.error('Error al firmar:', err);
       setShowSigningLoader(false);
@@ -3357,7 +3619,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation RejectDocument($documentId: Int!, $reason: String, $realSignerName: String) {
+            mutation rejectDocument($documentId: ID!, $reason: String, $realSignerName: String) {
               rejectDocument(documentId: $documentId, reason: $reason, realSignerName: $realSignerName)
             }
           `,
@@ -3425,7 +3687,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation RetainDocument($documentId: Int!, $centroCostoIndex: Int!, $retentionPercentage: Int!, $retentionReason: String!) {
+            mutation retainDocument($documentId: ID!, $centroCostoIndex: Int!, $retentionPercentage: Int!, $retentionReason: String!) {
               retainDocument(
                 documentId: $documentId
                 centroCostoIndex: $centroCostoIndex
@@ -3504,7 +3766,7 @@ function Dashboard({ user, onLogout }) {
           API_URL,
           {
             query: `
-              mutation ReleaseDocument($documentId: Int!, $centroCostoIndex: Int!) {
+              mutation releaseDocument($documentId: ID!, $centroCostoIndex: Int!) {
                 releaseDocument(documentId: $documentId, centroCostoIndex: $centroCostoIndex)
               }
             `,
@@ -3594,7 +3856,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            query GetDocument($id: Int!) {
+            query GetDocument($id: ID!) {
               document(id: $id) {
                 id
                 title
@@ -3912,7 +4174,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation DeleteDocument($id: Int!) {
+            mutation DeleteDocument($id: ID!) {
               deleteDocument(id: $id)
             }
           `,
@@ -4056,7 +4318,7 @@ function Dashboard({ user, onLogout }) {
         API_URL,
         {
           query: `
-            mutation UpdateFacturaTemplate($documentId: Int!, $templateData: String!) {
+            mutation updateFacturaTemplate($documentId: ID!, $templateData: String!) {
               updateFacturaTemplate(documentId: $documentId, templateData: $templateData) {
                 success
                 message
@@ -5140,6 +5402,49 @@ function Dashboard({ user, onLogout }) {
                                     padding: '1.5rem',
                                     marginBottom: '1.5rem'
                                   }}>
+                                    {(() => {
+                                      const currentAssignedSigner = getSAAssignedSignerForRole(saRoles[saWizardStep].name);
+
+                                      return currentAssignedSigner ? (
+                                        <div style={{
+                                          backgroundColor: '#eef2ff',
+                                          border: '1px solid #c7d2fe',
+                                          borderRadius: '0.5rem',
+                                          padding: '0.875rem',
+                                          marginBottom: '1rem'
+                                        }}>
+                                          <p style={{ margin: 0, color: '#312e81', fontSize: '0.875rem', fontWeight: '600' }}>
+                                            Ya hay un firmante asignado para {formatSARoleLabel(saRoles[saWizardStep].name)}: {currentAssignedSigner.signer.name}
+                                          </p>
+                                          <p style={{ margin: '0.25rem 0 0', color: '#4338ca', fontSize: '0.8125rem' }}>
+                                            Puedes continuar con ese firmante o escoger otro para reemplazarlo.
+                                          </p>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (!uploading) {
+                                                setSaWizardStep(prev => prev + 1);
+                                                setSaUserSearchQuery('');
+                                              }
+                                            }}
+                                            disabled={uploading}
+                                            style={{
+                                              marginTop: '0.75rem',
+                                              padding: '0.625rem 0.875rem',
+                                              backgroundColor: '#4338ca',
+                                              color: 'white',
+                                              border: 'none',
+                                              borderRadius: '0.375rem',
+                                              cursor: 'pointer',
+                                              fontWeight: '600'
+                                            }}
+                                          >
+                                            Continuar con {currentAssignedSigner.signer.name}
+                                          </button>
+                                        </div>
+                                      ) : null;
+                                    })()}
+
                                     {/* Encabezado del paso actual */}
                                     <div style={{ marginBottom: '1rem' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -5186,7 +5491,9 @@ function Dashboard({ user, onLogout }) {
                                             if (!uploading) {
                                               console.log('🔙 Wizard SA: Retrocediendo del paso', saWizardStep + 1, 'al paso', saWizardStep);
                                               setSaWizardStep(prev => prev - 1);
-                                              setSelectedSigners(prev => prev.slice(0, -1)); // Remover último firmante
+                                              setSelectedSigners(prev => sortSASigners(
+                                                removeSARoleFromSelections(prev, saRoles[saWizardStep - 1].name)
+                                              ));
                                               setSaUserSearchQuery(''); // Limpiar búsqueda
                                             }
                                           }}
@@ -5224,12 +5531,14 @@ function Dashboard({ user, onLogout }) {
                                           type="button"
                                           onClick={() => {
                                             if (!uploading && user && user.id) {
-                                              const role = documentTypeRoles.find(r => r.roleName === 'Solicitante');
+                                              const role = findSARoleDefinition('Solicitante');
                                               if (role) {
                                                 setSelectedSigners([{
                                                   userId: user.id,
                                                   roleId: role.id,
-                                                  roleName: role.roleName
+                                                  roleName: role.roleName,
+                                                  roleIds: [role.id],
+                                                  roleNames: [role.roleName]
                                                 }]);
                                                 setSaWizardStep(1);
                                                 setSaUserSearchQuery(''); // Limpiar búsqueda al avanzar al siguiente paso
@@ -5313,7 +5622,11 @@ function Dashboard({ user, onLogout }) {
                                         {getFilteredSignersForUpload()
                                           .filter(s => {
                                             // Excluir firmantes ya seleccionados
-                                            const isAlreadySelected = selectedSigners.some(ss => (typeof ss === 'object' ? ss.userId === s.id : ss === s.id));
+                                            const currentRoleName = saRoles[saWizardStep].name;
+                                            const existingSigner = selectedSigners.find(ss => (typeof ss === 'object' ? ss.userId === s.id : ss === s.id));
+                                            const isAlreadySelectedForRole = existingSigner && typeof existingSigner === 'object'
+                                              ? signerHasSARole(existingSigner, currentRoleName)
+                                              : Boolean(existingSigner);
                                             // En paso 1 (Solicitante), excluir también al usuario actual
                                             const isCurrentUserInStep1 = saWizardStep === 0 && user && s.id === user.id;
 
@@ -5323,38 +5636,20 @@ function Dashboard({ user, onLogout }) {
                                               s.email.toLowerCase().includes(saUserSearchQuery.toLowerCase());
 
                                             // Filtros específicos por rol SA
-                                            const currentRoleName = saRoles[saWizardStep].name;
-                                            let matchesRoleRestriction = true;
+                                            const matchesRoleRestriction = matchesSAWizardRestriction(s, currentRoleName);
 
-                                            if (currentRoleName === 'Negociaciones') {
-                                              // Solo mostrar el usuario "negociaciones"
-                                              matchesRoleRestriction = s.name.toLowerCase().includes('negociaciones') ||
-                                                                      s.email.toLowerCase().includes('negociaciones');
-                                            } else if (currentRoleName === 'Gerencia') {
-                                              // Solo mostrar el usuario "Juan Duque"
-                                              matchesRoleRestriction = s.name.toLowerCase().includes('juan duque') ||
-                                                                      s.name.toLowerCase() === 'juan duque';
-                                            } else if (currentRoleName === 'Tesorería') {
-                                              // Solo mostrar el usuario "Monica Bustamante"
-                                              matchesRoleRestriction = s.name.toLowerCase().includes('monica bustamante') ||
-                                                                      s.name.toLowerCase() === 'monica bustamante' ||
-                                                                      s.email.toLowerCase().includes('bustamante');
-                                            }
-
-                                            return !isAlreadySelected && !isCurrentUserInStep1 && matchesSearch && matchesRoleRestriction;
+                                            return !isAlreadySelectedForRole && !isCurrentUserInStep1 && matchesSearch && matchesRoleRestriction;
                                           })
                                           .map(signer => (
                                             <div
                                               key={signer.id}
                                               onClick={() => {
                                                 if (!uploading) {
-                                                  const role = documentTypeRoles.find(r => r.roleName === saRoles[saWizardStep].name);
+                                                  const role = findSARoleDefinition(saRoles[saWizardStep].name);
                                                   if (role) {
-                                                    setSelectedSigners(prev => [...prev, {
-                                                      userId: signer.id,
-                                                      roleId: role.id,
-                                                      roleName: role.roleName
-                                                    }]);
+                                                    setSelectedSigners(prev => sortSASigners(
+                                                      upsertSARoleForSigner(prev, signer, role)
+                                                    ));
                                                     setSaWizardStep(prev => prev + 1);
                                                     setSaUserSearchQuery(''); // Limpiar búsqueda al avanzar al siguiente paso
                                                   }
@@ -5531,7 +5826,7 @@ function Dashboard({ user, onLogout }) {
                           })()}
 
                           {/* Sección de firmantes seleccionados - Oculta durante wizard SA */}
-                          {selectedSigners.length > 0 && !(selectedDocumentType?.code === 'SA' && saWizardStep < saRoles.length) && (
+                          {selectedSigners.length > 0 && (
                             <div className="selected-signers-section">
                               <div className="selected-header">
                                 <h3 className="section-label">
@@ -5569,7 +5864,7 @@ function Dashboard({ user, onLogout }) {
                                           <p className="signer-name-modern">
                                             {groupName}
                                             {signerItem.roleNames && signerItem.roleNames.length > 0 && (
-                                              <span style={{ fontWeight: '400', color: '#374151' }}> - {signerItem.roleNames.join(' / ')}</span>
+                                              <span style={{ fontWeight: '400', color: '#374151' }}> - {signerItem.roleNames.map(formatSARoleLabel).join(' / ')}</span>
                                             )}
                                           </p>
                                         </div>
@@ -5590,7 +5885,7 @@ function Dashboard({ user, onLogout }) {
 
                                   return (
                                     <div
-                                      key={signerId}
+                                      key={`${signerId}-${index}`}
                                       className={`selected-signer-card ${draggedSignerIndex === index ? 'dragging' : ''} ${dragOverSignerIndex === index && draggedSignerIndex !== index ? 'drag-over' : ''} ${isLocked ? 'locked' : ''}`}
                                       draggable={canDrag}
                                       onDragStart={canDrag ? (e) => handleDragStartSigner(e, index) : undefined}
@@ -5610,13 +5905,11 @@ function Dashboard({ user, onLogout }) {
                                         <p className="signer-name-modern">
                                           {signer.name}
                                           {(() => {
-                                            const signerObj = selectedSigners.find(s =>
-                                              typeof s === 'object' ? s.userId === signerId : s === signerId
-                                            );
+                                            const signerObj = signerItem;
 
                                             // Soportar múltiples roles para FV
                                             if (typeof signerObj === 'object' && signerObj.roleNames && signerObj.roleNames.length > 0) {
-                                              const rolesText = signerObj.roleNames.join(' / ');
+                                              const rolesText = signerObj.roleNames.map(formatSARoleLabel).join(' / ');
                                               return (
                                                 <span style={{ fontWeight: '400', color: '#374151' }}> - {rolesText}</span>
                                               );
@@ -5625,7 +5918,7 @@ function Dashboard({ user, onLogout }) {
                                             // Fallback a rol singular para SA
                                             const roleName = typeof signerObj === 'object' ? signerObj.roleName : null;
                                             return roleName ? (
-                                              <span style={{ fontWeight: '400', color: '#374151' }}> - {roleName}</span>
+                                              <span style={{ fontWeight: '400', color: '#374151' }}> - {formatSARoleLabel(roleName)}</span>
                                             ) : null;
                                           })()}
                                           {isCurrentUser && <span className="you-tag">Tú</span>}
@@ -6125,7 +6418,7 @@ function Dashboard({ user, onLogout }) {
                                   API_URL,
                                   {
                                     query: `
-                                      query GetDocumentSigners($documentId: Int!) {
+                                      query GetDocumentSigners($documentId: ID!) {
                                         documentSigners(documentId: $documentId) {
                                           userId
                                           orderPosition
@@ -7585,13 +7878,13 @@ function Dashboard({ user, onLogout }) {
           {/* Contenedor del PDF */}
           <div className="pdf-viewer-minimal-body">
             <object
-              data={getViewUrl(viewingDocument.id)}
+              data={getViewUrl(viewingDocument.id, viewingDocument.pdfVersion)}
               type="application/pdf"
               className="pdf-viewer-minimal-iframe"
               title={viewingDocument.title}
             >
               <embed
-                src={getViewUrl(viewingDocument.id)}
+                src={getViewUrl(viewingDocument.id, viewingDocument.pdfVersion)}
                 type="application/pdf"
                 className="pdf-viewer-minimal-iframe"
                 title={viewingDocument.title}
@@ -8773,9 +9066,9 @@ function Dashboard({ user, onLogout }) {
               console.log('🔍 [DROPDOWN] Firmante:', sig.signer?.name, 'roleNames:', sig.roleNames, 'roleName:', sig.roleName, 'status:', sig.status);
               let roleText = '';
               if (sig.roleNames && Array.isArray(sig.roleNames) && sig.roleNames.length > 0) {
-                roleText = sig.roleNames.join(' / ');
+                roleText = sig.roleNames.map(formatSARoleLabel).join(' / ');
               } else if (sig.roleName) {
-                roleText = sig.roleName;
+                roleText = formatSARoleLabel(sig.roleName);
               }
 
               // Si está firmado/rechazado y tiene realSignerName, mostrar quien firmó/rechazó realmente (grupos de causación y Negociaciones)
@@ -8852,3 +9145,4 @@ function Dashboard({ user, onLogout }) {
 }
 
 export default Dashboard;
+

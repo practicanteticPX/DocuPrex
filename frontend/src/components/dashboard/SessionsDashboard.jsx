@@ -18,7 +18,7 @@ const ACTIVE_SESSIONS_QUERY = `
 `;
 
 const CLOSE_SESSION_MUTATION = `
-  mutation CloseUserSession($sessionId: Int!) {
+  mutation CloseUserSession($sessionId: ID!) {
     closeUserSession(sessionId: $sessionId)
   }
 `;

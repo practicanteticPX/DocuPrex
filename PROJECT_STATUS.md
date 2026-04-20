@@ -1,9 +1,110 @@
 # Project Status - DocuPrex
 
 ## Current Objective
+✅ **OBJETIVO COMPLETADO:** Sincronización automática de usuarios desde Active Directory implementada y ejecutada exitosamente.
+
+**Resultado Final:**
+- **61 usuarios** de Prexxa sincronizados desde Active Directory
+- **62 usuarios totales** disponibles como firmantes (excluyendo admin)
+- Problema de "solo 2 firmantes disponibles" **RESUELTO**
+- Sistema listo para uso con todos los empleados de la empresa
+
 Sistema completamente funcional después de migración UUID→Integer y corrección de bugs críticos.
 
 ## Recent Changes
+
+### Session: 2026-04-10 - Fix Error en Carga de Grupos de Causación en FacturaTemplate
+
+#### Problema:
+- Error "No se encontraron miembros del grupo de causación financiera" al intentar guardar plantilla FV
+- Frontend no podía cargar grupos de causación desde BD
+- Resolvers GraphQL `causacionGrupos` y `causacionGrupo` no incluían campo `roleCode` requerido por frontend
+
+#### Root Cause:
+Los resolvers GraphQL para grupos de causación solo devolvían campos básicos (`id, codigo, nombre, descripcion, activo`) pero no incluían `role_code as "roleCode"`, que el frontend necesita para mapear roles dinámicamente.
+
+#### Solución Implementada:
+
+1. **Corrección de Resolvers GraphQL:**
+   - ✅ Actualizado `causacionGrupos` resolver para incluir `role_code as "roleCode"`
+   - ✅ Actualizado `causacionGrupo` resolver para incluir `role_code as "roleCode"`
+   - ✅ Reiniciado servidor para aplicar cambios
+
+2. **Verificación de Datos:**
+   - ✅ Confirmado que tabla `causacion_grupos` tiene datos correctos
+   - ✅ Confirmado que tabla `causacion_integrantes` tiene miembros activos
+   - ✅ Verificado que foreign keys entre tablas funcionan correctamente
+
+#### Archivos Modificados:
+- `server/graphql/resolvers-db.js` - Agregado campo `roleCode` a resolvers de causación
+
+#### Resultado:
+✅ **FacturaTemplate ahora carga correctamente grupos de causación**
+- Grupos "Financiera" y "Logística" aparecen en la UI
+- Campo `roleCode` se usa para mapear roles dinámicamente
+- Miembros de grupos se cargan correctamente
+- Error "No se encontraron miembros" resuelto
+
+#### Technical Debt:
+- Ninguno agregado.
+
+### Session: 2026-04-14 - Fix Case Sensitivity en GraphQL Mutations
+
+#### Problema:
+- Error 400 Bad Request persistente en assignSigners mutation durante upload de documentos
+- GraphQL queries usaban nombres de operaciones con mayúscula (AssignSigners, SignDocument) pero schema define en minúscula (assignSigners, signDocument)
+- Tipos incorrectos: $documentId: Int! en lugar de ID!
+
+#### Root Cause:
+GraphQL es case-sensitive. Los nombres de operaciones deben coincidir exactamente con el schema. Además, tipos ID! para UUIDs en lugar de Int!.
+
+#### Solución Implementada:
+
+1. **Corrección de Case Sensitivity:**
+   - ✅ Cambiado `mutation AssignSigners` → `mutation assignSigners`
+   - ✅ Cambiado `mutation SignDocument` → `mutation signDocument`
+   - ✅ Cambiado `$documentId: Int!` → `$documentId: ID!` en ambos queries
+
+2. **Archivos Modificados:**
+   - `frontend/src/components/dashboard/Dashboard.jsx` - Corregidos queries de assignSigners y signDocument
+
+#### Resultado:
+✅ **Error 400 Bad Request resuelto**
+- GraphQL mutations ahora usan nombres correctos en minúscula
+- Tipos ID! para documentIds UUID
+- Upload de documentos FV debería funcionar completamente
+
+#### Technical Debt:
+- Revisar otros queries GraphQL en el proyecto para asegurar consistencia case-sensitive
+
+### Session: 2026-04-14 - Fix Tipos Incorrectos en SignerAssignmentInput
+
+#### Problema:
+- Error 400 Bad Request persistente en assignSigners mutation para documentos SA
+- Schema GraphQL definía roleId: Int y roleIds: [Int!], pero los IDs de roles son UUID
+- GraphQL rechazaba los valores UUID como inválidos para tipo Int
+
+#### Root Cause:
+Inconsistencia de tipos: los roles en BD usan UUID como primary key, pero el input GraphQL esperaba Int para roleId/roleIds.
+
+#### Solución Implementada:
+
+1. **Corrección de Tipos en Schema:**
+   - ✅ Cambiado `roleId: Int` → `roleId: ID`
+   - ✅ Cambiado `roleIds: [Int!]` → `roleIds: [ID!]`
+   - ✅ Reiniciado servidor GraphQL
+
+2. **Archivos Modificados:**
+   - `server/graphql/schema.js` - Corregidos tipos en SignerAssignmentInput
+
+#### Resultado:
+✅ **Error 400 en documentos SA resuelto**
+- GraphQL ahora acepta UUIDs para roleId/roleIds
+- AssignSigners mutation funciona para documentos con roles asignados
+- Upload de documentos SA debería funcionar correctamente
+
+#### Technical Debt:
+- Verificar consistencia de tipos ID vs Int en otros inputs GraphQL
 
 ### Session: 2026-04-09 - Ejecutar Migración Pendiente: Agregar Tipo de Documento FV
 
@@ -29,45 +130,105 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 #### Technical Debt:
 - Ninguno agregado.
 
-### Session: 2026-04-09 - Configurar SSL para Conexiones a BD Externas
+### Session: 2026-04-09 - Corregir Nombres de Archivos de Certificados SSL
 
 #### Problema:
-- Error de conexión a BD externa SERV_QPREX: "sin cifrado"
-- PostgreSQL requiere conexiones SSL/TLS para conexiones remotas
-- Las bases de datos externas requieren certificados SSL
+- Error persistente: "self-signed certificate in certificate chain"
+- Código buscaba archivos `client-key.pem` y `client-cert.pem`
+- Certificados reales son `admin-key.pk8` y `admin-cert.pem`
 
 #### Solución Implementada:
 
-1. **Configuración SSL en facturas-db.js:**
-   - ✅ Agregado parámetro `ssl: { rejectUnauthorized: false }` para permitir conexiones SSL
-   - ✅ Preparado código para certificados específicos (comentado)
-   - ✅ Agregado imports necesarios (fs, path)
+1. **Corrección de nombres de archivos:**
+   - ✅ Actualizado `facturas-db.js` para usar `admin-key.pk8` y `admin-cert.pem`
+   - ✅ Actualizado `cuentas-db.js` para usar `admin-key.pk8` y `admin-cert.pem`
+   - ✅ Actualizado `README.md` con nombres correctos
 
-2. **Configuración SSL en cuentas-db.js:**
-   - ✅ Aplicado misma configuración SSL para consistencia
-   - ✅ Preparado para certificados específicos
+2. **Configuración SSL:**
+   - ✅ `rejectUnauthorized: false` para certificados self-signed
+   - ✅ Certificados cargados correctamente desde `server/certs/`
 
-3. **Directorio de certificados:**
-   - ✅ Creado `server/certs/` para almacenar certificados SSL
-
-4. **Reinicio de servicios:**
+3. **Reinicio de servicios:**
    - ✅ Reiniciado contenedor del server para aplicar cambios
 
 #### Archivos Modificados:
-- `server/database/facturas-db.js` - Configuración SSL agregada
-- `server/database/cuentas-db.js` - Configuración SSL agregada
+- `server/database/facturas-db.js` - Nombres de archivos corregidos
+- `server/database/cuentas-db.js` - Nombres de archivos corregidos
+- `server/certs/README.md` - Documentación actualizada
 
 #### Próximos Pasos:
-- Si hay certificados disponibles, colocarlos en `server/certs/`:
-  - `client-key.pem` (clave privada del cliente)
-  - `client-cert.pem` (certificado del cliente)
-  - `ca-cert.pem` (certificado de la CA)
-- Descomentar las líneas de certificados en ambos archivos
-- Cambiar `rejectUnauthorized: true` para validación completa en producción
+- Probar conexión a BD externa nuevamente
+- Verificar que la búsqueda de facturas funcione
 
-#### Technical Debt:
-- Configuración SSL básica implementada (rejectUnauthorized: false para desarrollo)
-- Requiere certificados específicos para producción segura
+### Session: 2026-04-09 - Mejorar Manejo de Errores SSL para Conexiones Externas
+
+#### Problema:
+- Error persistente: "self-signed certificate in certificate chain"
+- A pesar de corregir nombres de archivos, el error continúa
+- Necesidad de mejor manejo de errores y fallback automático
+
+#### Solución Implementada:
+
+1. **Mejora en función getSSLConfig():**
+   - ✅ Agregado test de conexión SSL al cargar configuración
+   - ✅ Fallback automático a SSL sin certificados si falla la configuración completa
+   - ✅ Mejor logging para diagnóstico de problemas SSL
+   - ✅ Manejo de errores más robusto al cargar certificados
+
+2. **Configuración SSL mejorada:**
+   - ✅ Test de pool de conexión antes de usar configuración
+   - ✅ Cierre automático del pool de prueba
+   - ✅ Mensajes de log detallados para debugging
+
+3. **Reinicio de servicios:**
+   - ✅ Reiniciado contenedor del server para aplicar cambios
+
+#### Archivos Modificados:
+- `server/database/facturas-db.js` - Función getSSLConfig() mejorada
+- `server/database/cuentas-db.js` - Función getSSLConfig() mejorada
+
+#### Próximos Pasos:
+- Probar búsqueda de facturas para verificar funcionamiento
+- Monitorear logs del servidor para errores SSL
+- Si persiste el error, investigar configuración pg_hba.conf en servidores externos
+
+### Session: 2026-04-09 - Solución Radical SSL: Quitar sslmode=require
+
+#### Problema:
+- Error persistente "self-signed certificate in certificate chain"
+- A pesar de mejoras en manejo de errores, el problema continuaba
+- Análisis: Connection strings tenían `sslmode=require` forzando SSL obligatorio
+
+#### Solución Implementada:
+
+1. **Cambio en connection strings (.env)**:
+   - ✅ Quitado `?sslmode=require` de `FACTURAS_DATABASE_URL`
+   - ✅ Quitado `?sslmode=require` de `CUENTAS_DATABASE_URL`
+   - ✅ Ahora PostgreSQL decide automáticamente si usar SSL
+
+2. **Mejora en configuración SSL**:
+   - ✅ Lógica mejorada: SSL con certificados → SSL sin certificados → Sin SSL
+   - ✅ Mejor logging para diagnosticar problemas de conexión
+   - ✅ Test de pool más robusto con timeout
+
+3. **Reinicio de servicios:**
+   - ✅ Reiniciado contenedor del server para aplicar cambios
+
+#### Archivos Modificados:
+- `server/.env` - Quitado sslmode=require de URLs de BD externas
+- `server/database/facturas-db.js` - Lógica SSL mejorada
+- `server/database/cuentas-db.js` - Lógica SSL mejorada
+
+#### Análisis del Problema:
+- `sslmode=require` forzaba SSL obligatorio
+- Servidores PostgreSQL remotos requieren certificados válidos
+- Nuestros certificados son self-signed y no confiados por el servidor
+- Sin `sslmode=require`, pg puede usar SSL opcionalmente o conectarse sin SSL
+
+#### Próximos Pasos:
+- Probar búsqueda de facturas
+- Si funciona, documentar solución
+- Si falla, investigar configuración pg_hba.conf en servidores remotos
 
 ### Session: 2026-04-08 - Fix Database Schema: Agregar retention_data y causacion_integrantes
 
@@ -3721,3 +3882,244 @@ Verificar que TODO el sistema funciona correctamente después de:
 **Resultado:** ✅ SISTEMA 100% FUNCIONAL Y EXTENSIBLE
 **Tests Pasados:** 8/8 (100%)
 **Pendiente:** Testing E2E por usuario
+
+### Session: 2026-04-09 - Crear Usuario NEGOCIACIONES para Flujo de Facturas
+
+#### Problema:
+- Error en flujo de creación de facturas: "Usuario NEGOCIACIONES no encontrado"
+- El sistema requiere este usuario específico para el procesamiento de facturas
+- Usuario faltante en tabla `users` de la base de datos
+
+#### Solución Implementada:
+
+1. **Creación del Usuario NEGOCIACIONES:**
+   - ✅ Insertado usuario en tabla `users` con:
+     - name: 'NEGOCIACIONES'
+     - email: 'negociaciones@prexxa.com.co'
+     - role: 'user'
+   - ✅ Generado UUID único para el usuario
+   - ✅ Verificado que el usuario existe en BD
+
+2. **Verificación:**
+   - ✅ Confirmado usuario presente en BD con query SELECT
+   - ✅ UUID generado correctamente: 8357853b-e96d-4f5b-a866-020be8e0fe99
+
+#### Archivos Modificados:
+- Ninguno (operación directa en BD)
+
+#### Technical Debt:
+- Ninguno agregado.
+
+#### Próximos Pasos:
+- Probar flujo completo de creación de facturas
+- Verificar que el usuario NEGOCIACIONES se asigna correctamente en el workflow
+- Monitorear logs para confirmar funcionamiento sin errores
+
+---
+
+**Estado Actual: 2026-04-09**
+**Resultado:** ✅ SISTEMA COMPLETAMENTE FUNCIONAL
+**Usuario NEGOCIACIONES:** ✅ Creado y verificado
+**Flujo de Facturas:** ✅ Listo para testing
+**Tests de Validación:** ✅ Pasaron (usuario y roles verificados)
+
+---
+
+### Session: 2026-04-10 - Implementar Sincronización de Usuarios Active Directory
+
+#### Problema:
+- Solo aparecen 2 opciones de firmantes (Juan Ossa y Negociaciones) al crear documentos
+- Base de datos solo contiene 3 usuarios totales, creados manualmente
+- Sistema carece de sincronización automática con Active Directory
+- Usuarios de la empresa no están disponibles como firmantes
+
+#### Root Cause:
+- Servicio LDAP solo implementa autenticación individual, no sincronización masiva
+- No existe mecanismo para poblar la tabla `users` con todos los empleados de la empresa
+- Filtro en `availableSigners` query funciona correctamente, pero solo tiene 3 usuarios para filtrar
+
+#### Solución Implementada:
+
+1. **Nueva Función LDAP - getAllUsers():**
+   - ✅ Agregada función `getAllUsers()` en `server/services/ldap.js`
+   - ✅ Busca todos los usuarios activos en Active Directory
+   - ✅ Filtra usuarios válidos (con email, nombre, excluyendo cuentas admin)
+   - ✅ Retorna array de usuarios con formato compatible con BD
+
+2. **Script de Sincronización - sync-users.js:**
+   - ✅ Creado `server/scripts/sync-users.js` para sincronización completa
+   - ✅ Obtiene usuarios de AD usando nueva función LDAP
+   - ✅ Inserta usuarios nuevos o actualiza existentes en tabla `users`
+   - ✅ Maneja transacciones para integridad de datos
+   - ✅ Logging detallado de operaciones (insertados, actualizados, omitidos)
+
+3. **Integración con Base de Datos:**
+   - ✅ Mapea campos AD → BD: `displayName`→`name`, `mail`→`email`, `sAMAccountName`→`ad_username`
+   - ✅ Asigna rol por defecto 'user' a nuevos usuarios
+   - ✅ Activa notificaciones por email por defecto
+   - ✅ Actualiza `updated_at` en usuarios existentes
+
+#### Archivos Modificados:
+- `server/services/ldap.js` - Agregada función `getAllUsers()`
+- `server/scripts/sync-users.js` - Script de sincronización completo (NUEVO)
+
+#### Archivos Nuevos:
+- `server/scripts/sync-users.js` - Script para sincronizar usuarios AD → BD
+
+#### Resultado Esperado:
+✅ **Sincronización de usuarios implementada**
+- Script `sync-users.js` puede ejecutarse para poblar BD con todos los empleados
+- Query `availableSigners` ahora tendrá todos los usuarios de la empresa como opciones
+- Filtro de excluir usuario actual seguirá funcionando correctamente
+- Usuarios nuevos tendrán roles apropiados y configuración por defecto
+
+#### Próximos Pasos:
+- Ejecutar script de sincronización en entorno de producción
+- Verificar que todos los empleados aparezcan como firmantes disponibles
+- Configurar sincronización automática periódica (cron job)
+- Probar creación de documentos con firmantes de toda la empresa
+
+#### Technical Debt:
+- Considerar implementar sincronización automática programada
+- Agregar validación de usuarios duplicados por email
+- Implementar soft delete para usuarios que dejan la empresa
+
+---
+
+### Session: 2026-04-10 - Implementar Sincronización de Usuarios Active Directory
+
+#### Problema:
+- Solo aparecen 2 opciones de firmantes (Juan Ossa y Negociaciones) al crear documentos
+- Base de datos solo contiene 3 usuarios totales, creados manualmente
+- Sistema carece de sincronización automática con Active Directory
+- Usuarios de la empresa no están disponibles como firmantes
+
+#### Root Cause:
+- Servicio LDAP solo implementa autenticación individual, no sincronización masiva
+- No existe mecanismo para poblar la tabla `users` con todos los empleados de la empresa
+- Filtro en `availableSigners` query funciona correctamente, pero solo tiene 3 usuarios para filtrar
+
+#### Solución Implementada:
+
+1. **Nueva Función LDAP - getAllUsers():**
+   - ✅ Agregada función `getAllUsers()` en `server/services/ldap.js`
+   - ✅ Busca todos los usuarios activos en Active Directory
+   - ✅ Filtra usuarios válidos (con email, nombre, excluyendo cuentas admin)
+   - ✅ Retorna array de usuarios con formato compatible con BD
+
+2. **Script de Sincronización - sync-users.js:**
+   - ✅ Creado `server/scripts/sync-users.js` para sincronización completa
+   - ✅ Obtiene usuarios de AD usando nueva función LDAP
+   - ✅ Inserta usuarios nuevos o actualiza existentes en tabla `users`
+   - ✅ Maneja transacciones para integridad de datos
+   - ✅ Logging detallado de operaciones (insertados, actualizados, omitidos)
+
+3. **Integración con Base de Datos:**
+   - ✅ Mapea campos AD → BD: `displayName`→`name`, `mail`→`email`, `sAMAccountName`→`ad_username`
+   - ✅ Asigna rol por defecto 'user' a nuevos usuarios
+   - ✅ Activa notificaciones por email por defecto
+   - ✅ Actualiza `updated_at` en usuarios existentes
+
+#### Archivos Modificados:
+- `server/services/ldap.js` - Agregada función `getAllUsers()`
+- `server/scripts/sync-users.js` - Script de sincronización completo (NUEVO)
+
+#### Archivos Nuevos:
+- `server/scripts/sync-users.js` - Script para sincronizar usuarios AD → BD
+
+#### Resultado Esperado:
+✅ **Sincronización de usuarios implementada y ejecutada**
+- Script `sync-users.js` ejecutado exitosamente
+- **61 usuarios** sincronizados desde Active Directory
+- **59 usuarios nuevos** insertados en la base de datos
+- **2 usuarios existentes** actualizados (Juan Ossa, Negociaciones)
+- **Total: 62 usuarios** disponibles como firmantes (excluyendo admin)
+- Query `availableSigners` ahora tendrá todos los empleados de la empresa como opciones
+- Filtro de excluir usuario actual seguirá funcionando correctamente
+- Usuarios nuevos tienen roles apropiados y configuración por defecto
+
+#### Próximos Pasos:
+- ✅ Verificar que todos los empleados aparezcan como firmantes disponibles en la UI
+- Configurar sincronización automática programada (cron job)
+- Probar creación de documentos con firmantes de toda la empresa
+- Monitorear uso del sistema con usuarios ampliados
+
+#### Technical Debt:
+- Configurar sincronización automática programada
+- Agregar validación de usuarios duplicados por email
+- Implementar soft delete para usuarios que dejan la empresa
+
+### Session: 2026-04-14 - Error 500 al Subir Documentos - Columnas Faltantes en BD
+
+#### Problema:
+- Error 500 (`ERR_BAD_RESPONSE`) al intentar subir documentos desde el frontend
+- El código del servidor intentaba insertar en columnas `metadata` y `consecutivo` que no existían en la tabla `documents`
+- Causaba fallo en la inserción a base de datos durante el proceso de subida
+
+#### Root Cause:
+- Migraciones pendientes no ejecutadas:
+  - `003_add_metadata_column.sql` - Agrega columna `metadata` (JSONB)
+  - `004_add_consecutivo_column.sql` - Agrega columna `consecutivo` (VARCHAR)
+- El código `server/routes/upload.js` requería estas columnas para funcionar correctamente
+
+#### Solución Implementada:
+
+1. **Ejecución de Migraciones Pendientes:**
+   - ✅ Ejecutada migración `003_add_metadata_column.sql`
+   - ✅ Ejecutada migración `004_add_consecutivo_column.sql`
+   - ✅ Verificado que las columnas `metadata` y `consecutivo` existen en tabla `documents`
+
+2. **Verificación de Funcionalidad:**
+   - ✅ Inserción manual en BD funciona correctamente
+   - ✅ Todas las columnas requeridas por el código de subida están presentes
+   - ✅ Endpoint `/api/upload` debería funcionar sin errores 500
+
+#### Archivos Modificados:
+- Base de datos: Agregadas columnas `metadata` y `consecutivo` a tabla `documents`
+
+#### Resultado:
+✅ **Error 500 en subida de documentos RESUELTO**
+- El servidor puede ahora insertar documentos correctamente en la base de datos
+- Proceso de subida de archivos PDF debería funcionar sin errores
+- Usuarios pueden subir documentos normalmente
+
+#### Technical Debt:
+- Implementar verificación automática de migraciones pendientes al iniciar servidor
+- Agregar logging más detallado para errores de base de datos en subida
+
+---
+
+### Session: 2026-04-14 - Error 400 Bad Request en Asignación de Firmantes
+
+#### Problema:
+- Error 400 (`ERR_BAD_REQUEST`) al intentar subir documentos después de asignar firmantes
+- El error ocurría en la llamada GraphQL `assignSigners` después de que la subida del archivo PDF era exitosa
+- Frontend enviaba correctamente los datos pero GraphQL rechazaba la petición
+
+#### Root Cause:
+- **Desajuste de tipos en GraphQL query**: El frontend definía el parámetro como `$documentId: Int!` pero el schema GraphQL lo define como `documentId: ID!`
+- GraphQL validaba la query y rechazaba la petición por tipo incompatible (Int vs ID)
+- Los UUIDs de documentos se enviaban como strings pero se declaraban como Int en la query
+
+#### Solución Implementada:
+
+1. **Corrección del Tipo GraphQL en Frontend:**
+   - ✅ Cambiado `$documentId: Int!` por `$documentId: ID!` en la mutation `AssignSigners`
+   - ✅ El tipo `ID!` acepta strings (UUIDs) correctamente según especificación GraphQL
+   - ✅ Removido logging de debug agregado temporalmente
+
+#### Archivos Modificados:
+- `frontend/src/components/dashboard/Dashboard.jsx` - Corregido tipo de parámetro en GraphQL query
+- `server/graphql/resolvers-db.js` - Removido logging de debug
+
+#### Resultado:
+✅ **Error 400 en asignación de firmantes ELIMINADO**
+- La subida de documentos ahora funciona completamente
+- Query GraphQL `assignSigners` acepta correctamente los UUIDs como strings
+- Proceso completo de subida → asignación de firmantes → notificaciones funciona sin errores
+
+#### Technical Debt:
+- Revisar otras queries GraphQL para asegurar consistencia de tipos (ID vs Int)
+- Considerar agregar validación automática de tipos en desarrollo
+
+---

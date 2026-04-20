@@ -36,6 +36,7 @@ services:
       - ./server/logs:/app/logs
       - ./server/.env:/app/.env
       - ./server/assets:/app/assets
+      - ./server/certs:/app/certs
     env_file:
       - ./server/.env
     command: npm start

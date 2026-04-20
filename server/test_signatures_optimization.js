@@ -29,13 +29,17 @@ async function testSignaturesOptimization() {
       console.log('   Creando escenario de prueba básico...\n');
 
       // Verificar que al menos las queries no fallen
-      const testQuery1 = await query(`
-        SELECT id, role_code FROM document_type_roles WHERE id = ANY($1)
-      `, [[1, 2, 3]]);
+      console.log('🔍 Ejecutando testQuery1 con UUIDs...');
+      const testQuery1 = await query(
+        'SELECT id, role_code FROM document_type_roles WHERE id = ANY($1)',
+        [['d2d0aa35-045d-4b76-b070-843c8011ac35', '7e682eae-1909-4492-93e1-891921b46433', 'ba17d8d6-5523-42b6-8432-bb769d5de5f3']]
+      );
 
-      const testQuery2 = await query(`
-        SELECT role_name, role_code FROM document_type_roles WHERE role_name = ANY($1)
-      `, [['Test Role']]);
+      console.log('🔍 Ejecutando testQuery2...');
+      const testQuery2 = await query(
+        'SELECT role_name, role_code FROM document_type_roles WHERE role_name = ANY($1)',
+        [['Test Role']]
+      );
 
       console.log('✅ Queries batch funcionan correctamente');
       console.log('   Test query 1 resultados:', testQuery1.rows.length);
