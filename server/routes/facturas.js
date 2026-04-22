@@ -1,7 +1,14 @@
 const express = require('express');
+const fs = require('fs').promises;
+const path = require('path');
 const router = express.Router();
 const { queryFacturas } = require('../database/facturas-db');
 const { queryCuentas } = require('../database/cuentas-db');
+const { query } = require('../database/db');
+const { getUserUploadDir, normalizeFileName } = require('../utils/fileUpload');
+const websocketService = require('../services/websocket');
+
+const DOCUPREX_INGEST_TOKEN = process.env.DOCUPREX_INGEST_TOKEN || '';
 
 /**
  * GET /api/facturas/cuentas-contables
@@ -462,6 +469,223 @@ router.get('/usuario-negociaciones', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error interno al obtener usuario NEGOCIACIONES',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/facturas/ingest-from-facturacion
+ * Crea un documento FV directamente en DocuPrex para el usuario definido en "Entregado a"
+ */
+router.post('/ingest-from-facturacion', async (req, res) => {
+  try {
+    const providedToken = req.headers['x-docuprex-ingest-token'];
+
+    if (!DOCUPREX_INGEST_TOKEN || providedToken !== DOCUPREX_INGEST_TOKEN) {
+      return res.status(401).json({
+        success: false,
+        message: 'No autorizado para ingresar facturas en DocuPrex'
+      });
+    }
+
+    const {
+      numeroControl,
+      cia,
+      proveedor,
+      numeroFactura,
+      fechaFactura,
+      fechaEntrega,
+      entregadaA,
+      entregadaAEmail,
+      pdfBase64,
+      originalFileName,
+      mimeType
+    } = req.body || {};
+
+    if (!numeroControl || !entregadaAEmail || !pdfBase64) {
+      return res.status(400).json({
+        success: false,
+        message: 'numeroControl, entregadaAEmail y pdfBase64 son requeridos'
+      });
+    }
+
+    const userResult = await query(
+      `SELECT id, name, email
+       FROM users
+       WHERE LOWER(email) = LOWER($1)
+       LIMIT 1`,
+      [entregadaAEmail]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No se encontró en DocuPrex el usuario con correo ${entregadaAEmail}`
+      });
+    }
+
+    const fvTypeResult = await query(
+      `SELECT id, name, code, prefix
+       FROM document_types
+       WHERE code = 'FV'
+       LIMIT 1`
+    );
+
+    if (fvTypeResult.rows.length === 0) {
+      return res.status(500).json({
+        success: false,
+        message: 'No se encontró el tipo de documento FV en DocuPrex'
+      });
+    }
+
+    const targetUser = userResult.rows[0];
+    const fvType = fvTypeResult.rows[0];
+    const fileBuffer = Buffer.from(pdfBase64, 'base64');
+
+    const existingDocResult = await query(
+      `SELECT id
+       FROM documents
+       WHERE consecutivo = $1
+         AND uploaded_by = $2
+         AND document_type_id = $3
+         AND status != 'archived'
+       LIMIT 1`,
+      [String(numeroControl), targetUser.id, fvType.id]
+    );
+
+    if (existingDocResult.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `La factura ${numeroControl} ya existe en DocuPrex para ${targetUser.email}`
+      });
+    }
+
+    const templateData = {
+      consecutivo: String(numeroControl),
+      cia: cia || '',
+      proveedor: proveedor || '',
+      numeroFactura: numeroFactura || '',
+      fechaFactura: fechaFactura || '',
+      fechaRecepcion: fechaEntrega || '',
+      legalizaAnticipo: false,
+      checklistRevision: {
+        fechaEmision: false,
+        fechaVencimiento: false,
+        cantidades: false,
+        precioUnitario: false,
+        fletes: false,
+        valoresTotales: false,
+        descuentosTotales: false
+      },
+      nombreNegociador: '',
+      cargoNegociador: '',
+      grupoCausacion: '',
+      observaciones: '',
+      filasControl: [
+        {
+          id: 1,
+          noCuentaContable: '',
+          respCuentaContable: '',
+          cargoCuentaContable: '',
+          nombreCuentaContable: '',
+          centroCostos: '',
+          respCentroCostos: '',
+          cargoCentroCostos: '',
+          porcentaje: ''
+        }
+      ],
+      totalPorcentaje: 0,
+      firmantes: []
+    };
+
+    const targetDir = getUserUploadDir(targetUser.name);
+    const safeOriginalName = normalizeFileName(originalFileName || `factura_${numeroControl}.pdf`);
+    const ext = path.extname(safeOriginalName) || '.pdf';
+    const baseName = path.basename(safeOriginalName, ext);
+
+    let finalFileName = `${baseName}${ext}`;
+    let counter = 1;
+
+    while (true) {
+      try {
+        await fs.access(path.join(targetDir, finalFileName));
+        finalFileName = `${baseName} (${counter})${ext}`;
+        counter++;
+      } catch {
+        break;
+      }
+    }
+
+    const finalPath = path.join(targetDir, finalFileName);
+    await fs.writeFile(finalPath, fileBuffer);
+
+    const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
+    await fs.mkdir(backupDir, { recursive: true });
+
+    const backupFileName = `${Date.now()}_facturacion_${finalFileName}`;
+    const backupFullPath = path.join(backupDir, backupFileName);
+    await fs.copyFile(finalPath, backupFullPath);
+
+    const relativePath = `uploads/${path.basename(targetDir)}/${finalFileName}`;
+    const relativeBackupPath = `uploads/originals/${backupFileName}`;
+    const proveedorNormalizado = String(proveedor || '').trim().replace(/\s+/g, ' ');
+    const numeroFacturaNormalizado = String(numeroFactura || '').trim().replace(/\s+/g, ' ');
+    const docTitle = proveedorNormalizado && numeroFacturaNormalizado
+      ? `FV - ${proveedorNormalizado} - ${numeroFacturaNormalizado}`
+      : `${fvType.prefix || 'FV - '}${numeroControl}`.trim();
+
+    const insertResult = await query(
+      `INSERT INTO documents (
+        title,
+        description,
+        file_name,
+        file_path,
+        file_size,
+        mime_type,
+        status,
+        uploaded_by,
+        document_type_id,
+        consecutivo,
+        metadata,
+        original_pdf_backup
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, $11)
+      RETURNING id, title, uploaded_by, created_at`,
+      [
+        docTitle,
+        `Factura radicada desde Recepción de Facturas para ${entregadaA || targetUser.name}`,
+        finalFileName,
+        relativePath,
+        fileBuffer.length,
+        mimeType || 'application/pdf',
+        targetUser.id,
+        fvType.id,
+        String(numeroControl),
+        templateData,
+        JSON.stringify([relativeBackupPath])
+      ]
+    );
+
+    websocketService.emitDocumentUpdated(insertResult.rows[0].id, 'created', {
+      documentTitle: insertResult.rows[0].title,
+      uploadedBy: targetUser.id,
+      documentTypeCode: fvType.code
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Factura ingresada en DocuPrex exitosamente',
+      data: {
+        documentId: insertResult.rows[0].id,
+        title: insertResult.rows[0].title,
+        uploadedBy: targetUser.email
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error ingresando factura desde facturación a DocuPrex:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno al ingresar la factura en DocuPrex',
       error: error.message
     });
   }

@@ -55,11 +55,50 @@ const isAuthError = (error) => {
   return message.includes('autenticado') || message.includes('authenticated') || message.includes('No autenticado');
 };
 
+const SA_OTHER_OPTION = '__SA_OTRO__';
+const SA_COMMON_TITLE_OPTIONS = [
+  'Gasto de viaje',
+  'Impuestos',
+  'Reparaciones locativas',
+  'Compra de activos fijos',
+  'Aduanas',
+  'Compra de inventarios'
+];
+
+const SA_UI_TEXT = {
+  selectCategory: 'Seleccione una categoria',
+  other: 'Otro',
+  writeRequestTitle: 'Escribe el titulo de la solicitud...',
+  writeAdvanceDetail: 'Escribe el detalle del anticipo...',
+  selectAndWrite: 'Selecciona una categoria y escribe el detalle...',
+  savedAsCustom: 'Se guardara como: SA - titulo escrito por el usuario',
+  savedAsListed: 'Se guardara como: SA - categoria seleccionada - titulo escrito por el usuario',
+  helpText: 'Primero elige una categoria. Si seleccionas "Otro", el titulo quedara como SA - titulo escrito por el usuario.',
+  preview: 'Vista previa:'
+};
+
+const buildSADocumentTitle = (prefix, category, customTitle) => {
+  const cleanPrefix = (prefix || 'SA -').trim();
+  const cleanCategory = (category || '').trim();
+  const cleanCustomTitle = (customTitle || '').trim();
+
+  if (!cleanCustomTitle) {
+    return '';
+  }
+
+  if (!cleanCategory || cleanCategory === SA_OTHER_OPTION) {
+    return `${cleanPrefix} ${cleanCustomTitle}`.replace(/\s+/g, ' ').trim();
+  }
+
+  return `${cleanPrefix} ${cleanCategory} - ${cleanCustomTitle}`.replace(/\s+/g, ' ').trim();
+};
+
 function Dashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [documentTitle, setDocumentTitle] = useState('');
+  const [saTitleCategory, setSaTitleCategory] = useState('');
   const [documentDescription, setDocumentDescription] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -393,9 +432,8 @@ function Dashboard({ user, onLogout }) {
     }
 
     if (currentRoleName === 'tesoreria') {
-      return signerName.includes('monica bustamante') ||
-        signerName === 'monica bustamante' ||
-        signerEmail.includes('bustamante');
+      return signerName === 'monica bustamante' ||
+        signerEmail === 'm.bustamante@prexxa.com.co';
     }
 
     return true;
@@ -558,6 +596,25 @@ function Dashboard({ user, onLogout }) {
       loadRetainedDocuments();
     };
 
+    const getCurrentRealtimeUserId = () => {
+      if (user?.id) return String(user.id);
+      try {
+        const savedUser = localStorage.getItem('user');
+        if (!savedUser) return null;
+        const parsedUser = JSON.parse(savedUser);
+        return parsedUser?.id ? String(parsedUser.id) : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const isEventForCurrentUser = (eventUserId) => {
+      if (eventUserId === undefined || eventUserId === null) return true;
+      const currentUserId = getCurrentRealtimeUserId();
+      if (!currentUserId) return true;
+      return String(eventUserId) === currentUserId;
+    };
+
     newSocket.on('connect', () => {
       console.log('✅ WebSocket conectado:', newSocket.id);
       reloadAllData(); // Recargar datos al reconectar
@@ -602,6 +659,20 @@ function Dashboard({ user, onLogout }) {
     newSocket.on('document:retained', (data) => {
       console.log('📤 Documento retenido recibido:', data);
       reloadAllData();
+    });
+
+    newSocket.on('notification:created', (data) => {
+      console.log('📤 Notificación creada recibida:', data);
+      if (isEventForCurrentUser(data.userId)) {
+        reloadAllData();
+      }
+    });
+
+    newSocket.on('notification:deleted', (data) => {
+      console.log('📤 Notificación eliminada recibida:', data);
+      if (isEventForCurrentUser(data.userId)) {
+        reloadAllData();
+      }
     });
 
     // EVENTO CRÍTICO: Cerrar sesión remota (fuerza logout inmediato)
@@ -1022,12 +1093,31 @@ function Dashboard({ user, onLogout }) {
     setSelectedFiles([]);
     setSelectedSigners([]);
     setDocumentTitle('');
+    setSaTitleCategory('');
     setDocumentDescription('');
     setUploadSuccess(false);
     setError('');
     setTemplateCompleted(false);
     setFacturaTemplateData(null);
     setSelectedFactura(null);
+  };
+
+  const getComposedDocumentTitle = () => {
+    if (selectedDocumentType?.code === 'FV' && facturaTemplateData) {
+      const proveedor = (facturaTemplateData.proveedor?.trim() || '').replace(/\s+/g, ' ');
+      const numeroFactura = (facturaTemplateData.numeroFactura?.trim() || '').replace(/\s+/g, ' ');
+      return `FV - ${proveedor} - ${numeroFactura}`;
+    }
+
+    if (selectedDocumentType?.code === 'SA') {
+      return buildSADocumentTitle(selectedDocumentType.prefix, saTitleCategory, documentTitle);
+    }
+
+    if (selectedDocumentType) {
+      return `${selectedDocumentType.prefix} ${documentTitle.trim()}`.replace(/\s+/g, ' ').trim();
+    }
+
+    return documentTitle.trim().replace(/\s+/g, ' ').trim();
   };
 
   // Validar si el paso actual está completo para poder avanzar
@@ -1037,6 +1127,10 @@ function Dashboard({ user, onLogout }) {
         // Para FV con plantilla completada, no se requiere título (se genera automáticamente)
         if (selectedDocumentType?.code === 'FV' && templateCompleted && facturaTemplateData) {
           return selectedFiles && selectedFiles.length > 0;
+        }
+        if (selectedDocumentType?.code === 'SA') {
+          const hasCategory = saTitleCategory.trim().length > 0;
+          return selectedFiles && selectedFiles.length > 0 && hasCategory && documentTitle.trim().length > 0;
         }
         return selectedFiles && selectedFiles.length > 0 && documentTitle.trim().length > 0;
       case 1: // Añadir firmantes
@@ -1556,7 +1650,9 @@ function Dashboard({ user, onLogout }) {
                 filePath
                 consecutivo
                 metadata
+                templateData
                 uploadedBy {
+                  id
                   name
                   email
                 }
@@ -2936,6 +3032,11 @@ function Dashboard({ user, onLogout }) {
       return;
     }
 
+    if (selectedDocumentType?.code === 'SA' && !saTitleCategory.trim()) {
+      setError('Selecciona una categoria para la Solicitud de Anticipo');
+      return;
+    }
+
     if (selectedSigners.length === 0) {
       setError('Por favor selecciona al menos un firmante');
       return;
@@ -2959,30 +3060,19 @@ function Dashboard({ user, onLogout }) {
         setUploading(false);
         return;
       }
+      const finalTitle = getComposedDocumentTitle();
       // Nombre del conjunto (opcional)
-      if (documentTitle && documentTitle.trim()) {
-        formData.append('groupTitle', documentTitle.trim());
+      if (finalTitle) {
+        formData.append('groupTitle', finalTitle);
       }
-      // Enviar como múltiples si hay más de uno
+      // Enviar como multiples si hay mas de uno
       if (filesToSend.length > 1) {
         for (const f of filesToSend) formData.append('files', f);
       } else {
         formData.append('file', filesToSend[0]);
       }
-      // Ya no usamos 'title' como nombre del documento cuando hay múltiples,
-      // el backend usará el nombre real del archivo como título y 'groupTitle' para agrupar.
-      let finalTitle;
-      if (selectedDocumentType?.code === 'FV' && facturaTemplateData) {
-        // Para FV, generar título automático: FV - {proveedor} - {numero_factura}
-        // Limpiar espacios extra del proveedor y número de factura
-        const proveedor = (facturaTemplateData.proveedor?.trim() || '').replace(/\s+/g, ' ');
-        const numeroFactura = (facturaTemplateData.numeroFactura?.trim() || '').replace(/\s+/g, ' ');
-        finalTitle = `FV - ${proveedor} - ${numeroFactura}`;
-      } else if (selectedDocumentType) {
-        finalTitle = `${selectedDocumentType.prefix} ${documentTitle.trim()}`.replace(/\s+/g, ' ');
-      } else {
-        finalTitle = documentTitle.trim().replace(/\s+/g, ' ');
-      }
+      // Ya no usamos 'title' como nombre del documento cuando hay multiples,
+      // el backend usara el nombre real del archivo como titulo y 'groupTitle' para agrupar.
       formData.append('title', finalTitle);
       if (documentDescription.trim()) {
         formData.append('description', documentDescription.trim());
@@ -3168,6 +3258,7 @@ function Dashboard({ user, onLogout }) {
           setSelectedFile(null);
           setSelectedFiles([]);
           setDocumentTitle('');
+          setSaTitleCategory('');
           setDocumentDescription('');
           setSelectedSigners([]);
           setActiveStep(0); // Volver al primer paso del stepper
@@ -4232,7 +4323,8 @@ function Dashboard({ user, onLogout }) {
    * Verificar si el usuario puede editar la planilla de factura
    * Condiciones:
    * 1. El usuario es el creador del documento
-   * 2. Solo el creador ha firmado (autofirma) o nadie ha firmado
+   * 2. El documento aún tiene firmantes pendientes
+   * 3. El documento no está rechazado ni completado
    */
   const canEditFacturaTemplate = (doc) => {
     if (!doc || !doc.documentType || doc.documentType.code !== 'FV') {
@@ -4255,15 +4347,13 @@ function Dashboard({ user, onLogout }) {
       return false;
     }
 
-    // Verificar que nadie más que el creador ha firmado
-    const signaturesFromOthers = (doc.signatures || []).filter(sig => {
-      return sig.status === 'signed' &&
-             sig.signer &&
-             sig.signer.email !== user?.email &&
-             sig.signer.id !== user?.id;
-    });
+    if (doc.status === 'completed' || doc.status === 'rejected') {
+      return false;
+    }
 
-    return signaturesFromOthers.length === 0;
+    const pendingSignatures = (doc.signatures || []).filter(sig => sig.status === 'pending');
+
+    return pendingSignatures.length > 0;
   };
 
   /**
@@ -4330,7 +4420,7 @@ function Dashboard({ user, onLogout }) {
             }
           `,
           variables: {
-            documentId: parseInt(editingDocument.id),
+            documentId: editingDocument.id,
             templateData: JSON.stringify(updatedTemplateData)
           }
         },
@@ -5045,6 +5135,8 @@ function Dashboard({ user, onLogout }) {
                               setSelectedDocumentType(type);
                               setDocumentTypeRoles(type?.roles || []);
                               setSelectedSigners([]);
+                              setSaTitleCategory('');
+                              setDocumentTitle('');
                               setTemplateCompleted(false);
                               setFacturaTemplateData(null);
                               setSelectedFactura(null);
@@ -5120,33 +5212,116 @@ function Dashboard({ user, onLogout }) {
                           {/* Título y descripción para documentos no-FV O sin tipo (el selector ya está arriba) */}
                           <div className="form-group">
                             <label htmlFor="document-title">
-                              Título del documento
+                              Titulo del documento
                             </label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              {selectedDocumentType && (
-                                <span style={{
-                                  padding: '0.5rem 1rem',
-                                  backgroundColor: '#f3f4f6',
-                                  border: '1px solid #d1d5db',
-                                  borderRadius: '0.375rem',
-                                  fontWeight: '600',
-                                  color: '#374151',
-                                  whiteSpace: 'nowrap'
-                                }}>
-                                  {selectedDocumentType.prefix}
-                                </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                              {selectedDocumentType?.code === 'SA' ? (
+                                <>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      padding: '0.5rem 1rem',
+                                      backgroundColor: '#f3f4f6',
+                                      border: '1px solid #d1d5db',
+                                      borderRadius: '0.375rem',
+                                      fontWeight: '600',
+                                      color: '#374151',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {selectedDocumentType.prefix}
+                                    </span>
+                                    <select
+                                      value={saTitleCategory}
+                                      onChange={(e) => setSaTitleCategory(e.target.value)}
+                                      className="form-input"
+                                      style={{ minWidth: '240px', flex: '0 1 280px' }}
+                                      disabled={uploading}
+                                      required
+                                    >
+                                      <option value="">{SA_UI_TEXT.selectCategory}</option>
+                                      {SA_COMMON_TITLE_OPTIONS.map((option) => (
+                                        <option key={option} value={option}>
+                                          {option}
+                                        </option>
+                                      ))}
+                                      <option value={SA_OTHER_OPTION}>{SA_UI_TEXT.other}</option>
+                                    </select>
+                                    {saTitleCategory && saTitleCategory !== SA_OTHER_OPTION && (
+                                      <span style={{
+                                        color: '#64748b',
+                                        fontWeight: '600',
+                                        fontSize: '1rem'
+                                      }}>
+                                        -
+                                      </span>
+                                    )}
+                                    <input
+                                      type="text"
+                                      id="document-title"
+                                      value={documentTitle}
+                                      onChange={(e) => setDocumentTitle(e.target.value)}
+                                      placeholder={
+                                        saTitleCategory === SA_OTHER_OPTION
+                                          ? SA_UI_TEXT.writeRequestTitle
+                                          : saTitleCategory
+                                            ? SA_UI_TEXT.writeAdvanceDetail
+                                            : SA_UI_TEXT.selectAndWrite
+                                      }
+                                      className="form-input"
+                                      style={{ flex: 1, minWidth: '260px' }}
+                                      disabled={uploading}
+                                      required
+                                    />
+                                  </div>
+                                  <p style={{
+                                    margin: 0,
+                                    fontSize: '0.875rem',
+                                    color: '#64748b'
+                                  }}>
+                                    {saTitleCategory === SA_OTHER_OPTION
+                                      ? SA_UI_TEXT.savedAsCustom
+                                      : saTitleCategory
+                                        ? SA_UI_TEXT.savedAsListed
+                                        : SA_UI_TEXT.helpText}
+                                  </p>
+                                  {getComposedDocumentTitle() && (
+                                    <p style={{
+                                      margin: 0,
+                                      fontSize: '0.875rem',
+                                      color: '#0f172a',
+                                      fontWeight: '500'
+                                    }}>
+                                      {SA_UI_TEXT.preview} {getComposedDocumentTitle()}
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  {selectedDocumentType && (
+                                    <span style={{
+                                      padding: '0.5rem 1rem',
+                                      backgroundColor: '#f3f4f6',
+                                      border: '1px solid #d1d5db',
+                                      borderRadius: '0.375rem',
+                                      fontWeight: '600',
+                                      color: '#374151',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {selectedDocumentType.prefix}
+                                    </span>
+                                  )}
+                                  <input
+                                    type="text"
+                                    id="document-title"
+                                    value={documentTitle}
+                                    onChange={(e) => setDocumentTitle(e.target.value)}
+                                    placeholder={selectedDocumentType ? "Concepto del anticipo..." : "Concepto del documento..."}
+                                    className="form-input"
+                                    style={{ flex: 1 }}
+                                    disabled={uploading}
+                                    required
+                                  />
+                                </div>
                               )}
-                              <input
-                                type="text"
-                                id="document-title"
-                                value={documentTitle}
-                                onChange={(e) => setDocumentTitle(e.target.value)}
-                                placeholder={selectedDocumentType ? "Concepto del anticipo..." : "Concepto del documento..."}
-                                className="form-input"
-                                style={{ flex: 1 }}
-                                disabled={uploading}
-                                required
-                              />
                             </div>
                           </div>
 
@@ -6008,14 +6183,14 @@ function Dashboard({ user, onLogout }) {
 
                         <div className="summary-card">
                           {/* 1. Título */}
-                          {documentTitle && (
+                          {getComposedDocumentTitle() && (
                             <div className="summary-item">
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="summary-icon">
                                 <path d="M7 8H17M7 12H17M7 16H12M3 6C3 4.89543 3.89543 4 5 4H19C20.1046 4 21 4.89543 21 6V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                               <div>
                                 <h4>Título</h4>
-                                <p>{documentTitle}</p>
+                                <p>{getComposedDocumentTitle()}</p>
                               </div>
                             </div>
                           )}
@@ -6102,7 +6277,7 @@ function Dashboard({ user, onLogout }) {
             <div key="pending-tab" className="section my-documents-section-clean">
               <div className="section-header-minimal">
                 <div>
-                  <h2 className="section-title-minimal">Pendientes de Firma</h2>
+                  <h2 className="section-title-minimal">Pendientes</h2>
                   <p className="section-subtitle-minimal">
                     {(() => {
                       const filteredCount = pendingDocuments.filter(doc => {
@@ -6112,7 +6287,7 @@ function Dashboard({ user, onLogout }) {
                           (pendingDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                         return matchesSearch && matchesType;
                       }).length;
-                      return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} esperando tu firma`;
+                      return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} por completar o firmar`;
                     })()}
                   </p>
                 </div>
@@ -6216,7 +6391,7 @@ function Dashboard({ user, onLogout }) {
                     </svg>
                   </div>
                   <h3 className="empty-title-minimal">No hay documentos pendientes</h3>
-                  <p className="empty-text-minimal">Todos tus documentos han sido firmados</p>
+                  <p className="empty-text-minimal">No tienes documentos por completar o firmar</p>
                 </div>
               ) : (
                 (() => {
@@ -6408,6 +6583,19 @@ function Dashboard({ user, onLogout }) {
                         </div>
 
                         <div className="doc-actions-clean">
+                          {canEditFacturaTemplate(doc) && (
+                            <button
+                              className="btn-action-clean"
+                              onClick={() => handleEditFacturaTemplate(doc)}
+                              title="Editar planilla"
+                              style={{marginTop: '-1.5vw'}}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          )}
                           <button
                             className="btn-action-clean"
                             onClick={async () => {
@@ -6440,6 +6628,10 @@ function Dashboard({ user, onLogout }) {
 
                                 const signers = response.data?.data?.documentSigners || [];
                                 const currentUserSigner = signers.find(s => s.userId === user.id);
+                                const canCurrentUserSign = Boolean(currentUserSigner) && (
+                                  !currentUserSigner.signature?.status ||
+                                  currentUserSigner.signature?.status === 'pending'
+                                );
                                 let isWaiting = false;
 
                                 console.log('🔍 Validación de orden de firma:');
@@ -6474,11 +6666,11 @@ function Dashboard({ user, onLogout }) {
                                   console.log('   - ❌ Usuario no es firmante de este documento');
                                 }
 
-                                handleViewDocument(doc, true, isWaiting);
+                                handleViewDocument(doc, canCurrentUserSign, isWaiting);
                               } catch (error) {
                                 console.error('Error al verificar orden de firma:', error);
                                 // Si hay error, abrir el documento de todos modos
-                                handleViewDocument(doc, true, false);
+                                handleViewDocument(doc, false, false);
                               }
                             }}
                             title="Ver documento"

@@ -83,6 +83,7 @@ async function startServer() {
 
   // Configurar express.json para manejar correctamente UTF-8
   app.use(express.json({
+    limit: serverConfig.bodyLimit,
     charset: 'utf-8',
     verify: (req, res, buf, encoding) => {
       // Asegurar que el buffer se interprete como UTF-8

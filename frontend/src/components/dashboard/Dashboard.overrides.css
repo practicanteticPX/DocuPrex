@@ -1238,7 +1238,7 @@ html:has(.pdf-viewer-minimal-overlay) {
 /* Fila del header: título y badge */
 .doc-header-row {
   display: flex !important;
-  align-items: center !important;
+  align-items: flex-start !important;
   justify-content: space-between !important;
   gap: 16px !important;
 }
@@ -1249,10 +1249,10 @@ html:has(.pdf-viewer-minimal-overlay) {
   color: #111827 !important;
   margin: 0 !important;
   line-height: 1.4 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
   flex: 1 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 
 /* Fila de metadata: "Creado el..." */
@@ -1292,9 +1292,9 @@ html:has(.pdf-viewer-minimal-overlay) {
   color: #111827 !important;
   margin: 0 !important;
   line-height: 1.4 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 
 .doc-meta-clean {

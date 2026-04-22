@@ -172,6 +172,55 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   // Estado para tooltips del checklist
   const [tooltipAbierto, setTooltipAbierto] = useState(null);
 
+  const normalizarNombreFirmante = (nombre) => {
+    if (!nombre) return '';
+    return nombre.trim().toUpperCase().replace(/\s+/g, ' ');
+  };
+
+  const nombresCoinciden = (nombre1, nombre2) => {
+    const n1 = normalizarNombreFirmante(nombre1);
+    const n2 = normalizarNombreFirmante(nombre2);
+
+    if (!n1 || !n2) return false;
+    if (n1 === n2) return true;
+
+    const words1 = n1.split(' ').filter(w => w.length > 2);
+    const words2 = n2.split(' ').filter(w => w.length > 2);
+
+    let matchCount = 0;
+    words1.forEach(w1 => {
+      if (words2.some(w2 => w2.includes(w1) || w1.includes(w2))) {
+        matchCount++;
+      }
+    });
+
+    return matchCount >= 2;
+  };
+
+  const signedSignatures = (currentDocument?.signatures || []).filter(sig => sig.status === 'signed');
+  const signedNegociador = signedSignatures.some(sig => {
+    const roles = Array.isArray(sig.roleNames) && sig.roleNames.length > 0 ? sig.roleNames : [sig.roleName];
+    return roles.some(role => (role || '').toUpperCase().includes('NEGOCIADOR'));
+  });
+  const signedCausacion = signedSignatures.some(sig => {
+    const roles = Array.isArray(sig.roleNames) && sig.roleNames.length > 0 ? sig.roleNames : [sig.roleName];
+    return roles.some(role => (role || '').toUpperCase().includes('CAUSACION') || (role || '').toUpperCase().includes('CAUSACIÓN'));
+  });
+
+  const isFilaFirmada = (fila) => {
+    return signedSignatures.some(sig => {
+      const roles = Array.isArray(sig.roleNames) && sig.roleNames.length > 0 ? sig.roleNames : [sig.roleName];
+      const signerName = sig.signer?.name || sig.realSignerName || '';
+
+      const signedCuenta = roles.some(role => (role || '').toUpperCase().includes('CUENTA'))
+        && nombresCoinciden(signerName, fila.respCuentaContable);
+      const signedCentro = roles.some(role => (role || '').toUpperCase().includes('CENTRO'))
+        && nombresCoinciden(signerName, fila.respCentroCostos);
+
+      return signedCuenta || signedCentro;
+    });
+  };
+
   // Bloquear scroll del body cuando el componente está montado
   useEffect(() => {
     const scrollY = window.scrollY;
@@ -388,6 +437,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   }, [currentDocument]);
 
   const handleAddFila = () => {
+    if (isEditMode && signedSignatures.length > 0) {
+      return;
+    }
+
     const newId = Math.max(...filasControl.map(f => f.id), 0) + 1;
 
     setFilasControl([
@@ -407,6 +460,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleRemoveFila = (id) => {
+    const fila = filasControl.find(f => f.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     setFilasControl(prevFilas => {
       if (prevFilas.length > 1) {
         return prevFilas.filter(f => f.id !== id);
@@ -427,6 +485,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleFilaChange = (id, field, value) => {
+    const fila = filasControl.find(item => item.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     setFilasControl(prevFilas => prevFilas.map(fila =>
       fila.id === id ? { ...fila, [field]: value } : fila
     ));
@@ -451,6 +514,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleCuentaContableKeyDown = (e, currentFilaId) => {
+    const fila = filasControl.find(item => item.id === currentFilaId);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     const cuentasFiltradas = getFiltradas(inputValues[currentFilaId] || '');
     const dropdownVisible = dropdownAbierto[currentFilaId] && cuentasFiltradas.length > 0;
     const currentSelectedIndex = selectedIndexCuentas[currentFilaId] ?? -1;
@@ -506,6 +574,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleCentroCostosKeyDown = (e, currentFilaId) => {
+    const fila = filasControl.find(item => item.id === currentFilaId);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     const centrosFiltrados = getCentrosFiltrados(inputCentrosValues[currentFilaId] || '');
     const dropdownVisible = dropdownCentrosAbierto[currentFilaId] && centrosFiltrados.length > 0;
     const currentSelectedIndex = selectedIndexCentros[currentFilaId] ?? -1;
@@ -561,6 +634,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleCuentaContableChange = (id, codigoCuenta) => {
+    const fila = filasControl.find(item => item.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     const cuentaData = cuentas.find(c => c.cuenta === codigoCuenta);
 
     setInputValues(prev => ({ ...prev, [id]: codigoCuenta }));
@@ -590,6 +668,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleInputChange = (id, value) => {
+    const fila = filasControl.find(item => item.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     flushSync(() => {
       setInputValues(prev => ({ ...prev, [id]: value }));
       setSelectedIndexCuentas(prev => ({ ...prev, [id]: -1 }));
@@ -623,6 +706,9 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
   const handleFocus = (id) => {
     const fila = filasControl.find(f => f.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
 
     if (inputValues[id] === undefined && fila) {
       const valorInicial = fila.noCuentaContable || '';
@@ -656,6 +742,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleCentroCostosChange = async (id, codigo) => {
+    const fila = filasControl.find(item => item.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     const centroData = centros.find(c => c.codigo === codigo);
 
     setInputCentrosValues(prev => ({ ...prev, [id]: codigo }));
@@ -685,6 +776,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleInputCentrosChange = (id, value) => {
+    const fila = filasControl.find(item => item.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     flushSync(() => {
       setInputCentrosValues(prev => ({ ...prev, [id]: value }));
       setSelectedIndexCentros(prev => ({ ...prev, [id]: -1 }));
@@ -717,6 +813,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
   const handleCentrosFocus = (id) => {
     const fila = filasControl.find(f => f.id === id);
+    if (fila && isFilaFirmada(fila)) {
+      return;
+    }
+
     if (inputCentrosValues[id] === undefined && fila) {
       setInputCentrosValues(prev => ({ ...prev, [id]: fila.centroCostos }));
     }
@@ -748,6 +848,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleNegociadorChange = (nombre) => {
+    if (isEditMode && signedNegociador) {
+      return;
+    }
+
     const negociadorData = negociadores.find(n => n.negociador === nombre);
 
     setInputNegociadorValue(nombre);
@@ -763,6 +867,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleInputNegociadorChange = (value) => {
+    if (isEditMode && signedNegociador) {
+      return;
+    }
+
     flushSync(() => {
       setInputNegociadorValue(value);
       setSelectedIndexNegociadores(-1);
@@ -785,6 +893,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleNegociadorFocus = () => {
+    if (isEditMode && signedNegociador) {
+      return;
+    }
+
     if (inputNegociadorValue === undefined) {
       setInputNegociadorValue(nombreNegociador || '');
     }
@@ -802,6 +914,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   };
 
   const handleNegociadorKeyDown = (e) => {
+    if (isEditMode && signedNegociador) {
+      return;
+    }
+
     const negociadoresFiltrados = getNegociadoresFiltrados(inputNegociadorValue || '');
     const dropdownVisible = dropdownNegociadoresAbierto && negociadoresFiltrados.length > 0;
 
@@ -1528,12 +1644,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                     onChange={(e) => handleInputNegociadorChange(e.target.value)}
                     onFocus={handleNegociadorFocus}
                     onKeyDown={handleNegociadorKeyDown}
-                    placeholder={loadingNegociadores ? "Cargando..." : (isEditMode ? nombreNegociador : "Buscar negociador...")}
-                    disabled={loadingNegociadores || isEditMode}
+                    placeholder={loadingNegociadores ? "Cargando..." : "Buscar negociador..."}
+                    disabled={loadingNegociadores || (isEditMode && signedNegociador)}
                     title={nombreNegociador}
-                    style={isEditMode ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                   />
-                  {dropdownNegociadoresAbierto && !loadingNegociadores && dropdownNegociadoresPosition.top && getNegociadoresFiltrados(inputNegociadorValue || '').length > 0 && (
+                  {dropdownNegociadoresAbierto && !loadingNegociadores && !(isEditMode && signedNegociador) && dropdownNegociadoresPosition.top && getNegociadoresFiltrados(inputNegociadorValue || '').length > 0 && (
                     <div
                       className="factura-autocomplete-dropdown"
                       style={{
@@ -1578,6 +1693,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                 className="factura-add-row-btn"
                 onClick={handleAddFila}
                 title="Agregar fila"
+                disabled={isEditMode && signedSignatures.length > 0}
               >
                 <Plus size={20} />
                 <span>Agregar Fila</span>
@@ -1606,183 +1722,189 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                   </tr>
                 </thead>
                 <tbody>
-                  {filasControl.map((fila, filaIndex) => (
-                    <tr key={fila.id}>
-                      <td>
-                        <div
-                          className="factura-autocomplete-wrapper"
-                          ref={(el) => dropdownRefs.current[fila.id] = el}
-                        >
-                          <Input
-                            type="text"
-                            value={inputValues[fila.id] !== undefined ? inputValues[fila.id] : fila.noCuentaContable}
-                            onChange={(e) => handleInputChange(fila.id, e.target.value)}
-                            onFocus={() => handleFocus(fila.id)}
-                            placeholder={loadingCuentas ? "Cargando..." : "Buscar cuenta..."}
-                            className="factura-table-input"
-                            disabled={loadingCuentas}
-                            data-cuenta-id={fila.id}
-                            onKeyDown={(e) => handleCuentaContableKeyDown(e, fila.id)}
-                          />
-                          {dropdownAbierto[fila.id] && !loadingCuentas && dropdownPositions[fila.id] && getFiltradas(inputValues[fila.id] || '').length > 0 && (
-                            <div
-                              className="factura-autocomplete-dropdown"
-                              style={{
-                                top: `${dropdownPositions[fila.id].top}px`,
-                                left: `${dropdownPositions[fila.id].left}px`,
-                                width: `${dropdownPositions[fila.id].width}px`
-                              }}
-                            >
-                              {getFiltradas(inputValues[fila.id] || '').map((cuenta, index) => (
-                                <div
-                                  key={`cuenta-${cuenta.cuenta}-${index}`}
-                                  data-cuenta-option={`${fila.id}-${index}`}
-                                  className={`factura-autocomplete-option ${index === selectedIndexCuentas[fila.id] ? 'factura-autocomplete-option-selected' : ''}`}
-                                  onClick={() => handleCuentaContableChange(fila.id, cuenta.cuenta)}
-                                >
-                                  {cuenta.cuenta}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <Input
-                          type="text"
-                          value={fila.respCuentaContable}
-                          disabled
-                          className="factura-table-input factura-input-disabled"
-                          title={fila.respCuentaContable}
-                        />
-                      </td>
-                      <td>
-                        <Input
-                          type="text"
-                          value={fila.cargoCuentaContable}
-                          disabled
-                          className="factura-table-input factura-input-disabled"
-                          title={fila.cargoCuentaContable}
-                        />
-                      </td>
-                      <td>
-                        <Input
-                          type="text"
-                          value={fila.nombreCuentaContable}
-                          disabled
-                          className="factura-table-input factura-input-disabled"
-                          title={fila.nombreCuentaContable}
-                        />
-                      </td>
-                      <td>
-                        <div
-                          className="factura-autocomplete-wrapper"
-                          ref={(el) => dropdownCentrosRefs.current[fila.id] = el}
-                        >
-                          <Input
-                            type="text"
-                            value={inputCentrosValues[fila.id] !== undefined ? inputCentrosValues[fila.id] : fila.centroCostos}
-                            onChange={(e) => handleInputCentrosChange(fila.id, e.target.value)}
-                            onFocus={() => handleCentrosFocus(fila.id)}
-                            placeholder={loadingCentros ? "Cargando..." : "Buscar centro..."}
-                            className="factura-table-input"
-                            disabled={loadingCentros}
-                            data-centro-id={fila.id}
-                            onKeyDown={(e) => handleCentroCostosKeyDown(e, fila.id)}
-                          />
-                          {dropdownCentrosAbierto[fila.id] && !loadingCentros && dropdownCentrosPositions[fila.id] && getCentrosFiltrados(inputCentrosValues[fila.id] || '').length > 0 && (
-                            <div
-                              className="factura-autocomplete-dropdown"
-                              style={{
-                                top: `${dropdownCentrosPositions[fila.id].top}px`,
-                                left: `${dropdownCentrosPositions[fila.id].left}px`,
-                                width: `${dropdownCentrosPositions[fila.id].width}px`
-                              }}
-                            >
-                              {getCentrosFiltrados(inputCentrosValues[fila.id] || '').map((centro, index) => (
-                                <div
-                                  key={`centro-${centro.codigo}-${index}`}
-                                  data-centro-option={`${fila.id}-${index}`}
-                                  className={`factura-autocomplete-option ${index === selectedIndexCentros[fila.id] ? 'factura-autocomplete-option-selected' : ''}`}
-                                  onClick={() => handleCentroCostosChange(fila.id, centro.codigo)}
-                                >
-                                  {centro.codigo}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <Input
-                          type="text"
-                          value={fila.respCentroCostos}
-                          disabled
-                          className="factura-table-input factura-input-disabled"
-                          title={fila.respCentroCostos}
-                        />
-                      </td>
-                      <td>
-                        <Input
-                          type="text"
-                          value={fila.cargoCentroCostos}
-                          disabled
-                          className="factura-table-input factura-input-disabled"
-                          title={fila.cargoCentroCostos}
-                        />
-                      </td>
-                      <td>
-                        <Input
-                          type="number"
-                          value={fila.porcentaje}
-                          onChange={(e) => handleFilaChange(fila.id, 'porcentaje', e.target.value)}
-                          placeholder="0"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          className="factura-table-input"
-                          data-porcentaje-id={fila.id}
-                          onKeyDown={(e) => handlePorcentajeKeyDown(e, fila.id)}
-                        />
-                      </td>
-                      {Object.keys(retenciones).length > 0 && (
-                        <>
-                          <td>
-                            {retenciones[filaIndex] ? (
-                              <Input
-                                type="text"
-                                value={`${retenciones[filaIndex].porcentajeRetenido}%`}
-                                disabled
-                                className="factura-table-input factura-input-disabled"
-                              />
-                            ) : '-'}
-                          </td>
-                          <td>
-                            {retenciones[filaIndex] ? (
-                              <Input
-                                type="text"
-                                value={retenciones[filaIndex].motivo}
-                                disabled
-                                className="factura-table-input factura-input-disabled"
-                                title={retenciones[filaIndex].motivo}
-                              />
-                            ) : '-'}
-                          </td>
-                        </>
-                      )}
-                      <td>
-                        {filasControl.length > 1 && (
-                          <button
-                            className="factura-remove-row-btn"
-                            onClick={() => handleRemoveFila(fila.id)}
-                            title="Eliminar fila"
+                  {filasControl.map((fila, filaIndex) => {
+                    const filaFirmada = isFilaFirmada(fila);
+
+                    return (
+                      <tr key={fila.id}>
+                        <td>
+                          <div
+                            className="factura-autocomplete-wrapper"
+                            ref={(el) => dropdownRefs.current[fila.id] = el}
                           >
-                            <X size={16} />
-                          </button>
+                            <Input
+                              type="text"
+                              value={inputValues[fila.id] !== undefined ? inputValues[fila.id] : fila.noCuentaContable}
+                              onChange={(e) => handleInputChange(fila.id, e.target.value)}
+                              onFocus={() => !filaFirmada && handleFocus(fila.id)}
+                              placeholder={loadingCuentas ? "Cargando..." : "Buscar cuenta..."}
+                              className="factura-table-input"
+                              disabled={loadingCuentas || filaFirmada}
+                              data-cuenta-id={fila.id}
+                              onKeyDown={(e) => handleCuentaContableKeyDown(e, fila.id)}
+                            />
+                            {dropdownAbierto[fila.id] && !loadingCuentas && !filaFirmada && dropdownPositions[fila.id] && getFiltradas(inputValues[fila.id] || '').length > 0 && (
+                              <div
+                                className="factura-autocomplete-dropdown"
+                                style={{
+                                  top: `${dropdownPositions[fila.id].top}px`,
+                                  left: `${dropdownPositions[fila.id].left}px`,
+                                  width: `${dropdownPositions[fila.id].width}px`
+                                }}
+                              >
+                                {getFiltradas(inputValues[fila.id] || '').map((cuenta, index) => (
+                                  <div
+                                    key={`cuenta-${cuenta.cuenta}-${index}`}
+                                    data-cuenta-option={`${fila.id}-${index}`}
+                                    className={`factura-autocomplete-option ${index === selectedIndexCuentas[fila.id] ? 'factura-autocomplete-option-selected' : ''}`}
+                                    onClick={() => handleCuentaContableChange(fila.id, cuenta.cuenta)}
+                                  >
+                                    {cuenta.cuenta}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <Input
+                            type="text"
+                            value={fila.respCuentaContable}
+                            disabled
+                            className="factura-table-input factura-input-disabled"
+                            title={fila.respCuentaContable}
+                          />
+                        </td>
+                        <td>
+                          <Input
+                            type="text"
+                            value={fila.cargoCuentaContable}
+                            disabled
+                            className="factura-table-input factura-input-disabled"
+                            title={fila.cargoCuentaContable}
+                          />
+                        </td>
+                        <td>
+                          <Input
+                            type="text"
+                            value={fila.nombreCuentaContable}
+                            disabled
+                            className="factura-table-input factura-input-disabled"
+                            title={fila.nombreCuentaContable}
+                          />
+                        </td>
+                        <td>
+                          <div
+                            className="factura-autocomplete-wrapper"
+                            ref={(el) => dropdownCentrosRefs.current[fila.id] = el}
+                          >
+                            <Input
+                              type="text"
+                              value={inputCentrosValues[fila.id] !== undefined ? inputCentrosValues[fila.id] : fila.centroCostos}
+                              onChange={(e) => handleInputCentrosChange(fila.id, e.target.value)}
+                              onFocus={() => !filaFirmada && handleCentrosFocus(fila.id)}
+                              placeholder={loadingCentros ? "Cargando..." : "Buscar centro..."}
+                              className="factura-table-input"
+                              disabled={loadingCentros || filaFirmada}
+                              data-centro-id={fila.id}
+                              onKeyDown={(e) => handleCentroCostosKeyDown(e, fila.id)}
+                            />
+                            {dropdownCentrosAbierto[fila.id] && !loadingCentros && !filaFirmada && dropdownCentrosPositions[fila.id] && getCentrosFiltrados(inputCentrosValues[fila.id] || '').length > 0 && (
+                              <div
+                                className="factura-autocomplete-dropdown"
+                                style={{
+                                  top: `${dropdownCentrosPositions[fila.id].top}px`,
+                                  left: `${dropdownCentrosPositions[fila.id].left}px`,
+                                  width: `${dropdownCentrosPositions[fila.id].width}px`
+                                }}
+                              >
+                                {getCentrosFiltrados(inputCentrosValues[fila.id] || '').map((centro, index) => (
+                                  <div
+                                    key={`centro-${centro.codigo}-${index}`}
+                                    data-centro-option={`${fila.id}-${index}`}
+                                    className={`factura-autocomplete-option ${index === selectedIndexCentros[fila.id] ? 'factura-autocomplete-option-selected' : ''}`}
+                                    onClick={() => handleCentroCostosChange(fila.id, centro.codigo)}
+                                  >
+                                    {centro.codigo}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <Input
+                            type="text"
+                            value={fila.respCentroCostos}
+                            disabled
+                            className="factura-table-input factura-input-disabled"
+                            title={fila.respCentroCostos}
+                          />
+                        </td>
+                        <td>
+                          <Input
+                            type="text"
+                            value={fila.cargoCentroCostos}
+                            disabled
+                            className="factura-table-input factura-input-disabled"
+                            title={fila.cargoCentroCostos}
+                          />
+                        </td>
+                        <td>
+                          <Input
+                            type="number"
+                            value={fila.porcentaje}
+                            onChange={(e) => handleFilaChange(fila.id, 'porcentaje', e.target.value)}
+                            placeholder="0"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            className="factura-table-input"
+                            disabled={filaFirmada}
+                            data-porcentaje-id={fila.id}
+                            onKeyDown={(e) => handlePorcentajeKeyDown(e, fila.id)}
+                          />
+                        </td>
+                        {Object.keys(retenciones).length > 0 && (
+                          <>
+                            <td>
+                              {retenciones[filaIndex] ? (
+                                <Input
+                                  type="text"
+                                  value={`${retenciones[filaIndex].porcentajeRetenido}%`}
+                                  disabled
+                                  className="factura-table-input factura-input-disabled"
+                                />
+                              ) : '-'}
+                            </td>
+                            <td>
+                              {retenciones[filaIndex] ? (
+                                <Input
+                                  type="text"
+                                  value={retenciones[filaIndex].motivo}
+                                  disabled
+                                  className="factura-table-input factura-input-disabled"
+                                  title={retenciones[filaIndex].motivo}
+                                />
+                              ) : '-'}
+                            </td>
+                          </>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td>
+                          {filasControl.length > 1 && (
+                            <button
+                              className="factura-remove-row-btn"
+                              onClick={() => handleRemoveFila(fila.id)}
+                              title="Eliminar fila"
+                              disabled={filaFirmada}
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr>
@@ -1828,11 +1950,20 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                   <div
                     key={grupo.codigo}
                     className="factura-checklist-item"
-                    onClick={() => setGrupoCausacion(grupo.codigo)}
+                    onClick={() => {
+                      if (!(isEditMode && signedCausacion)) {
+                        setGrupoCausacion(grupo.codigo);
+                      }
+                    }}
+                    style={{
+                      opacity: isEditMode && signedCausacion ? 0.65 : 1,
+                      cursor: isEditMode && signedCausacion ? 'not-allowed' : 'pointer'
+                    }}
                   >
                     <div className="factura-checklist-label">
                       <Checkbox
                         checked={grupoCausacion === grupo.codigo}
+                        disabled={isEditMode && signedCausacion}
                         onCheckedChange={() => {}}
                       />
                       <span className="factura-checklist-text">{grupo.nombre}</span>

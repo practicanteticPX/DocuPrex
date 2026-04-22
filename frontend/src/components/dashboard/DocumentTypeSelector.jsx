@@ -107,6 +107,7 @@ const DocumentTypeSelector = ({
 
           {/* Document type options */}
           {documentTypes
+            .filter((type) => type.code !== 'FV')
             .sort((a, b) => {
               // Ordenar: SA primero, luego FV
               const order = { 'SA': 1, 'FV': 2 };

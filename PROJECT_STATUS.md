@@ -13,6 +13,39 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2026-04-21 - Fix Firma Fantasma de Causación (Bug Crítico) — COMPLETADO
+
+#### Problema:
+- Al firmar el grupo NEGOCIACIONES, también aparecía "NEGOCIACIONES - Causación: Firmado" automáticamente
+- La firma de causación tenía el mismo timestamp y email que la firma de negociaciones
+- Las queries de causación solo verificaban `signer_id IN (miembros_grupo)` sin validar que la firma estuviera vinculada al entry específico de causación en `document_signers`
+
+#### Root Cause:
+Todas las queries que determinan si un grupo de causación "ha firmado" usaban la condición:
+```sql
+s.signer_id IN (SELECT ci.user_id FROM causacion_integrantes ...)
+```
+Sin verificar `s.document_signer_id = ds.id`. La tabla `signatures` no tiene la columna `document_signer_id` en este entorno, por lo que la condición debía ser condicional.
+
+#### Solución Implementada (2 fases):
+**Fase 1:** Agregar `AND (s.document_signer_id IS NULL OR s.document_signer_id = ds.id)` en todas las verificaciones de grupos de causación.
+
+**Fase 2 (fix error `column s.document_signer_id does not exist`):**
+- Nuevo helper: `getCausacionSignerIdConstraint(sigAlias, dsAlias)` — retorna la condición SQL sólo si la columna existe (via `checkSignaturesHasDocumentSignerIdColumn()` que usa caché)
+- Todos los LEFT JOIN usan `${csConstraint})` — template literal condicional
+- Queries parametrizadas ($3): usan `csConstraint ? ... : ''` + params condicionales
+- `csConstraint` declarado en 10 funciones: `checkIfDocumentFullySigned`, `obtenerFirmasDocumento`, `pendingDocuments`, función de conteo, `rejectDocument`, `signDocument` (×2), `retainDocument`, `releaseDocument`, `Document.signatures`
+
+#### Archivos Modificados:
+- `server/graphql/resolvers-db.js` — 30+ cambios en queries SQL de causación
+
+#### Resultado Esperado:
+- NEGOCIACIONES firma solo por rol Negociaciones
+- Causación permanece "Firma pendiente" hasta que un miembro real del grupo de causación firme
+- Sin error `column s.document_signer_id does not exist` en ningún entorno
+
+---
+
 ### Session: 2026-04-10 - Fix Error en Carga de Grupos de Causación en FacturaTemplate
 
 #### Problema:
