@@ -452,6 +452,22 @@ function Dashboard({ user, onLogout }) {
     return true;
   };
 
+  const getSignerPreviewName = (signature) => {
+    const assignedName = signature?.signer?.name || signature?.signer?.email || '';
+    const assignedNameKey = normalizeRoleLabel(assignedName);
+    const assignedEmailKey = normalizeRoleLabel(signature?.signer?.email || '');
+
+    if (assignedNameKey.includes('negociaciones') || assignedEmailKey.includes('negociaciones')) {
+      return assignedName || 'Negociaciones';
+    }
+
+    if ((signature?.status === 'signed' || signature?.status === 'rejected') && signature?.realSignerName) {
+      return signature.realSignerName;
+    }
+
+    return assignedName;
+  };
+
   // Estados para filtros de "Documentos pendientes"
   const [pendingDocsSearchTerm, setPendingDocsSearchTerm] = useState('');
 
@@ -7095,7 +7111,7 @@ function Dashboard({ user, onLogout }) {
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                   ></span>
                                   <span className="signer-name">
-                                    {((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
+                                    {getSignerPreviewName(sig)}
                                   </span>
                                 </div>
                               );
@@ -7501,7 +7517,7 @@ function Dashboard({ user, onLogout }) {
                                     style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                   ></span>
                                   <span className="signer-name">
-                                    {((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
+                                    {getSignerPreviewName(sig)}
                                   </span>
                                 </div>
                               );
@@ -7839,7 +7855,7 @@ function Dashboard({ user, onLogout }) {
                                       style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                     ></span>
                                     <span className="signer-name">
-                                      {((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
+                                      {getSignerPreviewName(sig)}
                                     </span>
                                   </div>
                                 );
@@ -8142,7 +8158,7 @@ function Dashboard({ user, onLogout }) {
                                           style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                         ></span>
                                         <span className="signer-name">
-                                          {((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
+                                          {getSignerPreviewName(sig)}
                                         </span>
                                       </div>
                                     );
@@ -8476,7 +8492,7 @@ function Dashboard({ user, onLogout }) {
                                         className="signer-dot"
                                         style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                       ></span>
-                                      <span className="signer-name">{((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}</span>
+                                      <span className="signer-name">{getSignerPreviewName(sig)}</span>
                                     </div>
                                   );
                                 })}
@@ -8717,7 +8733,7 @@ function Dashboard({ user, onLogout }) {
                                       style={{ backgroundColor: getSignerStatusColor(sig.status) }}
                                     ></span>
                                     <span className="signer-name">
-                                      {((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
+                                      {getSignerPreviewName(sig)}
                                     </span>
                                   </div>
                                 );
@@ -10448,9 +10464,7 @@ function Dashboard({ user, onLogout }) {
               }
 
               // Si está firmado/rechazado y tiene realSignerName, mostrar quien firmó/rechazó realmente (grupos de causación y Negociaciones)
-              const displayName = ((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName)
-                ? sig.realSignerName
-                : (sig.signer?.name || sig.signer?.email);
+              const displayName = getSignerPreviewName(sig);
 
               // Generar tooltip basado en estado
               let tooltipText = '';
