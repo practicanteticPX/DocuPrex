@@ -13,6 +13,90 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2026-04-30 - Fix Duplicado al Autofirmar Negociaciones
+
+#### Problema:
+- Al firmar Carolina Martinez como Negociadora, la firma personal si quedaba registrada, pero el backend devolvia error por clave duplicada `signatures_document_id_signer_id_key`.
+- La autofirma de Negociaciones buscaba la firma existente solo por `document_signer_id`; en documentos con firmas pendientes heredadas, esa columna estaba vacia y el INSERT chocaba con el unico `(document_id, signer_id)`.
+
+#### Solucion:
+- `server/graphql/resolvers-db.js`: la autofirma de Negociaciones ahora busca primero por `document_signer_id`, pero tambien reutiliza la firma pendiente heredada por `(document_id, signer_id)`.
+- Al reutilizar esa fila, completa `document_signer_id`, `real_signer_name`, `signed_at` y el estado `signed`.
+- Se reparo el documento afectado: Carolina quedo firmada como Negociadora y Negociaciones quedo firmada a nombre de Carolina Martinez.
+- Se dejo el documento en `in_progress` y se restauro la notificacion interna solo para el siguiente firmante pendiente.
+- Desplegado con rebuild de `server`.
+
+### Session: 2026-04-30 - Modal de Firmante Real de Negociaciones
+
+#### Problema:
+- El modal "Quien firma este documento?" mostraba 5 personas porque tenia una lista hardcodeada en el frontend.
+- La tabla `negotiation_signers` de la BD solo tenia 3 personas activas.
+
+#### Solucion:
+- `frontend/src/components/dashboard/RealSignerModal.jsx`: el modal ahora consulta `negotiationSigners` por GraphQL y muestra solo firmantes activos.
+- `frontend/src/components/dashboard/RealSignerModal.css`: agregado estado visual para carga/lista vacia.
+- Desplegado con rebuild/recreate de `frontend`; `server` tambien quedo arriba tras recreacion de dependencia.
+
+### Session: 2026-04-30 - Correccion de Firma Fantasma FINANCIERA en FV
+
+#### Problema:
+- En el informe PDF de facturas, el grupo FINANCIERA podia aparecer repetido y marcado como firmado aunque el grupo no hubiera firmado.
+- La causa era que la base no tenia `signatures.document_signer_id`; al validar grupos de causacion, una firma personal de un miembro del grupo podia contarse como firma del grupo.
+
+#### Solucion:
+- Base de datos: agregada columna `signatures.document_signer_id UUID` con indice.
+- `server/graphql/resolvers-db.js`: la validacion de causacion ahora exige coincidencia estricta con `document_signer_id` cuando la columna existe.
+- Se corrigieron a `in_progress` 3 FV que habian quedado `completed` por error aunque FINANCIERA seguia pendiente.
+- Se restauraron notificaciones internas pendientes para integrantes activos del grupo FINANCIERA.
+- Desplegado con rebuild de `server` y verificado arranque sin errores.
+
+### Session: 2026-04-30 - Autofirma de Negociaciones desde Negociador FV
+
+#### Problema:
+- En facturas FV, si una persona activa del grupo/listado de negociadores era asignada tambien como "Negociador", al firmar con su cuenta personal no quedaba reflejada automaticamente la firma del rol compartido de Negociaciones.
+- Ejemplo: Carolina Martinez pertenece a `negotiation_signers`; si firma como Negociador, tambien debe quedar firmado el rol de Negociaciones a nombre de Carolina.
+
+#### Solucion:
+- `server/graphql/resolvers-db.js`: agregado reconocimiento de roles y comparacion normalizada de nombres contra `negotiation_signers`.
+- `server/graphql/resolvers-db.js`: despues de guardar la firma personal del rol "Negociador", si el usuario tambien pertenece a Negociaciones, se firma automaticamente el firmante compartido `Negociaciones` si esta pendiente.
+- La firma automatica guarda `real_signer_name` con el nombre de la persona real para que el PDF/informe muestre quien firmo por Negociaciones.
+- Se agrego/confirmo en BD la columna `signatures.real_signer_name`.
+- Desplegado con rebuild de `server` en Docker y verificado arranque sin errores.
+
+### Session: 2026-04-29 - Notificaciones Internas para Facturas Inscritas
+
+#### Problema:
+- Las facturas ingresadas desde `/api/facturas/ingest-from-facturacion` se creaban para el usuario de "Entregado a", pero no insertaban registro en `notifications`.
+- El usuario veia la factura en sus documentos, pero no recibia aviso interno en la campana.
+
+#### Solucion:
+- `server/routes/facturas.js`: al crear una FV desde facturacion ahora inserta una notificacion `invoice_assigned` para el usuario destino y emite evento WebSocket.
+- `frontend/src/components/dashboard/Notifications.jsx`: agregado texto para `invoice_assigned` como "Factura inscrita".
+- Se crearon notificaciones faltantes para las facturas ya inscritas desde facturacion.
+- Desplegado con rebuild de `server` y `frontend` en Docker.
+
+### Session: 2026-04-29 - Bloqueo de Solicitante SA Firmado
+
+#### Problema:
+- En la edicion de Solicitud de Anticipo (SA), el rol Solicitante podia cambiarse aunque ya estuviera firmado por autofirma.
+
+#### Solucion:
+- `frontend/src/components/dashboard/Dashboard.jsx`: cualquier rol SA con firma `signed`, incluido Solicitante, queda bloqueado en el editor.
+- `server/graphql/resolvers-db.js`: el backend impide reasignar roles SA que ya tienen una firma registrada.
+- Desplegado con rebuild de `server` y `frontend` en Docker.
+
+### Session: 2026-04-27 - Fix Bloqueo de Orden en FV con Posiciones Saltadas
+
+#### Problema:
+- En la factura FV `200880`, los firmantes quedaron en posiciones 1, 2 y 4 porque un firmante duplicado fue compactado con varios roles.
+- La validacion de `signDocument` buscaba exactamente `currentOrder - 1`; para el grupo Financiera/Causacion en posicion 4 intentaba encontrar posicion 3 y fallaba aunque todos los firmantes anteriores existentes ya estaban firmados.
+
+#### Solucion:
+- `server/graphql/resolvers-db.js`: la validacion de orden ahora revisa todos los firmantes con `order_position < currentOrder` y bloquea solo si alguno sigue pendiente.
+- `server/graphql/resolvers-db.js`: la notificacion posterior a firma ahora busca el siguiente firmante pendiente real con `order_position > currentOrder`, no solo `currentOrder + 1`.
+- Para la FV `200880`, se reenviaron correos y notificaciones internas al grupo Financiera: Angelica Martinez y Luis Riano.
+- Verificado con `node --check server/graphql/resolvers-db.js`.
+
 ### Session: 2026-04-21 - Fix Firma Fantasma de Causación (Bug Crítico) — COMPLETADO
 
 #### Problema:

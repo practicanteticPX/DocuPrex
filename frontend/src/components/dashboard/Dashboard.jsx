@@ -176,6 +176,19 @@ function Dashboard({ user, onLogout }) {
   const [availableSigners, setAvailableSigners] = useState([]);
   const [selectedSigners, setSelectedSigners] = useState([]);
   const [loadingSigners, setLoadingSigners] = useState(false);
+  const [showNoTypeSignersEditor, setShowNoTypeSignersEditor] = useState(false);
+  const [editingNoTypeDocument, setEditingNoTypeDocument] = useState(null);
+  const [editingNoTypeSigners, setEditingNoTypeSigners] = useState([]);
+  const [editingNoTypeLockedSignerIds, setEditingNoTypeLockedSignerIds] = useState([]);
+  const [editingNoTypeSearchTerm, setEditingNoTypeSearchTerm] = useState('');
+  const [savingNoTypeSigners, setSavingNoTypeSigners] = useState(false);
+  const [showSAEditor, setShowSAEditor] = useState(false);
+  const [editingSADocument, setEditingSADocument] = useState(null);
+  const [editingSASigners, setEditingSASigners] = useState([]);
+  const [editingSARoleLocks, setEditingSARoleLocks] = useState({});
+  const [editingSAActiveRole, setEditingSAActiveRole] = useState('solicitante');
+  const [editingSASearchTerm, setEditingSASearchTerm] = useState('');
+  const [savingSAEditor, setSavingSAEditor] = useState(false);
 
   // Estados para tipos de documentos y roles
   const [documentTypes, setDocumentTypes] = useState([]);
@@ -445,6 +458,8 @@ function Dashboard({ user, onLogout }) {
   // Estados para filtros de "Mis documentos"
   const [myDocsSearchTerm, setMyDocsSearchTerm] = useState('');
   const [myDocsStatusFilter, setMyDocsStatusFilter] = useState('all'); // all, completed, rejected, pending
+  const [myInvoicesSearchTerm, setMyInvoicesSearchTerm] = useState('');
+  const [myInvoicesStatusFilter, setMyInvoicesStatusFilter] = useState('all'); // all, completed, rejected, pending
 
   // Estados para filtros de "Documentos firmados"
   const [signedDocsSearchTerm, setSignedDocsSearchTerm] = useState('');
@@ -1410,7 +1425,9 @@ function Dashboard({ user, onLogout }) {
                         rejectionReasonPopup ||
                         roleErrorPopup ||
                         showConsecutivoModal ||
-                        showWaitingTurnScreen;
+                        showWaitingTurnScreen ||
+                        showNoTypeSignersEditor ||
+                        showSAEditor;
 
     if (hasModalOpen) {
       // Bloquear scroll simplemente con overflow hidden
@@ -1424,7 +1441,7 @@ function Dashboard({ user, onLogout }) {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [viewingDocument, showSignConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showReleaseSuccess, showOrderError, showQuickSignConfirm, confirmDeleteOpen, rejectionReasonPopup, showReleasingLoader]);
+  }, [viewingDocument, showSignConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showReleaseSuccess, showOrderError, showQuickSignConfirm, confirmDeleteOpen, rejectionReasonPopup, showReleasingLoader, showNoTypeSignersEditor, showSAEditor]);
 
   // Cargar documentos pendientes al montar o cambiar de tab
   useEffect(() => {
@@ -1435,7 +1452,7 @@ function Dashboard({ user, onLogout }) {
 
   // Cargar mis documentos al montar o cambiar de tab
   useEffect(() => {
-    if (activeTab === 'my-documents') {
+    if (activeTab === 'my-documents' || activeTab === 'my-invoices') {
       loadMyDocuments();
     }
   }, [activeTab]);
@@ -3952,11 +3969,17 @@ function Dashboard({ user, onLogout }) {
                 id
                 title
                 description
+                metadata
                 fileName
                 filePath
                 fileSize
                 mimeType
                 status
+                documentType {
+                  id
+                  code
+                  name
+                }
                 uploadedBy {
                   id
                   name
@@ -4029,7 +4052,7 @@ function Dashboard({ user, onLogout }) {
       }
 
       // Determinar la pestaña y el estado isPending según el tipo de notificación
-      let targetTab = 'my-documents';
+      let targetTab = getOwnerDocumentTab(doc);
       let isPending = false;
       let isWaiting = false;
 
@@ -4084,7 +4107,7 @@ function Dashboard({ user, onLogout }) {
         // Verificar si el usuario actual es el creador
         const currentUserId = user?.id;
         if (doc.uploadedById === currentUserId) {
-          targetTab = 'my-documents';
+          targetTab = getOwnerDocumentTab(doc);
         } else {
           targetTab = 'signed';
         }
@@ -4105,7 +4128,7 @@ function Dashboard({ user, onLogout }) {
       // para mantener la UI actualizada
       if (targetTab === 'pending' && !loadingPending) {
         loadPendingDocuments();
-      } else if (targetTab === 'my-documents' && !loadingMy) {
+      } else if ((targetTab === 'my-documents' || targetTab === 'my-invoices') && !loadingMy) {
         loadMyDocuments();
       } else if (targetTab === 'signed' && !loadingSigned) {
         loadSignedDocuments();
@@ -4323,7 +4346,7 @@ function Dashboard({ user, onLogout }) {
    * Verificar si el usuario puede editar la planilla de factura
    * Condiciones:
    * 1. El usuario es el creador del documento
-   * 2. El documento aún tiene firmantes pendientes
+   * 2. El documento aún no tiene firmantes asignados o tiene firmantes pendientes
    * 3. El documento no está rechazado ni completado
    */
   const canEditFacturaTemplate = (doc) => {
@@ -4351,10 +4374,99 @@ function Dashboard({ user, onLogout }) {
       return false;
     }
 
-    const pendingSignatures = (doc.signatures || []).filter(sig => sig.status === 'pending');
+    const signatures = doc.signatures || [];
+    if (signatures.length === 0) {
+      return true;
+    }
+
+    const pendingSignatures = signatures.filter(sig => sig.status === 'pending');
 
     return pendingSignatures.length > 0;
   };
+
+  const canEditNoTypeSigners = (doc) => {
+    const hasSpecificType = Boolean(doc?.documentType?.code);
+    if (!doc || hasSpecificType) {
+      return false;
+    }
+
+    const isCreator = doc.uploadedBy && (
+      doc.uploadedBy.email === user?.email ||
+      doc.uploadedBy.id === user?.id
+    );
+
+    if (!isCreator) {
+      return false;
+    }
+
+    if (doc.status === 'completed' || doc.status === 'rejected') {
+      return false;
+    }
+
+    const signatures = doc.signatures || [];
+    const hasRejections = signatures.some(sig => sig.status === 'rejected');
+    if (hasRejections) {
+      return false;
+    }
+
+    if (signatures.length === 0) {
+      return true;
+    }
+
+    return signatures.some(sig => sig.status === 'pending');
+  };
+
+  const canEditSASigners = (doc) => {
+    if (!doc || doc.documentType?.code !== 'SA') {
+      return false;
+    }
+
+    const isCreator = doc.uploadedBy && (
+      doc.uploadedBy.email === user?.email ||
+      doc.uploadedBy.id === user?.id
+    );
+
+    if (!isCreator || doc.status === 'completed' || doc.status === 'rejected') {
+      return false;
+    }
+
+    const signatures = doc.signatures || [];
+    if (signatures.some(sig => sig.status === 'rejected')) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const normalizeTextForComparison = (value) => (
+    (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+  );
+
+  const isFacturacionInvoiceDocument = (doc) => {
+    if (!doc || doc.documentType?.code !== 'FV') {
+      return false;
+    }
+
+    const metadataSource = normalizeTextForComparison(doc.metadata?.source || doc.metadata?.ingestionSource);
+    if (metadataSource === 'facturacion') {
+      return true;
+    }
+
+    const normalizedDescription = normalizeTextForComparison(doc.description);
+    return normalizedDescription.includes('factura radicada desde recepcion de facturas');
+  };
+
+  const getOwnerDocumentTab = (doc) => (
+    isFacturacionInvoiceDocument(doc) ? 'my-invoices' : 'my-documents'
+  );
+
+  const myInvoiceDocuments = myDocuments.filter(isFacturacionInvoiceDocument);
+  const myRegularDocuments = myDocuments.filter(doc => !isFacturacionInvoiceDocument(doc));
+  const effectiveMyDocsTypeFilter = myDocsTypeFilter.filter(type => type !== 'FV');
 
   /**
    * Abrir modal para editar planilla de factura
@@ -4387,6 +4499,406 @@ function Dashboard({ user, onLogout }) {
     setFacturaTemplateData(parsedTemplateData);
     setShowFacturaTemplate(true);
     console.log('✅ Modal de edición debe abrirse ahora');
+  };
+
+  const closeNoTypeSignersEditor = () => {
+    setShowNoTypeSignersEditor(false);
+    setEditingNoTypeDocument(null);
+    setEditingNoTypeSigners([]);
+    setEditingNoTypeLockedSignerIds([]);
+    setEditingNoTypeSearchTerm('');
+    setSavingNoTypeSigners(false);
+  };
+
+  const handleOpenNoTypeSignersEditor = async (doc) => {
+    try {
+      if (availableSigners.length === 0) {
+        await loadAvailableSigners();
+      }
+
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            query GetDocumentSignersForEdit($documentId: ID!) {
+              documentSigners(documentId: $documentId) {
+                userId
+                orderPosition
+                user {
+                  id
+                  name
+                  email
+                }
+                signature {
+                  status
+                }
+              }
+            }
+          `,
+          variables: { documentId: doc.id }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const signers = (response.data.data.documentSigners || [])
+        .slice()
+        .sort((a, b) => a.orderPosition - b.orderPosition);
+
+      setEditingNoTypeDocument(doc);
+      setEditingNoTypeSigners(signers.map(signer => ({
+        userId: signer.userId,
+        locked: signer.signature?.status === 'signed',
+        signatureStatus: signer.signature?.status || 'pending'
+      })));
+      setEditingNoTypeLockedSignerIds(
+        signers
+          .filter(signer => signer.signature?.status === 'signed')
+          .map(signer => signer.userId)
+      );
+      setEditingNoTypeSearchTerm('');
+      setShowNoTypeSignersEditor(true);
+    } catch (error) {
+      console.error('Error al abrir editor de firmantes sin tipo:', error);
+      showNotif('Error', error.message || 'No se pudieron cargar los firmantes del documento', 'error');
+    }
+  };
+
+  const isLockedNoTypeSigner = (userId) => editingNoTypeLockedSignerIds.includes(userId);
+
+  const addNoTypeSigner = (signerId) => {
+    if (editingNoTypeSigners.some(signer => String(signer.userId) === String(signerId))) {
+      return;
+    }
+
+    setEditingNoTypeSigners(prev => [
+      ...prev,
+      { userId: signerId, locked: false, signatureStatus: 'pending' }
+    ]);
+    setEditingNoTypeSearchTerm('');
+  };
+
+  const removeNoTypeSigner = (signerId) => {
+    if (isLockedNoTypeSigner(signerId)) {
+      return;
+    }
+
+    setEditingNoTypeSigners(prev =>
+      prev.filter(signer => String(signer.userId) !== String(signerId))
+    );
+  };
+
+  const moveNoTypeSigner = (index, direction) => {
+    setEditingNoTypeSigners(prev => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= prev.length) {
+        return prev;
+      }
+
+      const currentSigner = prev[index];
+      const targetSigner = prev[targetIndex];
+      if (!currentSigner || !targetSigner || currentSigner.locked || targetSigner.locked) {
+        return prev;
+      }
+
+      const updated = [...prev];
+      [updated[index], updated[targetIndex]] = [updated[targetIndex], updated[index]];
+      return updated;
+    });
+  };
+
+  const handleSaveNoTypeSigners = async () => {
+    if (!editingNoTypeDocument) {
+      return;
+    }
+
+    if (editingNoTypeSigners.length === 0) {
+      showNotif('Error', 'Debes dejar al menos un firmante', 'error');
+      return;
+    }
+
+    try {
+      setSavingNoTypeSigners(true);
+      const token = localStorage.getItem('token');
+      const signerAssignments = editingNoTypeSigners.map(signer => ({
+        userId: signer.userId
+      }));
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation AssignSignersForEdit($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
+              assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
+            }
+          `,
+          variables: {
+            documentId: editingNoTypeDocument.id,
+            signerAssignments
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      closeNoTypeSignersEditor();
+      await loadMyDocuments();
+      await loadPendingDocuments();
+      showNotif('Firmantes actualizados', 'Se guardaron los cambios en el flujo de firmas', 'success');
+    } catch (error) {
+      console.error('Error al guardar firmantes sin tipo:', error);
+      showNotif('Error', error.message || 'No se pudieron guardar los firmantes', 'error');
+    } finally {
+      setSavingNoTypeSigners(false);
+    }
+  };
+
+  const closeSAEditor = () => {
+    setShowSAEditor(false);
+    setEditingSADocument(null);
+    setEditingSASigners([]);
+    setEditingSARoleLocks({});
+    setEditingSAActiveRole('solicitante');
+    setEditingSASearchTerm('');
+    setSavingSAEditor(false);
+  };
+
+  const getSAAssignedSignerFromList = (signersList, roleName) => {
+    const assignedSigner = signersList.find(signer => (
+      typeof signer === 'object' && signerHasSARole(signer, roleName)
+    ));
+
+    if (!assignedSigner || typeof assignedSigner !== 'object') {
+      return null;
+    }
+
+    const signer = availableSigners.find(item => String(item.id) === String(assignedSigner.userId));
+    if (!signer) {
+      return null;
+    }
+
+    return {
+      ...assignedSigner,
+      signer
+    };
+  };
+
+  const handleOpenSAEditor = async (doc) => {
+    try {
+      if (availableSigners.length === 0) {
+        await loadAvailableSigners();
+      }
+
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            query GetSADocumentSigners($documentId: ID!) {
+              documentSigners(documentId: $documentId) {
+                userId
+                orderPosition
+                assignedRoleId
+                assignedRoleIds
+                roleName
+                roleNames
+                user {
+                  id
+                  name
+                  email
+                }
+                signature {
+                  status
+                }
+              }
+            }
+          `,
+          variables: { documentId: doc.id }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const documentSigners = (response.data.data.documentSigners || [])
+        .slice()
+        .sort((a, b) => a.orderPosition - b.orderPosition);
+
+      const mergedByUser = new Map();
+      const roleLocks = {};
+
+      documentSigners.forEach((documentSigner) => {
+        const userId = documentSigner.userId;
+        const roleNames = Array.isArray(documentSigner.roleNames) && documentSigner.roleNames.length > 0
+          ? documentSigner.roleNames
+          : [documentSigner.roleName].filter(Boolean);
+        const roleIds = Array.isArray(documentSigner.assignedRoleIds) && documentSigner.assignedRoleIds.length > 0
+          ? documentSigner.assignedRoleIds
+          : [documentSigner.assignedRoleId].filter(Boolean);
+
+        const existing = mergedByUser.get(userId) || {
+          userId,
+          roleId: roleIds[0] || null,
+          roleName: roleNames[0] || null,
+          roleIds: [],
+          roleNames: []
+        };
+
+        roleNames.forEach((roleName, index) => {
+          if (!existing.roleNames.some(existingRole => getSARoleKey(existingRole) === getSARoleKey(roleName))) {
+            existing.roleNames.push(roleName);
+            if (roleIds[index]) {
+              existing.roleIds.push(roleIds[index]);
+            }
+          }
+
+          const roleKey = getSARoleKey(roleName);
+          const signatureStatus = documentSigner.signature?.status || 'pending';
+          roleLocks[roleKey] = roleKey === 'tesoreria' || signatureStatus === 'signed';
+        });
+
+        existing.roleId = existing.roleIds[0] || existing.roleId || null;
+        existing.roleName = existing.roleNames[0] || existing.roleName || null;
+        mergedByUser.set(userId, existing);
+      });
+
+      setEditingSADocument(doc);
+      setEditingSASigners(sortSASigners(Array.from(mergedByUser.values())));
+      setEditingSARoleLocks(roleLocks);
+      setEditingSAActiveRole('solicitante');
+      setEditingSASearchTerm('');
+      setShowSAEditor(true);
+    } catch (error) {
+      console.error('Error al abrir editor SA:', error);
+      showNotif('Error', error.message || 'No se pudo abrir la edición de firmantes', 'error');
+    }
+  };
+
+  const assignSAEditorRoleToSigner = (roleName, signer) => {
+    if (editingSARoleLocks[getSARoleKey(roleName)]) {
+      return;
+    }
+
+    const roleDefinition = findSARoleDefinition(roleName);
+    const rolePayload = roleDefinition || {
+      id: null,
+      roleName
+    };
+
+    setEditingSASigners(prev => sortSASigners(
+      upsertSARoleForSigner(prev, signer, rolePayload)
+    ));
+    setEditingSASearchTerm('');
+  };
+
+  const clearSAEditorRole = (roleName) => {
+    if (editingSARoleLocks[getSARoleKey(roleName)]) {
+      return;
+    }
+
+    setEditingSASigners(prev => sortSASigners(
+      removeSARoleFromSelections(prev, roleName).filter(Boolean)
+    ));
+  };
+
+  const toggleSAOptionalRole = (roleName, applies) => {
+    const roleKey = getSARoleKey(roleName);
+    if (editingSARoleLocks[roleKey]) {
+      return;
+    }
+
+    if (!applies) {
+      clearSAEditorRole(roleName);
+      return;
+    }
+
+    const defaultSigner = availableSigners.find(signer => matchesSAWizardRestriction(signer, roleName));
+    if (!defaultSigner) {
+      showNotif('Error', `No encontré un usuario configurado para ${formatSARoleLabel(roleName)}`, 'error');
+      return;
+    }
+
+    assignSAEditorRoleToSigner(roleName, defaultSigner);
+  };
+
+  const handleSaveSAEditor = async () => {
+    if (!editingSADocument) {
+      return;
+    }
+
+    const requiredRoles = ['Solicitante', 'Aprobador', 'Tesoreria'];
+    const missingRequiredRole = requiredRoles.find(roleName => !getSAAssignedSignerFromList(editingSASigners, roleName));
+    if (missingRequiredRole) {
+      showNotif('Error', `Debes mantener asignado el rol ${formatSARoleLabel(missingRequiredRole)}`, 'error');
+      return;
+    }
+
+    try {
+      setSavingSAEditor(true);
+      const token = localStorage.getItem('token');
+      const signerAssignments = editingSASigners.map(signer => ({
+        userId: signer.userId,
+        roleId: signer.roleId || null,
+        roleName: signer.roleName || null,
+        roleIds: signer.roleIds || [],
+        roleNames: signer.roleNames || []
+      }));
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation AssignSASigners($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
+              assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
+            }
+          `,
+          variables: {
+            documentId: editingSADocument.id,
+            signerAssignments
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      closeSAEditor();
+      await loadMyDocuments();
+      await loadPendingDocuments();
+      showNotif('Firmantes actualizados', 'Se guardaron los cambios de la Solicitud de Anticipo', 'success');
+    } catch (error) {
+      console.error('Error al guardar SA editor:', error);
+      showNotif('Error', error.message || 'No se pudieron guardar los cambios', 'error');
+    } finally {
+      setSavingSAEditor(false);
+    }
   };
 
   /**
@@ -4626,6 +5138,12 @@ function Dashboard({ user, onLogout }) {
                 </svg>
                 Subir documento
               </button>
+              <button className={`ds-nav-item ${activeTab === 'my-documents' ? 'active' : ''}`} onClick={() => setActiveTab('my-documents')}>
+                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 7V17C3 17.5304 3.21071 18.0391 3.58579 18.4142C3.96086 18.7893 4.46957 19 5 19H19C19.5304 19 20.0391 18.7893 20.4142 18.4142C20.7893 18.0391 21 17.5304 21 17V9C21 8.46957 20.7893 7.96086 20.4142 7.58579C20.0391 7.21071 19.5304 7 19 7H13L11 4H5C4.46957 4 3.96086 4.21071 3.58579 4.58579C3.21071 4.96086 3 5.46957 3 6V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Mis documentos
+              </button>
               <button className={`ds-nav-item ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
                 <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 6V12L16 14M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -4638,18 +5156,19 @@ function Dashboard({ user, onLogout }) {
                 </svg>
                 Documentos firmados
               </button>
-              <button className={`ds-nav-item ${activeTab === 'my-documents' ? 'active' : ''}`} onClick={() => setActiveTab('my-documents')}>
-                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 7V17C3 17.5304 3.21071 18.0391 3.58579 18.4142C3.96086 18.7893 4.46957 19 5 19H19C19.5304 19 20.0391 18.7893 20.4142 18.4142C20.7893 18.0391 21 17.5304 21 17V9C21 8.46957 20.7893 7.96086 20.4142 7.58579C20.0391 7.21071 19.5304 7 19 7H13L11 4H5C4.46957 4 3.96086 4.21071 3.58579 4.58579C3.21071 4.96086 3 5.46957 3 6V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Mis documentos
-              </button>
               <button className={`ds-nav-item ${activeTab === 'rejected' ? 'active' : ''}`} onClick={() => setActiveTab('rejected')}>
                 <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Rechazados
 
+              </button>
+              <button className={`ds-nav-item ${activeTab === 'my-invoices' ? 'active' : ''}`} onClick={() => setActiveTab('my-invoices')}>
+                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 8H16M8 12H16M8 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Mis facturas
               </button>
               {retainedDocuments.length > 0 && (
                 <button className={`ds-nav-item ${activeTab === 'retained' ? 'active' : ''}`} onClick={() => setActiveTab('retained')}>
@@ -4988,6 +5507,15 @@ function Dashboard({ user, onLogout }) {
               Subir Documento
             </button>
             <button
+              className={`tab ${activeTab === 'my-documents' ? 'active' : ''}`}
+              onClick={() => setActiveTab('my-documents')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Mis Documentos
+            </button>
+            <button
               className={`tab ${activeTab === 'pending' ? 'active' : ''}`}
               onClick={() => setActiveTab('pending')}
             >
@@ -5006,15 +5534,6 @@ function Dashboard({ user, onLogout }) {
               Documentos Firmados
             </button>
             <button
-              className={`tab ${activeTab === 'my-documents' ? 'active' : ''}`}
-              onClick={() => setActiveTab('my-documents')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Mis Documentos
-            </button>
-            <button
               className={`tab ${activeTab === 'rejected' ? 'active' : ''}`}
               onClick={() => setActiveTab('rejected')}
             >
@@ -5025,6 +5544,16 @@ function Dashboard({ user, onLogout }) {
               {!loadingRejected && (rejectedByMe.length + rejectedByOthers.length) > 0 && (
                 <span className="badge badge-danger">{rejectedByMe.length + rejectedByOthers.length}</span>
               )}
+            </button>
+            <button
+              className={`tab ${activeTab === 'my-invoices' ? 'active' : ''}`}
+              onClick={() => setActiveTab('my-invoices')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M8 8H16M8 12H16M8 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Mis Facturas
             </button>
             {retainedDocuments.length > 0 && (
               <button
@@ -6989,6 +7518,19 @@ function Dashboard({ user, onLogout }) {
                         </div>
 
                         <div className="doc-actions-clean">
+                          {canEditNoTypeSigners(doc) && (
+                            <button
+                              className="btn-action-clean"
+                              onClick={() => handleOpenNoTypeSignersEditor(doc)}
+                              title="Editar firmantes"
+                              style={{ marginTop: '-1.5vw' }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          )}
                           <button
                             className="btn-action-clean"
                             onClick={() => handleViewDocument(doc)}
@@ -7019,14 +7561,14 @@ function Dashboard({ user, onLogout }) {
                   <h2 className="section-title-minimal">Mis Documentos</h2>
                   <p className="section-subtitle-minimal">
                     {(() => {
-                      const filteredCount = myDocuments.filter(doc => {
+                      const filteredCount = myRegularDocuments.filter(doc => {
                         const matchesSearch = doc.title.toLowerCase().includes(myDocsSearchTerm.toLowerCase());
                         const matchesStatus = myDocsStatusFilter === 'all' ||
                                              (myDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                              doc.status === myDocsStatusFilter;
-                        const matchesType = myDocsTypeFilter.length === 0 ||
-                          myDocsTypeFilter.includes(doc.documentType?.code) ||
-                          (myDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                        const matchesType = effectiveMyDocsTypeFilter.length === 0 ||
+                          effectiveMyDocsTypeFilter.includes(doc.documentType?.code) ||
+                          (effectiveMyDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
                         return matchesSearch && matchesStatus && matchesType;
                       }).length;
                       return (
@@ -7041,7 +7583,7 @@ function Dashboard({ user, onLogout }) {
               </div>
 
               {/* Filtros */}
-              {myDocuments.length > 0 && (
+              {myRegularDocuments.length > 0 && (
                 <div className="my-docs-filters">
                   <div className="filter-search">
                     <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -7108,7 +7650,7 @@ function Dashboard({ user, onLogout }) {
                     {/* Botón de filtro por tipo de documento */}
                     <div style={{ position: 'relative' }}>
                       <button
-                        className={`filter-type-btn ${myDocsTypeFilter.length > 0 ? 'active' : ''}`}
+                        className={`filter-type-btn ${effectiveMyDocsTypeFilter.length > 0 ? 'active' : ''}`}
                         onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'my' ? null : 'my')}
                         title="Filtrar por tipo de documento"
                       >
@@ -7122,7 +7664,7 @@ function Dashboard({ user, onLogout }) {
                       <div className="type-filter-dropdown">
                         <div className="type-filter-header">
                           <span>Tipo de documento</span>
-                          {myDocsTypeFilter.length > 0 && (
+                          {effectiveMyDocsTypeFilter.length > 0 && (
                             <button
                               className="clear-all-filters-btn"
                               onClick={() => setMyDocsTypeFilter([])}
@@ -7135,7 +7677,7 @@ function Dashboard({ user, onLogout }) {
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
-                              checked={myDocsTypeFilter.includes('NONE')}
+                              checked={effectiveMyDocsTypeFilter.includes('NONE')}
                               onChange={() => toggleDocTypeFilter('my', 'NONE')}
                             />
                             <span>Sin tipo específico</span>
@@ -7143,18 +7685,10 @@ function Dashboard({ user, onLogout }) {
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
-                              checked={myDocsTypeFilter.includes('SA')}
+                              checked={effectiveMyDocsTypeFilter.includes('SA')}
                               onChange={() => toggleDocTypeFilter('my', 'SA')}
                             />
                             <span>Solicitudes de Anticipo</span>
-                          </label>
-                          <label className="type-filter-option">
-                            <input
-                              type="checkbox"
-                              checked={myDocsTypeFilter.includes('FV')}
-                              onChange={() => toggleDocTypeFilter('my', 'FV')}
-                            />
-                            <span>Legalización de Facturas</span>
                           </label>
                         </div>
                       </div>
@@ -7169,7 +7703,7 @@ function Dashboard({ user, onLogout }) {
                   <Loader size="medium" />
                   <p>Cargando documentos...</p>
                 </div>
-              ) : myDocuments.length === 0 ? (
+              ) : myRegularDocuments.length === 0 ? (
                 <div className="empty-state-minimal">
                   <div className="empty-icon-minimal">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -7183,7 +7717,7 @@ function Dashboard({ user, onLogout }) {
                 <>
                   {(() => {
                     // Filtrar documentos
-                    const filteredDocs = myDocuments.filter(doc => {
+                    const filteredDocs = myRegularDocuments.filter(doc => {
                       // Filtro por búsqueda de texto
                       const matchesSearch = doc.title.toLowerCase().includes(myDocsSearchTerm.toLowerCase());
 
@@ -7193,9 +7727,9 @@ function Dashboard({ user, onLogout }) {
                                            doc.status === myDocsStatusFilter;
 
                       // Filtro por tipo de documento
-                      const matchesType = myDocsTypeFilter.length === 0 ||
-                        myDocsTypeFilter.includes(doc.documentType?.code) ||
-                        (myDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                      const matchesType = effectiveMyDocsTypeFilter.length === 0 ||
+                        effectiveMyDocsTypeFilter.includes(doc.documentType?.code) ||
+                        (effectiveMyDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
 
                       return matchesSearch && matchesStatus && matchesType;
                     });
@@ -7334,6 +7868,32 @@ function Dashboard({ user, onLogout }) {
                                 <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                             </button>
+                            {canEditNoTypeSigners(doc) && (
+                              <button
+                                className="btn-action-clean"
+                                onClick={() => handleOpenNoTypeSignersEditor(doc)}
+                                title="Editar firmantes"
+                                style={{marginTop: '-1.5vw'}}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </button>
+                            )}
+                            {canEditSASigners(doc) && (
+                              <button
+                                className="btn-action-clean"
+                                onClick={() => handleOpenSAEditor(doc)}
+                                title="Editar firmantes"
+                                style={{marginTop: '-1.5vw'}}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </button>
+                            )}
                             {canEditFacturaTemplate(doc) && (
                               <button
                                 className="btn-action-clean"
@@ -7360,6 +7920,282 @@ function Dashboard({ user, onLogout }) {
                           </div>
                         </div>
                     );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* My Invoices Section */}
+          {activeTab === 'my-invoices' && (
+            <div key="my-invoices-tab" className="section my-documents-section-clean">
+              <div className="section-header-minimal">
+                <div>
+                  <h2 className="section-title-minimal">Mis Facturas</h2>
+                  <p className="section-subtitle-minimal">
+                    {(() => {
+                      const filteredCount = myInvoiceDocuments.filter(doc => {
+                        const matchesSearch = doc.title.toLowerCase().includes(myInvoicesSearchTerm.toLowerCase());
+                        const matchesStatus = myInvoicesStatusFilter === 'all' ||
+                                             (myInvoicesStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
+                                             doc.status === myInvoicesStatusFilter;
+                        return matchesSearch && matchesStatus;
+                      }).length;
+                      return (
+                        <>
+                          {filteredCount}
+                          {` factura${filteredCount !== 1 ? 's' : ''}`}
+                        </>
+                      );
+                    })()}
+                  </p>
+                </div>
+              </div>
+
+              {myInvoiceDocuments.length > 0 && (
+                <div className="my-docs-filters">
+                  <div className="filter-search">
+                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <input
+                      type="text"
+                      className="filter-search-input"
+                      placeholder="Buscar por nombre de factura..."
+                      value={myInvoicesSearchTerm}
+                      onChange={(e) => setMyInvoicesSearchTerm(e.target.value)}
+                    />
+                    {myInvoicesSearchTerm && (
+                      <button
+                        className="clear-search-btn"
+                        onClick={() => setMyInvoicesSearchTerm('')}
+                        title="Limpiar búsqueda"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="filter-status-group">
+                    <button
+                      className={`filter-status-btn ${myInvoicesStatusFilter === 'all' ? 'active' : ''}`}
+                      onClick={() => setMyInvoicesStatusFilter('all')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Todas
+                    </button>
+                    <button
+                      className={`filter-status-btn filter-status-btn-completed ${myInvoicesStatusFilter === 'completed' ? 'active' : ''}`}
+                      onClick={() => setMyInvoicesStatusFilter('completed')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12 C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Firmadas
+                    </button>
+                    <button
+                      className={`filter-status-btn filter-status-btn-pending ${myInvoicesStatusFilter === 'pending' ? 'active' : ''}`}
+                      onClick={() => setMyInvoicesStatusFilter('pending')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 8V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      En curso
+                    </button>
+                    <button
+                      className={`filter-status-btn filter-status-btn-rejected ${myInvoicesStatusFilter === 'rejected' ? 'active' : ''}`}
+                      onClick={() => setMyInvoicesStatusFilter('rejected')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Rechazadas
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {loadingMy ? (
+                <div className="loading-state-minimal">
+                  <Loader size="medium" />
+                  <p>Cargando facturas...</p>
+                </div>
+              ) : myInvoiceDocuments.length === 0 ? (
+                <div className="empty-state-minimal">
+                  <div className="empty-icon-minimal">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M8 8H16M8 12H16M8 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <h3 className="empty-title-minimal">No tienes facturas</h3>
+                  <p className="empty-text-minimal">Las facturas inscritas desde Facturación aparecerán aquí</p>
+                </div>
+              ) : (
+                <>
+                  {(() => {
+                    const filteredDocs = myInvoiceDocuments.filter(doc => {
+                      const matchesSearch = doc.title.toLowerCase().includes(myInvoicesSearchTerm.toLowerCase());
+                      const matchesStatus = myInvoicesStatusFilter === 'all' ||
+                                           (myInvoicesStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
+                                           doc.status === myInvoicesStatusFilter;
+                      return matchesSearch && matchesStatus;
+                    });
+
+                    if (filteredDocs.length === 0) {
+                      return (
+                        <div className="empty-state-minimal">
+                          <div className="empty-icon-minimal">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                          <h3 className="empty-title-minimal">No se encontraron facturas</h3>
+                          <p className="empty-text-minimal">
+                            {myInvoicesSearchTerm
+                              ? `No hay facturas que coincidan con "${myInvoicesSearchTerm}"`
+                              : 'No hay facturas con el estado seleccionado'}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="my-docs-grid-clean">
+                        {filteredDocs.map((doc) => {
+                          const getStatusConfig = (status) => {
+                            const statusMap = {
+                              pending: { label: 'En curso', color: '#92400E', bg: '#FEF3C7' },
+                              in_progress: { label: 'En curso', color: '#92400E', bg: '#FEF3C7' },
+                              completed: { label: 'Firmado', color: '#065F46', bg: '#D1FAE5'},
+                              rejected: { label: 'Rechazado', color: '#991B1B', bg: '#FEE2E2' },
+                              archived: { label: 'Archivado', color: '#374151', bg: '#F3F4F6' }
+                            };
+                            return statusMap[status] || statusMap.pending;
+                          };
+
+                          const statusConfig = getStatusConfig(doc.status);
+                          const signatures = doc.signatures || [];
+
+                          return (
+                            <div key={doc.id} className="my-doc-card-reference">
+                              <div className="doc-content-wrapper">
+                                <div className="doc-header-row">
+                                  <h3 className="doc-title-reference">{doc.title}</h3>
+
+                                  <div
+                                    className="status-badge-clean"
+                                    style={{
+                                      color: statusConfig.color,
+                                      backgroundColor: statusConfig.bg,
+                                      cursor: statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'pointer' : 'default',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onClick={() => {
+                                      if (statusConfig.label === 'Rechazado') {
+                                        const rejectedSignature = signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason);
+                                        if (rejectedSignature) {
+                                          setRejectionReasonPopup({
+                                            title: doc.title,
+                                            rejectedBy: rejectedSignature.realSignerName || rejectedSignature.signer?.name || rejectedSignature.signer?.email,
+                                            reason: rejectedSignature.rejectionReason,
+                                            rejectedAt: rejectedSignature.rejectedAt
+                                          });
+                                        }
+                                      }
+                                    }}
+                                    title={statusConfig.label === 'Rechazado' && signatures.find(sig => sig.status === 'rejected' && sig.rejectionReason) ? 'Ver razón del rechazo' : ''}
+                                  >
+                                    {statusConfig.label}
+                                  </div>
+                                </div>
+
+                                <div className="doc-meta-row">
+                                  <span className="doc-created-text">Creado el {formatDateTime(doc.createdAt)}</span>
+                                </div>
+
+                                <div className="doc-signers-row">
+                                  {signatures.slice(0, 3).map((sig) => {
+                                    const getSignerStatusColor = (status) => {
+                                      if (status === 'signed') return '#10B981';
+                                      if (status === 'rejected') return '#EF4444';
+                                      return '#F59E0B';
+                                    };
+
+                                    const getSignerStatusText = (status) => {
+                                      if (status === 'signed') return 'Firmado';
+                                      if (status === 'rejected') return 'Rechazado';
+                                      return 'Pendiente';
+                                    };
+
+                                    return (
+                                      <div key={sig.id} className="signer-item-horizontal" title={getSignerStatusText(sig.status)}>
+                                        <span
+                                          className="signer-dot"
+                                          style={{ backgroundColor: getSignerStatusColor(sig.status) }}
+                                        ></span>
+                                        <span className="signer-name">
+                                          {((sig.status === 'signed' || sig.status === 'rejected') && sig.realSignerName) ? sig.realSignerName : (sig.signer?.name || sig.signer?.email)}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                  {signatures.length > 3 && (
+                                    <button
+                                      className="btn-ver-todos"
+                                      onClick={(e) => handleToggleSignersDropdown(e, doc.id, signatures)}
+                                    >
+                                      {signersDropdownPos?.docId === doc.id ? '- ver menos' : '+ ver todos'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="doc-actions-clean">
+                                <button
+                                  className="btn-action-clean"
+                                  onClick={() => handleViewDocument(doc)}
+                                  title="Ver documento"
+                                  style={{marginTop: '-1.5vw'}}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                                {canEditFacturaTemplate(doc) && (
+                                  <button
+                                    className="btn-action-clean"
+                                    onClick={() => handleEditFacturaTemplate(doc)}
+                                    title="Editar planilla"
+                                    style={{marginTop: '-1.5vw'}}
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  </button>
+                                )}
+                                <button
+                                  className="btn-action-clean"
+                                  onClick={() => handleDeleteDocument(doc.id, doc.title)}
+                                  title="Eliminar documento"
+                                  style={{marginTop: '-1.5vw'}}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 6H5H21M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          );
                         })}
                       </div>
                     );
@@ -9136,6 +9972,354 @@ function Dashboard({ user, onLogout }) {
       {showCreationLoader && <DocumentCreationLoader />}
 
       {/* Modal de ayuda */}
+      {showNoTypeSignersEditor && editingNoTypeDocument && (
+        <div className="no-type-editor-overlay" onClick={closeNoTypeSignersEditor}>
+          <div className="no-type-editor-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="no-type-editor-header">
+              <div>
+                <h3 className="no-type-editor-title">Editar firmantes</h3>
+                <p className="no-type-editor-subtitle">{editingNoTypeDocument.title}</p>
+              </div>
+              <button
+                type="button"
+                className="no-type-editor-close"
+                onClick={closeNoTypeSignersEditor}
+                disabled={savingNoTypeSigners}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="no-type-editor-body">
+              <div className="no-type-editor-column">
+                <h4 className="no-type-editor-section-title">Agregar firmantes</h4>
+                <div className="search-wrapper no-type-editor-search">
+                  <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <input
+                    type="text"
+                    className="search-input-modern"
+                    placeholder="Buscar por nombre o correo"
+                    value={editingNoTypeSearchTerm}
+                    onChange={(e) => setEditingNoTypeSearchTerm(e.target.value)}
+                    disabled={savingNoTypeSigners}
+                  />
+                </div>
+
+                <div className="no-type-editor-results">
+                  {availableSigners
+                    .filter((signer) => {
+                      const alreadySelected = editingNoTypeSigners.some(item => String(item.userId) === String(signer.id));
+                      const matchesSearch = editingNoTypeSearchTerm.trim() === '' ||
+                        signer.name.toLowerCase().includes(editingNoTypeSearchTerm.toLowerCase()) ||
+                        signer.email.toLowerCase().includes(editingNoTypeSearchTerm.toLowerCase());
+                      return !alreadySelected && matchesSearch;
+                    })
+                    .slice(0, 12)
+                    .map((signer) => (
+                      <button
+                        key={signer.id}
+                        type="button"
+                        className="no-type-editor-result-item"
+                        onClick={() => addNoTypeSigner(signer.id)}
+                        disabled={savingNoTypeSigners}
+                      >
+                        <div className="signer-avatar-circle">
+                          {getInitials(signer.name, signer.email)}
+                        </div>
+                        <div className="signer-info-modern">
+                          <p className="signer-name-modern">{signer.name}</p>
+                          <p className="signer-email-modern">{signer.email}</p>
+                        </div>
+                        <div className="add-indicator">
+                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              <div className="no-type-editor-column">
+                <div className="no-type-editor-selected-header">
+                  <h4 className="no-type-editor-section-title">Firmantes actuales</h4>
+                  <span className="signers-count">
+                    {editingNoTypeSigners.length} {editingNoTypeSigners.length === 1 ? 'firmante' : 'firmantes'}
+                  </span>
+                </div>
+
+                <div className="selected-signers-container no-type-editor-selected">
+                  {editingNoTypeSigners.map((signerItem, index) => {
+                    const signer = availableSigners.find(s => String(s.id) === String(signerItem.userId));
+                    if (!signer) return null;
+
+                    const isLocked = signerItem.locked;
+                    const canMoveUp = !isLocked && index > 0 && !editingNoTypeSigners[index - 1]?.locked;
+                    const canMoveDown = !isLocked && index < editingNoTypeSigners.length - 1 && !editingNoTypeSigners[index + 1]?.locked;
+
+                    return (
+                      <div
+                        key={`${signerItem.userId}-${index}`}
+                        className={`selected-signer-card ${isLocked ? 'locked' : ''}`}
+                      >
+                        <div className="signer-order-badge">{index + 1}</div>
+                        <div className="signer-avatar-circle">
+                          {getInitials(signer.name, signer.email)}
+                        </div>
+                        <div className="signer-info-modern flex-grow">
+                          <p className="signer-name-modern">
+                            {signer.name}
+                            {isLocked && <span className="you-tag">Firmado</span>}
+                          </p>
+                          <p className="signer-email-modern">{signer.email}</p>
+                        </div>
+
+                        <div className="no-type-editor-actions">
+                          <button
+                            type="button"
+                            className="no-type-editor-move-btn"
+                            onClick={() => moveNoTypeSigner(index, -1)}
+                            disabled={!canMoveUp || savingNoTypeSigners}
+                            title="Mover arriba"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M12 19V5M12 5L6 11M12 5L18 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="no-type-editor-move-btn"
+                            onClick={() => moveNoTypeSigner(index, 1)}
+                            disabled={!canMoveDown || savingNoTypeSigners}
+                            title="Mover abajo"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M12 5V19M12 19L6 13M12 19L18 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                          {!isLocked && (
+                            <button
+                              type="button"
+                              className="remove-btn-modern"
+                              onClick={() => removeNoTypeSigner(signerItem.userId)}
+                              disabled={savingNoTypeSigners}
+                              title="Quitar firmante"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="no-type-editor-footer">
+              <button
+                type="button"
+                className="footer-btn-secondary"
+                onClick={closeNoTypeSignersEditor}
+                disabled={savingNoTypeSigners}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="footer-btn-primary"
+                onClick={handleSaveNoTypeSigners}
+                disabled={savingNoTypeSigners || editingNoTypeSigners.length === 0}
+              >
+                {savingNoTypeSigners ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSAEditor && editingSADocument && (
+        <div className="sa-editor-overlay" onClick={closeSAEditor}>
+          <div className="sa-editor-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sa-editor-header">
+              <div>
+                <h3 className="sa-editor-title">Editar firmantes</h3>
+                <p className="sa-editor-subtitle">{editingSADocument.title}</p>
+              </div>
+              <button
+                type="button"
+                className="sa-editor-close"
+                onClick={closeSAEditor}
+                disabled={savingSAEditor}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="sa-editor-body">
+              <div className="sa-editor-left">
+                <h4 className="sa-editor-section-title">Roles editables</h4>
+                <div className="sa-editor-role-list">
+                  {['Solicitante', 'Aprobador', 'Negociaciones', 'Gerencia', 'Tesoreria'].map((roleName) => {
+                    const assignedSigner = getSAAssignedSignerFromList(editingSASigners, roleName);
+                    const roleKey = getSARoleKey(roleName);
+                    const isLocked = roleKey === 'tesoreria' || Boolean(editingSARoleLocks[roleKey]);
+                    const isOptional = roleKey === 'negociaciones' || roleKey === 'gerencia' || roleKey === 'gerencia_ejecutiva';
+                    const isActive = editingSAActiveRole === roleKey;
+                    const roleValue = isOptional
+                      ? (assignedSigner ? 'Aplica' : 'No aplica')
+                      : (assignedSigner?.signer?.name || 'Sin asignar');
+
+                    return (
+                      <button
+                        key={roleKey}
+                        type="button"
+                        className={`sa-editor-role-card ${isActive ? 'active' : ''}`}
+                        onClick={() => !isLocked && setEditingSAActiveRole(roleKey)}
+                        disabled={isLocked}
+                      >
+                        <div className="sa-editor-role-text">
+                          <span className="sa-editor-role-name">{formatSARoleLabel(roleName)}</span>
+                          <span className="sa-editor-role-value">{roleValue}</span>
+                        </div>
+                        {isOptional && <span className="sa-editor-optional-pill">Opcional</span>}
+                        {isLocked ? (
+                          <svg className="sa-editor-lock" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 11V8C7 5.79086 8.79086 4 11 4H13C15.2091 4 17 5.79086 17 8V11M6 11H18V20H6V11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        ) : isActive ? (
+                          <svg className="sa-editor-chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9 5L16 12L9 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="sa-editor-right">
+                <h4 className="sa-editor-section-title">
+                  {formatSARoleLabel(editingSAActiveRole)}
+                </h4>
+                {(['negociaciones', 'gerencia', 'gerencia_ejecutiva'].includes(editingSAActiveRole)) ? (
+                  <div className="sa-editor-toggle-panel">
+                    <div className="sa-editor-toggle-actions">
+                      <button
+                        type="button"
+                        className={`sa-editor-option-row ${getSAAssignedSignerFromList(editingSASigners, editingSAActiveRole) ? 'selected' : ''}`}
+                        onClick={() => toggleSAOptionalRole(editingSAActiveRole, true)}
+                        disabled={savingSAEditor || editingSARoleLocks[editingSAActiveRole]}
+                      >
+                        <span>Aplica</span>
+                        {getSAAssignedSignerFromList(editingSASigners, editingSAActiveRole) && (
+                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className={`sa-editor-option-row ${!getSAAssignedSignerFromList(editingSASigners, editingSAActiveRole) ? 'selected' : ''}`}
+                        onClick={() => toggleSAOptionalRole(editingSAActiveRole, false)}
+                        disabled={savingSAEditor || editingSARoleLocks[editingSAActiveRole]}
+                      >
+                        <span>No aplica</span>
+                        {!getSAAssignedSignerFromList(editingSASigners, editingSAActiveRole) && (
+                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    {getSAAssignedSignerFromList(editingSASigners, editingSAActiveRole) && (
+                      <p className="sa-editor-toggle-helper">
+                        Usuario asignado automáticamente: <strong>{getSAAssignedSignerFromList(editingSASigners, editingSAActiveRole).signer.name}</strong>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="sa-editor-search">
+                      <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <input
+                        type="text"
+                        className="search-input-modern"
+                        placeholder="Buscar por nombre o correo"
+                        value={editingSASearchTerm}
+                        onChange={(e) => setEditingSASearchTerm(e.target.value)}
+                        disabled={savingSAEditor}
+                      />
+                    </div>
+
+                    <div className="sa-editor-user-list">
+                      {availableSigners
+                        .filter((signer) => {
+                          const matchesSearch = editingSASearchTerm.trim() === '' ||
+                            signer.name.toLowerCase().includes(editingSASearchTerm.toLowerCase()) ||
+                            signer.email.toLowerCase().includes(editingSASearchTerm.toLowerCase());
+                          return matchesSearch;
+                        })
+                        .map((signer) => (
+                          <button
+                            key={`${editingSAActiveRole}-${signer.id}`}
+                            type="button"
+                            className={`sa-editor-user-row ${String(getSAAssignedSignerFromList(editingSASigners, editingSAActiveRole)?.userId) === String(signer.id) ? 'selected' : ''}`}
+                            onClick={() => assignSAEditorRoleToSigner(editingSAActiveRole, signer)}
+                            disabled={savingSAEditor || editingSARoleLocks[editingSAActiveRole]}
+                          >
+                            <div className="sa-editor-avatar">
+                              {getInitials(signer.name, signer.email)}
+                            </div>
+                            <div className="sa-editor-user-info">
+                              <p>{signer.name}</p>
+                              <span>{signer.email}</span>
+                            </div>
+                            <div className="sa-editor-check">
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="sa-editor-footer">
+              <button
+                type="button"
+                className="sa-editor-cancel"
+                onClick={closeSAEditor}
+                disabled={savingSAEditor}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="sa-editor-save"
+                onClick={handleSaveSAEditor}
+                disabled={savingSAEditor}
+              >
+                {savingSAEditor ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
 
       {/* Modal de selección de firmante real (usuario Negociaciones) */}
@@ -9337,4 +10521,6 @@ function Dashboard({ user, onLogout }) {
 }
 
 export default Dashboard;
+
+
 

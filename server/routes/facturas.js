@@ -562,6 +562,8 @@ router.post('/ingest-from-facturacion', async (req, res) => {
     }
 
     const templateData = {
+      source: 'facturacion',
+      ingestionSource: 'facturacion',
       consecutivo: String(numeroControl),
       cia: cia || '',
       proveedor: proveedor || '',
@@ -665,6 +667,31 @@ router.post('/ingest-from-facturacion', async (req, res) => {
         JSON.stringify([relativeBackupPath])
       ]
     );
+
+    const notificationResult = await query(
+      `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+       SELECT $1, 'invoice_assigned', $2, NULL, $3
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM notifications
+         WHERE user_id = $1
+           AND type = 'invoice_assigned'
+           AND document_id = $2
+       )
+       RETURNING id`,
+      [targetUser.id, insertResult.rows[0].id, insertResult.rows[0].title]
+    );
+
+    if (notificationResult.rows.length > 0) {
+      websocketService.emitNotificationCreated(targetUser.id, {
+        id: notificationResult.rows[0].id,
+        type: 'invoice_assigned',
+        document_id: insertResult.rows[0].id,
+        actor_id: null,
+        document_title: insertResult.rows[0].title,
+        actor: null
+      });
+    }
 
     websocketService.emitDocumentUpdated(insertResult.rows[0].id, 'created', {
       documentTitle: insertResult.rows[0].title,

@@ -10,8 +10,9 @@ services:
       POSTGRES_PASSWORD: postgres123
       POSTGRES_DB: firmas_db
     ports:
-      # Puerto expuesto para acceso local si es necesario
-      - "5432:5432"
+      # Exponer en un puerto administrativo alterno para DBeaver.
+      # Windows bloquea 5432 en este equipo, el contenedor sigue usando 5432 internamente.
+      - "15432:5432"
     volumes:
       # Volumen local en carpeta bd/ para persistencia
       - ./bd:/var/lib/postgresql/data

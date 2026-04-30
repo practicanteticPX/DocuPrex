@@ -1,6 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import graphqlClient from '../../api/client';
 import './RealSignerModal.css';
+
+const GET_NEGOTIATION_SIGNERS = `
+  query GetNegotiationSigners {
+    negotiationSigners {
+      id
+      name
+      active
+    }
+  }
+`;
 
 const VERIFY_CEDULA = `
   query VerifyNegotiationSignerCedula($name: String!, $lastFourDigits: String!) {
@@ -20,15 +30,47 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
   const [error, setError] = useState('');
   const [step, setStep] = useState(1); // 1: seleccionar firmante, 2: ingresar cédula
   const [loading, setLoading] = useState(false);
+  const [availableSigners, setAvailableSigners] = useState([]);
+  const [loadingSigners, setLoadingSigners] = useState(false);
 
-  // Lista de personas que usan el usuario Negociaciones
-  const availableSigners = [
-    'Carolina Martinez',
-    'Valentina Arroyave',
-    'Manuela Correa',
-    'Luisa Velez',
-    'Sebastian Pinto'
-  ];
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let isMounted = true;
+
+    const loadNegotiationSigners = async () => {
+      try {
+        setLoadingSigners(true);
+        setError('');
+
+        const data = await graphqlClient.query(GET_NEGOTIATION_SIGNERS);
+        if (!isMounted) return;
+
+        const signers = (data.negotiationSigners || [])
+          .filter(signer => signer.active !== false)
+          .map(signer => signer.name)
+          .filter(Boolean);
+
+        setAvailableSigners(signers);
+      } catch (err) {
+        if (isMounted) {
+          setAvailableSigners([]);
+          setError('No se pudo cargar la lista de firmantes de Negociaciones');
+        }
+        console.error('Error cargando firmantes de Negociaciones:', err);
+      } finally {
+        if (isMounted) {
+          setLoadingSigners(false);
+        }
+      }
+    };
+
+    loadNegotiationSigners();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
 
   const handleSelectSigner = () => {
     if (!selectedSigner) {
@@ -144,7 +186,11 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
         <div className="real-signer-modal-body">
           {step === 1 ? (
             <div className="real-signer-list">
-              {availableSigners.map((signer) => (
+              {loadingSigners ? (
+                <div className="real-signer-loading">Cargando firmantes...</div>
+              ) : availableSigners.length === 0 ? (
+                <div className="real-signer-loading">No hay firmantes de Negociaciones activos</div>
+              ) : availableSigners.map((signer) => (
                 <label key={signer} className="real-signer-option">
                   <input
                     type="radio"
@@ -206,7 +252,7 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
           <button
             className={`real-signer-btn-confirm real-signer-btn-${action}`}
             onClick={step === 1 ? handleSelectSigner : handleConfirm}
-            disabled={step === 1 ? !selectedSigner : cedulaDigits.join('').length !== 4 || loading}
+            disabled={step === 1 ? (!selectedSigner || loadingSigners) : cedulaDigits.join('').length !== 4 || loading}
           >
             {loading ? 'Verificando...' : (step === 1 ? 'Continuar' : (action === 'firmar' ? 'Firmar documento' : 'Rechazar documento'))}
           </button>

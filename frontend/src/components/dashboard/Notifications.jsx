@@ -78,6 +78,8 @@ const getNotificationMessage = (notification) => {
   const documentTitle = notification.documentTitle || 'el documento';
 
   switch (notification.type) {
+    case 'invoice_assigned':
+      return `Te inscribieron una factura en DocuPrex: ${documentTitle}`;
     case 'signature_request':
       return `${actorName} te asignó como firmante del documento: ${documentTitle}`;
     case 'document_signed':
@@ -98,6 +100,8 @@ const getNotificationMessage = (notification) => {
 // Función para obtener el tipo de notificación para mostrar
 const getNotificationType = (type) => {
   switch (type) {
+    case 'invoice_assigned':
+      return 'Factura inscrita';
     case 'signature_request':
       return 'Solicitud de firma recibida';
     case 'document_signed':

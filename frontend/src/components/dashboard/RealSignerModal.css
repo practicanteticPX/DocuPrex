@@ -114,6 +114,18 @@
   gap: 12px;
 }
 
+.real-signer-loading {
+  grid-column: 1 / -1;
+  padding: 18px 20px;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  color: #6B7280;
+  font-size: 14px;
+  font-family: 'Google Sans', sans-serif;
+  background-color: #F9FAFB;
+  text-align: center;
+}
+
 .real-signer-option {
   display: flex;
   align-items: center;
