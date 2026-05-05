@@ -42,6 +42,9 @@ import {
   getWebSocketUrl
 } from '../../config/api';
 
+// Cambia a true para volver a permitir documentos sin tipo específico.
+const ALLOW_UPLOAD_WITHOUT_DOCUMENT_TYPE = false;
+
 // Log para debug
 console.log('🔗 Dashboard - Backend URL:', API_URL);
 
@@ -113,11 +116,15 @@ function Dashboard({ user, onLogout }) {
   const [rejectedByMe, setRejectedByMe] = useState([]);
   const [rejectedByOthers, setRejectedByOthers] = useState([]);
   const [retainedDocuments, setRetainedDocuments] = useState([]);
+  const [payableInvoices, setPayableInvoices] = useState([]);
+  const [payableStatusDropdownOpen, setPayableStatusDropdownOpen] = useState(false);
+  const [updatingPayableStatus, setUpdatingPayableStatus] = useState(false);
   const [loadingPending, setLoadingPending] = useState(false);
   const [loadingSigned, setLoadingSigned] = useState(false);
   const [loadingMy, setLoadingMy] = useState(false);
   const [loadingRejected, setLoadingRejected] = useState(false);
   const [loadingRetained, setLoadingRetained] = useState(false);
+  const [loadingPayableInvoices, setLoadingPayableInvoices] = useState(false);
   const [viewingDocument, setViewingDocument] = useState(null);
   const [isViewingPending, setIsViewingPending] = useState(false);
   const [isWaitingTurn, setIsWaitingTurn] = useState(false);
@@ -476,6 +483,8 @@ function Dashboard({ user, onLogout }) {
   const [myDocsStatusFilter, setMyDocsStatusFilter] = useState('all'); // all, completed, rejected, pending
   const [myInvoicesSearchTerm, setMyInvoicesSearchTerm] = useState('');
   const [myInvoicesStatusFilter, setMyInvoicesStatusFilter] = useState('all'); // all, completed, rejected, pending
+  const [payableInvoicesSearchTerm, setPayableInvoicesSearchTerm] = useState('');
+  const [payableInvoicesStatusFilter, setPayableInvoicesStatusFilter] = useState('pending');
 
   // Estados para filtros de "Documentos firmados"
   const [signedDocsSearchTerm, setSignedDocsSearchTerm] = useState('');
@@ -625,6 +634,9 @@ function Dashboard({ user, onLogout }) {
       loadMyDocuments();
       loadRejectedDocuments();
       loadRetainedDocuments();
+      if (isMonicaBustamanteUser()) {
+        loadPayableInvoices();
+      }
     };
 
     const getCurrentRealtimeUserId = () => {
@@ -1155,6 +1167,10 @@ function Dashboard({ user, onLogout }) {
   const canProceedToNextStep = () => {
     switch (activeStep) {
       case 0: // Cargar documentos
+        if (!ALLOW_UPLOAD_WITHOUT_DOCUMENT_TYPE && !selectedDocumentType) {
+          return false;
+        }
+
         // Para FV con plantilla completada, no se requiere título (se genera automáticamente)
         if (selectedDocumentType?.code === 'FV' && templateCompleted && facturaTemplateData) {
           return selectedFiles && selectedFiles.length > 0;
@@ -1461,6 +1477,17 @@ function Dashboard({ user, onLogout }) {
 
   // Cargar documentos pendientes al montar o cambiar de tab
   useEffect(() => {
+    if (user) {
+      loadPendingDocuments();
+      loadMyDocuments();
+
+      if (isMonicaBustamanteUser()) {
+        loadPayableInvoices();
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
     if (activeTab === 'pending') {
       loadPendingDocuments();
     }
@@ -1576,6 +1603,12 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     if (activeTab === 'retained') {
       loadRetainedDocuments();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'payable-invoices') {
+      loadPayableInvoices();
     }
   }, [activeTab]);
 
@@ -2278,6 +2311,95 @@ function Dashboard({ user, onLogout }) {
       }
     } finally {
       setLoadingRetained(false);
+    }
+  };
+
+  const loadPayableInvoices = async () => {
+    setLoadingPayableInvoices(true);
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            query {
+              payableInvoices {
+                id
+                title
+                description
+                fileName
+                filePath
+                fileSize
+                status
+                consecutivo
+                payableStatus
+                paidAt
+                createdAt
+                completedAt
+                metadata
+                documentType {
+                  id
+                  code
+                  name
+                }
+                uploadedBy {
+                  id
+                  name
+                  email
+                }
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
+                signatures {
+                  id
+                  status
+                  signedAt
+                  roleCode
+                  roleName
+                  roleNames
+                  roleCodes
+                  orderPosition
+                  realSignerName
+                  isCausacionGroup
+                  grupoCodigo
+                  grupoNombre
+                  signer {
+                    id
+                    name
+                    email
+                  }
+                }
+              }
+            }
+          `
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const docs = parseDocumentMetadata(response.data.data.payableInvoices || []);
+      setPayableInvoices(docs);
+    } catch (err) {
+      console.error('Error al cargar facturas por pagar:', err);
+      if (!isAuthError(err)) {
+        setError('Error al cargar facturas por pagar');
+      }
+    } finally {
+      setLoadingPayableInvoices(false);
     }
   };
 
@@ -3059,6 +3181,12 @@ function Dashboard({ user, onLogout }) {
    */
   const handleUpload = async (e) => {
     e.preventDefault();
+
+    if (!ALLOW_UPLOAD_WITHOUT_DOCUMENT_TYPE && !selectedDocumentType) {
+      setError('Selecciona un tipo de documento para continuar');
+      showNotif('Tipo de documento requerido', 'Por ahora no está habilitada la carga sin tipo específico.', 'error');
+      return;
+    }
 
     if (((selectedFiles?.length || 0) === 0 && !selectedFile)) {
       setError('Por favor adjunta al menos un archivo');
@@ -3991,6 +4119,8 @@ function Dashboard({ user, onLogout }) {
                 fileSize
                 mimeType
                 status
+                payableStatus
+                paidAt
                 documentType {
                   id
                   code
@@ -4130,6 +4260,8 @@ function Dashboard({ user, onLogout }) {
       } else if (notification.type === 'document_rejected' || notification.type === 'document_rejected_by_other') {
         // Documento rechazado -> pestaña de rechazados
         targetTab = 'rejected';
+      } else if (notification.type === 'payable_invoice') {
+        targetTab = 'payable-invoices';
       }
 
       // Cambiar a la pestaña correspondiente y abrir el documento
@@ -4150,6 +4282,8 @@ function Dashboard({ user, onLogout }) {
         loadSignedDocuments();
       } else if (targetTab === 'rejected' && !loadingRejected) {
         loadRejectedDocuments();
+      } else if (targetTab === 'payable-invoices' && !loadingPayableInvoices) {
+        loadPayableInvoices();
       }
 
     } catch (error) {
@@ -4173,6 +4307,7 @@ function Dashboard({ user, onLogout }) {
     setRejectReason('');
     setRejectError('');
     setShowDescription(false);
+    setPayableStatusDropdownOpen(false);
   };
 
   const handleOpenSignConfirm = () => {
@@ -4480,7 +4615,90 @@ function Dashboard({ user, onLogout }) {
     isFacturacionInvoiceDocument(doc) ? 'my-invoices' : 'my-documents'
   );
 
+  const isMonicaBustamanteUser = () => {
+    const normalizedName = normalizeTextForComparison(user?.name);
+    const normalizedEmail = normalizeTextForComparison(user?.email);
+    return normalizedEmail === 'm.bustamante@prexxa.com.co' || normalizedName === 'monica bustamante';
+  };
+
+  const getPayableStatus = (doc) => (doc?.payableStatus === 'paid' ? 'paid' : 'pending');
+
+  const getPayableStatusMeta = (doc) => {
+    const status = getPayableStatus(doc);
+    return status === 'paid'
+      ? { label: 'Pagado', className: 'paid' }
+      : { label: 'Pendiente', className: 'pending' };
+  };
+
+  const isViewingPayableInvoice = () => (
+    isMonicaBustamanteUser()
+    && viewingDocument?.documentType?.code === 'FV'
+    && (activeTab === 'payable-invoices' || viewingDocument?.payableStatus)
+  );
+
+  const handleUpdatePayableStatus = async (paymentStatus) => {
+    if (!viewingDocument || updatingPayableStatus) return;
+
+    setUpdatingPayableStatus(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation UpdatePayableInvoiceStatus($documentId: ID!, $paymentStatus: String!) {
+              updatePayableInvoiceStatus(documentId: $documentId, paymentStatus: $paymentStatus) {
+                id
+                payableStatus
+                paidAt
+              }
+            }
+          `,
+          variables: {
+            documentId: viewingDocument.id,
+            paymentStatus
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const updatedStatus = response.data.data.updatePayableInvoiceStatus.payableStatus;
+      const updatedPaidAt = response.data.data.updatePayableInvoiceStatus.paidAt;
+
+      setViewingDocument(prev => prev ? ({
+        ...prev,
+        payableStatus: updatedStatus,
+        paidAt: updatedPaidAt
+      }) : prev);
+
+      setPayableInvoices(prev => prev.map(doc => (
+        doc.id === viewingDocument.id
+          ? { ...doc, payableStatus: updatedStatus, paidAt: updatedPaidAt }
+          : doc
+      )));
+
+      setPayableStatusDropdownOpen(false);
+    } catch (err) {
+      console.error('Error al actualizar estado de pago:', err);
+      showNotif('Error', `No se pudo actualizar el estado de pago: ${err.message}`, 'error');
+    } finally {
+      setUpdatingPayableStatus(false);
+    }
+  };
+
   const myInvoiceDocuments = myDocuments.filter(isFacturacionInvoiceDocument);
+  const unassignedMyInvoiceDocuments = myInvoiceDocuments.filter(doc => (
+    Number(doc.totalSigners || 0) === 0 && (doc.signatures || []).length === 0
+  ));
+  const pendingPayableInvoices = payableInvoices.filter(doc => getPayableStatus(doc) === 'pending');
   const myRegularDocuments = myDocuments.filter(doc => !isFacturacionInvoiceDocument(doc));
   const effectiveMyDocsTypeFilter = myDocsTypeFilter.filter(type => type !== 'FV');
 
@@ -5165,6 +5383,9 @@ function Dashboard({ user, onLogout }) {
                   <path d="M12 6V12L16 14M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Pendiente de firma
+                {!loadingPending && pendingDocuments.length > 0 && (
+                  <span className="nav-count-badge">{pendingDocuments.length}</span>
+                )}
               </button>
               <button className={`ds-nav-item ${activeTab === 'signed' ? 'active' : ''}`} onClick={() => setActiveTab('signed')}>
                 <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -5185,7 +5406,23 @@ function Dashboard({ user, onLogout }) {
                   <path d="M8 8H16M8 12H16M8 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Mis facturas
+                {!loadingMy && unassignedMyInvoiceDocuments.length > 0 && (
+                  <span className="nav-count-badge">{unassignedMyInvoiceDocuments.length}</span>
+                )}
               </button>
+              {isMonicaBustamanteUser() && (
+                <button className={`ds-nav-item ${activeTab === 'payable-invoices' ? 'active' : ''}`} onClick={() => setActiveTab('payable-invoices')}>
+                  <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9 8H15M9 12H15M9 16H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M16 15L18 17L22 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Facturas por pagar
+                  {!loadingPayableInvoices && pendingPayableInvoices.length > 0 && (
+                    <span className="nav-count-badge">{pendingPayableInvoices.length}</span>
+                  )}
+                </button>
+              )}
               {retainedDocuments.length > 0 && (
                 <button className={`ds-nav-item ${activeTab === 'retained' ? 'active' : ''}`} onClick={() => setActiveTab('retained')}>
                   <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -5539,6 +5776,9 @@ function Dashboard({ user, onLogout }) {
                 <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               Pendientes de Firma
+              {!loadingPending && pendingDocuments.length > 0 && (
+                <span className="nav-count-badge">{pendingDocuments.length}</span>
+              )}
             </button>
             <button
               className={`tab ${activeTab === 'signed' ? 'active' : ''}`}
@@ -5570,7 +5810,26 @@ function Dashboard({ user, onLogout }) {
                 <path d="M8 8H16M8 12H16M8 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               Mis Facturas
+              {!loadingMy && unassignedMyInvoiceDocuments.length > 0 && (
+                <span className="nav-count-badge">{unassignedMyInvoiceDocuments.length}</span>
+              )}
             </button>
+            {isMonicaBustamanteUser() && (
+              <button
+                className={`tab ${activeTab === 'payable-invoices' ? 'active' : ''}`}
+                onClick={() => setActiveTab('payable-invoices')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 8H15M9 12H15M9 16H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M16 15L18 17L22 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Facturas por pagar
+                {!loadingPayableInvoices && pendingPayableInvoices.length > 0 && (
+                  <span className="nav-count-badge">{pendingPayableInvoices.length}</span>
+                )}
+              </button>
+            )}
             {retainedDocuments.length > 0 && (
               <button
                 className={`tab ${activeTab === 'retained' ? 'active' : ''}`}
@@ -5687,6 +5946,7 @@ function Dashboard({ user, onLogout }) {
                               setSelectedFactura(null);
                             }}
                             disabled={uploading || loadingDocumentTypes}
+                            allowNoSpecificType={ALLOW_UPLOAD_WITHOUT_DOCUMENT_TYPE}
                           />
                         </div>
                       )}
@@ -8221,6 +8481,200 @@ function Dashboard({ user, onLogout }) {
             </div>
           )}
 
+          {/* Payable Invoices Section */}
+          {activeTab === 'payable-invoices' && isMonicaBustamanteUser() && (
+            <div key="payable-invoices-tab" className="section my-documents-section-clean">
+              {(() => {
+                const visiblePayableInvoices = payableInvoices.filter(doc => {
+                  const matchesSearch = doc.title.toLowerCase().includes(payableInvoicesSearchTerm.toLowerCase());
+                  const matchesStatus = payableInvoicesStatusFilter === 'all'
+                    || getPayableStatus(doc) === payableInvoicesStatusFilter;
+
+                  return matchesSearch && matchesStatus;
+                });
+
+                return (
+                  <>
+              <div className="section-header-minimal">
+                <div>
+                  <h2 className="section-title-minimal">Facturas por pagar</h2>
+                  <p className="section-subtitle-minimal">
+                    {`${visiblePayableInvoices.length} factura${visiblePayableInvoices.length !== 1 ? 's' : ''}`}
+                  </p>
+                </div>
+              </div>
+
+              {payableInvoices.length > 0 && (
+                <div className="my-docs-filters">
+                  <div className="filter-search payable-filter-search">
+                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <input
+                      type="text"
+                      className="filter-search-input"
+                      placeholder="Buscar por nombre de factura..."
+                      value={payableInvoicesSearchTerm}
+                      onChange={(e) => setPayableInvoicesSearchTerm(e.target.value)}
+                    />
+                    {payableInvoicesSearchTerm && (
+                      <button
+                        className="clear-search-btn"
+                        onClick={() => setPayableInvoicesSearchTerm('')}
+                        title="Limpiar búsqueda"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="filter-status-group">
+                    <button
+                      type="button"
+                      className={`filter-status-btn ${payableInvoicesStatusFilter === 'all' ? 'active' : ''}`}
+                      onClick={() => setPayableInvoicesStatusFilter('all')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Todas
+                    </button>
+                    <button
+                      type="button"
+                      className={`filter-status-btn filter-status-btn-completed ${payableInvoicesStatusFilter === 'paid' ? 'active' : ''}`}
+                      onClick={() => setPayableInvoicesStatusFilter('paid')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Pagadas
+                    </button>
+                    <button
+                      type="button"
+                      className={`filter-status-btn filter-status-btn-pending ${payableInvoicesStatusFilter === 'pending' ? 'active' : ''}`}
+                      onClick={() => setPayableInvoicesStatusFilter('pending')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 8V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Pendientes
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {loadingPayableInvoices ? (
+                <div className="loading-state-minimal">
+                  <Loader size="medium" />
+                  <p>Cargando facturas por pagar...</p>
+                </div>
+              ) : payableInvoices.length === 0 ? (
+                <div className="empty-state-minimal">
+                  <div className="empty-icon-minimal">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M9 8H15M9 12H15M9 16H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <h3 className="empty-title-minimal">No hay facturas por pagar</h3>
+                  <p className="empty-text-minimal">Las facturas FV completamente firmadas aparecerÃ¡n aquÃ­</p>
+                </div>
+              ) : (
+                (() => {
+                  const filteredDocs = visiblePayableInvoices;
+
+                  if (filteredDocs.length === 0) {
+                    return (
+                      <div className="empty-state-minimal">
+                        <div className="empty-icon-minimal">
+                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 21L15.8 15.8M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        <h3 className="empty-title-minimal">No se encontraron facturas</h3>
+                        <p className="empty-text-minimal">No hay facturas que coincidan con la búsqueda o el filtro seleccionado</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="my-docs-grid-clean">
+                      {filteredDocs.map((doc) => {
+                        const signatures = doc.signatures || [];
+
+                        return (
+                          <div key={doc.id} className="my-doc-card-reference">
+                            <div className="doc-content-wrapper">
+                              <div className="doc-header-row">
+                                <h3 className="doc-title-reference">{doc.title}</h3>
+                                <div className={`payable-status-badge ${getPayableStatusMeta(doc).className}`}>
+                                  {getPayableStatusMeta(doc).label}
+                                </div>
+                              </div>
+
+                              <div className="doc-meta-row">
+                                <span className="doc-created-text">
+                                  Completada el {formatDateTime(doc.completedAt || doc.createdAt)} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
+                                </span>
+                              </div>
+
+                              <div className="doc-signers-row">
+                                {signatures.slice(0, 3).map((sig) => {
+                                  const getSignerStatusColor = (status) => {
+                                    if (status === 'signed') return '#10B981';
+                                    if (status === 'rejected') return '#EF4444';
+                                    return '#F59E0B';
+                                  };
+
+                                  return (
+                                    <div key={sig.id} className="signer-item-horizontal" title={sig.status === 'signed' ? 'Firmado' : 'Pendiente'}>
+                                      <span
+                                        className="signer-dot"
+                                        style={{ backgroundColor: getSignerStatusColor(sig.status) }}
+                                      ></span>
+                                      <span className="signer-name">{getSignerPreviewName(sig)}</span>
+                                    </div>
+                                  );
+                                })}
+                                {signatures.length > 3 && (
+                                  <button
+                                    className="btn-ver-todos"
+                                    onClick={(e) => handleToggleSignersDropdown(e, doc.id, signatures)}
+                                  >
+                                    {signersDropdownPos?.docId === doc.id ? '- ver menos' : '+ ver todos'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="doc-actions-clean">
+                              <button
+                                className="btn-action-clean"
+                                onClick={() => handleViewDocument(doc)}
+                                title="Ver factura"
+                                style={{marginTop: '-1.5vw'}}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Rejected Documents Section */}
           {activeTab === 'rejected' && (
             <div key="rejected-tab" className="section my-documents-section-clean">
@@ -8805,6 +9259,73 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
             <div className="pdf-viewer-header-right">
+              {isViewingPayableInvoice() && (
+                <details className="payable-status-control">
+                  <summary
+                    className={`payable-status-trigger ${getPayableStatusMeta(viewingDocument).className}`}
+                    title="Cambiar estado de pago"
+                  >
+                    {getPayableStatus(viewingDocument) === 'paid' ? (
+                      <svg className="payable-status-icon paid" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    ) : (
+                      <svg className="payable-status-icon pending" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 7V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                    {getPayableStatusMeta(viewingDocument).label}
+                    <svg className="payable-chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </summary>
+
+                  <div className="payable-status-menu">
+                    <button
+                      type="button"
+                      className={`payable-status-option ${getPayableStatus(viewingDocument) === 'pending' ? 'selected' : ''}`}
+                      onClick={(e) => {
+                        e.currentTarget.closest('details')?.removeAttribute('open');
+                        handleUpdatePayableStatus('pending');
+                      }}
+                      disabled={updatingPayableStatus}
+                    >
+                      <span className="option-left">
+                        <svg className="option-icon pending" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 7V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Pendiente
+                      </span>
+                      {getPayableStatus(viewingDocument) === 'pending' && (
+                        <svg className="option-check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className={`payable-status-option ${getPayableStatus(viewingDocument) === 'paid' ? 'selected' : ''}`}
+                      onClick={(e) => {
+                        e.currentTarget.closest('details')?.removeAttribute('open');
+                        handleUpdatePayableStatus('paid');
+                      }}
+                      disabled={updatingPayableStatus}
+                    >
+                      <span className="option-left">
+                        <svg className="option-icon paid" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Pagado
+                      </span>
+                      {getPayableStatus(viewingDocument) === 'paid' && (
+                        <svg className="option-check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </details>
+              )}
               {isViewingPending && !isWaitingTurn && (
                 <>
                   {/* Botón Consecutivo (solo para FV y usuario t.pineda) */}

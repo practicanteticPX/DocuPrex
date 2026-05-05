@@ -13,6 +13,56 @@ Sistema completamente funcional después de migración UUID→Integer y correcci
 
 ## Recent Changes
 
+### Session: 2026-05-04 - Estado de Pago en Facturas por Pagar
+
+#### Cambio:
+- `server/database/migrations/015_create_payable_invoices.sql`: agregados `payment_status`, `paid_at` y `paid_by` en `payable_invoices`.
+- `server/graphql/schema.js` y `server/graphql/resolvers-db.js`: agregado campo `payableStatus`/`paidAt` en documentos y mutation `updatePayableInvoiceStatus`.
+- `frontend/src/components/dashboard/Dashboard.jsx`: para Monica, el visor de factura por pagar muestra un badge clickeable con dropdown `Pendiente`/`Pagado`.
+- La lista previa de `Facturas por pagar` ahora pinta el badge dinamico: `Pendiente` naranja o `Pagado` verde.
+- Rebuild y recreacion de `server` y `frontend` completados; columnas validadas en BD.
+
+### Session: 2026-05-04 - Correccion de Badges de Facturas
+
+#### Cambio:
+- `frontend/src/components/dashboard/Dashboard.jsx`: el badge de `Mis facturas` ahora cuenta solo facturas recibidas que aun no tienen firmantes asignados (`totalSigners = 0` y sin firmas).
+- Se carga `pendingDocuments`, `myDocuments` y, para Monica Bustamante, `payableInvoices` desde la entrada al dashboard.
+- La opcion `Facturas por pagar` de Monica refresca tambien con eventos WebSocket, para que el badge aparezca sin depender de seleccionar la opcion.
+- Rebuild y recreacion de `frontend` completados; servicios verificados arriba.
+
+### Session: 2026-04-30 - Badge de Conteo en Menu Lateral
+
+#### Cambio:
+- `frontend/src/components/dashboard/Dashboard.jsx`: agregados contadores en estilo pill para `Pendiente de firma`, `Mis facturas` y `Facturas por pagar`.
+- `frontend/src/components/dashboard/Dashboard.css`: agregado estilo `nav-count-badge` alineado a la derecha dentro de la opcion, similar al diseno solicitado.
+- Reemplazado el badge flotante anterior de `Facturas por pagar`.
+- Desplegado con rebuild y recreacion de `frontend`.
+
+### Session: 2026-04-30 - Facturas por Pagar para Monica
+
+#### Problema:
+- Las facturas FV completadas no tenian una bandeja posterior para que Monica Bustamante recibiera el documento final completo para pago.
+
+#### Solucion:
+- Base de datos: creada tabla `payable_invoices` para asignar cada FV completada a una bandeja de pago sin duplicar el PDF.
+- `server/graphql/resolvers-db.js`: al completar una FV, se asigna automaticamente a Monica Bustamante y se crea notificacion interna `payable_invoice`.
+- `server/graphql/schema.js`: agregada query `payableInvoices`.
+- `frontend/src/components/dashboard/Dashboard.jsx`: agregada opcion "Facturas por pagar" solo para Monica, con busqueda y visor del documento completo.
+- `frontend/src/components/dashboard/Notifications.jsx`: agregado texto para notificaciones de factura por pagar.
+- Desplegado con rebuild de `server` y `frontend`; servicios verificados arriba.
+
+### Session: 2026-04-30 - Vista Previa de Firmantes Negociaciones
+
+#### Problema:
+- En las tarjetas/lista de documentos, cuando Carolina Martinez firmaba como Negociadora y tambien autofirmaba Negociaciones, la vista previa mostraba "Carolina Martinez" dos veces.
+- El PDF/factura si debe conservar la firma real de Carolina en la seccion de Negociaciones, pero la vista previa debe mostrar el firmante asignado literal "Negociaciones".
+
+#### Solucion:
+- `frontend/src/components/dashboard/Dashboard.jsx`: agregada funcion de presentacion `getSignerPreviewName`.
+- En tarjetas y dropdown de firmantes, si el firmante asignado es `Negociaciones`, se muestra "Negociaciones" aunque exista `realSignerName`.
+- No se cambio el dato guardado ni la generacion del PDF.
+- Desplegado con rebuild y recreacion forzada de `frontend`.
+
 ### Session: 2026-04-30 - Fix Duplicado al Autofirmar Negociaciones
 
 #### Problema:

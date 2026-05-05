@@ -51,6 +51,9 @@ const typeDefs = gql`
     createdAt: String!
     updatedAt: String!
     completedAt: String
+    payableStatus: String
+    paidAt: String
+    paidBy: User
     # Campos calculados
     totalSigners: Int
     signedCount: Int
@@ -234,6 +237,7 @@ const typeDefs = gql`
     myDocuments: [Document!]!
     pendingDocuments: [Document!]!
     signedDocuments: [Document!]!
+    payableInvoices: [Document!]!
     rejectedByMeDocuments: [Document!]!
     rejectedByOthersDocuments: [Document!]!
     retainedDocuments: [Document!]!
@@ -282,6 +286,7 @@ const typeDefs = gql`
     deleteDocument(id: ID!): Boolean!
     assignSigners(documentId: ID!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
     updateFacturaTemplate(documentId: ID!, templateData: String!): UpdateFacturaTemplateResponse!
+    updatePayableInvoiceStatus(documentId: ID!, paymentStatus: String!): Document!
 
     # Firmas
     signDocument(documentId: ID!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String): Signature!

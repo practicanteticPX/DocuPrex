@@ -2,39 +2,21 @@ import { useState, useEffect, useRef } from 'react';
 import './DocumentTypeSelector.css';
 
 /**
- * DocumentTypeSelector - Dropdown component for selecting document types
+ * DocumentTypeSelector - Dropdown component for selecting document types.
  *
- * Allows users to choose between predefined document types or no specific type.
- * Selected state is indicated by background color rather than checkmarks for
- * cleaner UX.
- *
- * @component
- * @param {Object} props - Component props
- * @param {Array<Object>} props.documentTypes - Array of available document types
- * @param {Object|null} props.selectedDocumentType - Currently selected document type or null
- * @param {Function} props.onDocumentTypeChange - Callback fired when selection changes
- * @param {boolean} [props.disabled=false] - Whether the selector is disabled
- *
- * @example
- * ```jsx
- * <DocumentTypeSelector
- *   documentTypes={[{id: 1, name: 'Invoice', description: 'Invoice type', roles: []}]}
- *   selectedDocumentType={null}
- *   onDocumentTypeChange={(type) => setSelectedType(type)}
- *   disabled={false}
- * />
- * ```
+ * The "no specific type" option can be disabled with allowNoSpecificType=false.
+ * To re-enable uploads without type, pass true from the parent.
  */
 const DocumentTypeSelector = ({
   documentTypes,
   selectedDocumentType,
   onDocumentTypeChange,
-  disabled = false
+  disabled = false,
+  allowNoSpecificType = true
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target) && isOpen) {
@@ -70,7 +52,11 @@ const DocumentTypeSelector = ({
         aria-expanded={isOpen}
       >
         <span className="doc-type-selector__value">
-          {selectedDocumentType ? selectedDocumentType.name : 'Sin tipo específico'}
+          {selectedDocumentType
+            ? selectedDocumentType.name
+            : allowNoSpecificType
+              ? 'Sin tipo específico'
+              : 'Selecciona un tipo de documento'}
         </span>
         <svg
           className={`doc-type-selector__arrow ${isOpen ? 'doc-type-selector__arrow--open' : ''}`}
@@ -90,42 +76,41 @@ const DocumentTypeSelector = ({
 
       {isOpen && (
         <ul className="doc-type-selector__dropdown" role="listbox">
-          {/* Default option: No specific type */}
-          <li
-            className={`doc-type-selector__option ${!selectedDocumentType ? 'doc-type-selector__option--selected' : ''}`}
-            onClick={() => handleSelectType(null)}
-            role="option"
-            aria-selected={!selectedDocumentType}
-          >
-            <div className="doc-type-selector__option-content">
-              <p className="doc-type-selector__option-name">Sin tipo específico</p>
-              <p className="doc-type-selector__option-description">
-                Documento sin plantilla predefinida
-              </p>
-            </div>
-          </li>
+          {allowNoSpecificType && (
+            <li
+              className={`doc-type-selector__option ${!selectedDocumentType ? 'doc-type-selector__option--selected' : ''}`}
+              onClick={() => handleSelectType(null)}
+              role="option"
+              aria-selected={!selectedDocumentType}
+            >
+              <div className="doc-type-selector__option-content">
+                <p className="doc-type-selector__option-name">Sin tipo específico</p>
+                <p className="doc-type-selector__option-description">
+                  Documento sin plantilla predefinida
+                </p>
+              </div>
+            </li>
+          )}
 
-          {/* Document type options */}
           {documentTypes
             .filter((type) => type.code !== 'FV')
             .sort((a, b) => {
-              // Ordenar: SA primero, luego FV
-              const order = { 'SA': 1, 'FV': 2 };
+              const order = { SA: 1, FV: 2 };
               return (order[a.code] || 999) - (order[b.code] || 999);
             })
             .map((type) => (
-            <li
-              key={type.id}
-              className={`doc-type-selector__option ${selectedDocumentType?.id === type.id ? 'doc-type-selector__option--selected' : ''}`}
-              onClick={() => handleSelectType(type)}
-              role="option"
-              aria-selected={selectedDocumentType?.id === type.id}
-            >
-              <div className="doc-type-selector__option-content">
-                <p className="doc-type-selector__option-name">{type.name}</p>
-              </div>
-            </li>
-          ))}
+              <li
+                key={type.id}
+                className={`doc-type-selector__option ${selectedDocumentType?.id === type.id ? 'doc-type-selector__option--selected' : ''}`}
+                onClick={() => handleSelectType(type)}
+                role="option"
+                aria-selected={selectedDocumentType?.id === type.id}
+              >
+                <div className="doc-type-selector__option-content">
+                  <p className="doc-type-selector__option-name">{type.name}</p>
+                </div>
+              </li>
+            ))}
         </ul>
       )}
     </div>

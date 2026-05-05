@@ -249,6 +249,123 @@ async function userBelongsToNegotiationSigners(user) {
   return result.rows.some(row => normalizePersonNameForMatch(row.name) === normalizedUserName);
 }
 
+async function ensurePayableInvoicesTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS payable_invoices (
+      id SERIAL PRIMARY KEY,
+      document_id UUID NOT NULL UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      payment_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      paid_at TIMESTAMP,
+      paid_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    ALTER TABLE payable_invoices
+    ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) NOT NULL DEFAULT 'pending'
+  `);
+
+  await query(`
+    ALTER TABLE payable_invoices
+    ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP
+  `);
+
+  await query(`
+    ALTER TABLE payable_invoices
+    ADD COLUMN IF NOT EXISTS paid_by UUID REFERENCES users(id) ON DELETE SET NULL
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_payable_invoices_user_id
+    ON payable_invoices(user_id)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_payable_invoices_created_at
+    ON payable_invoices(created_at DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_payable_invoices_payment_status
+    ON payable_invoices(payment_status)
+  `);
+}
+
+async function getMonicaBustamanteUser() {
+  const result = await query(
+    `SELECT id, name, email
+     FROM users
+     WHERE LOWER(TRIM(email)) = 'm.bustamante@prexxa.com.co'
+        OR LOWER(TRIM(name)) = 'monica bustamante'
+     ORDER BY CASE WHEN LOWER(TRIM(email)) = 'm.bustamante@prexxa.com.co' THEN 0 ELSE 1 END
+     LIMIT 1`
+  );
+
+  return result.rows[0] || null;
+}
+
+async function assignCompletedInvoiceToPayables(documentId, actorUserId = null) {
+  await ensurePayableInvoicesTable();
+
+  const monicaUser = await getMonicaBustamanteUser();
+  if (!monicaUser?.id) {
+    console.warn(`No se encontro Monica Bustamante para asignar factura por pagar del documento ${documentId}`);
+    return null;
+  }
+
+  const docResult = await query(
+    `SELECT d.id, d.title, d.status, dt.code as document_type_code
+     FROM documents d
+     LEFT JOIN document_types dt ON d.document_type_id = dt.id
+     WHERE d.id = $1`,
+    [documentId]
+  );
+
+  const doc = docResult.rows[0];
+  if (!doc || doc.document_type_code !== 'FV' || doc.status !== 'completed') {
+    return null;
+  }
+
+  const insertResult = await query(
+    `INSERT INTO payable_invoices (document_id, user_id)
+     VALUES ($1, $2)
+     ON CONFLICT (document_id) DO UPDATE SET
+       user_id = EXCLUDED.user_id,
+       updated_at = CURRENT_TIMESTAMP
+     RETURNING id`,
+    [documentId, monicaUser.id]
+  );
+
+  const notificationResult = await query(
+    `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+     SELECT $1::uuid, 'payable_invoice', $2::uuid, $3::uuid, $4::varchar
+     WHERE NOT EXISTS (
+       SELECT 1 FROM notifications
+       WHERE user_id = $1::uuid
+         AND type = 'payable_invoice'
+         AND document_id = $2::uuid
+     )
+     RETURNING id`,
+    [monicaUser.id, documentId, actorUserId, doc.title]
+  );
+
+  if (notificationResult.rows.length > 0) {
+    websocketService.emitNotificationCreated(monicaUser.id, {
+      id: notificationResult.rows[0].id,
+      type: 'payable_invoice',
+      document_id: documentId,
+      actor_id: actorUserId,
+      document_title: doc.title
+    });
+  }
+
+  console.log(`Factura FV completada enviada a Facturas por pagar de Monica: ${doc.title}`);
+  return insertResult.rows[0] || null;
+}
+
 async function getNegociacionesSharedUserIds(user, realSignerName = null) {
   const userIds = [user.id];
 
@@ -916,6 +1033,41 @@ const resolvers = {
               AND (retention->>'activa')::boolean = true
           )
         ORDER BY s.signed_at DESC
+      `, [user.id]);
+
+      return result.rows;
+    },
+
+    payableInvoices: async (_, __, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      await ensurePayableInvoicesTable();
+
+      const monicaUser = await getMonicaBustamanteUser();
+      if (!monicaUser || String(user.id) !== String(monicaUser.id)) {
+        return [];
+      }
+
+      const result = await query(`
+        SELECT
+          d.*,
+          u.name as uploaded_by_name,
+          u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
+          pi.created_at as payable_assigned_at,
+          pi.payment_status as payable_status,
+          pi.paid_at,
+          pi.paid_by,
+          paid_user.name as paid_by_name,
+          paid_user.email as paid_by_email
+        FROM payable_invoices pi
+        JOIN documents d ON d.id = pi.document_id
+        JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN users paid_user ON paid_user.id = pi.paid_by
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
+        WHERE pi.user_id = $1
+        ORDER BY pi.created_at DESC
       `, [user.id]);
 
       return result.rows;
@@ -1753,6 +1905,66 @@ const resolvers = {
       );
 
       return result.rows[0];
+    },
+
+    updatePayableInvoiceStatus: async (_, { documentId, paymentStatus }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      await ensurePayableInvoicesTable();
+
+      const monicaUser = await getMonicaBustamanteUser();
+      if (!monicaUser || String(user.id) !== String(monicaUser.id)) {
+        throw new Error('No autorizado');
+      }
+
+      const normalizedStatus = String(paymentStatus || '').trim().toLowerCase();
+      if (!['pending', 'paid'].includes(normalizedStatus)) {
+        throw new Error('Estado de pago inválido');
+      }
+
+      const result = await query(
+        `UPDATE payable_invoices
+         SET payment_status = $1::varchar,
+             paid_at = CASE WHEN $1::varchar = 'paid' THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE NULL END,
+             paid_by = CASE WHEN $1::varchar = 'paid' THEN $4::uuid ELSE NULL END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE document_id = $2
+           AND user_id = $3::uuid
+         RETURNING *`,
+        [normalizedStatus, documentId, monicaUser.id, user.id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Factura por pagar no encontrada');
+      }
+
+      websocketService.emitDocumentUpdated(documentId, 'payable_status_updated', {
+        paymentStatus: normalizedStatus,
+        userId: user.id
+      });
+
+      const docResult = await query(`
+        SELECT
+          d.*,
+          u.name as uploaded_by_name,
+          u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
+          pi.payment_status as payable_status,
+          pi.paid_at,
+          pi.paid_by,
+          paid_user.name as paid_by_name,
+          paid_user.email as paid_by_email
+        FROM payable_invoices pi
+        JOIN documents d ON d.id = pi.document_id
+        JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN users paid_user ON paid_user.id = pi.paid_by
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
+        WHERE pi.document_id = $1
+          AND pi.user_id = $2::uuid
+      `, [documentId, monicaUser.id]);
+
+      return docResult.rows[0];
     },
 
     /**
@@ -5576,6 +5788,14 @@ const resolvers = {
         // No lanzamos error para no interrumpir el flujo de firma
       }
 
+      if (newStatus === 'completed') {
+        try {
+          await assignCompletedInvoiceToPayables(documentId, user.id);
+        } catch (payableError) {
+          console.error('Error al enviar factura completada a Facturas por pagar:', payableError);
+        }
+      }
+
       // ========== GESTIONAR NOTIFICACIONES INTERNAS ==========
       try {
         const docResult = await query(
@@ -7090,6 +7310,31 @@ const resolvers = {
     createdAt: (parent) => parent.created_at,
     updatedAt: (parent) => parent.updated_at,
     completedAt: (parent) => parent.completed_at,
+    payableStatus: async (parent) => {
+      if (parent.payable_status) return parent.payable_status;
+
+      const result = await query(
+        'SELECT payment_status FROM payable_invoices WHERE document_id = $1 LIMIT 1',
+        [parent.id]
+      );
+
+      return result.rows[0]?.payment_status || null;
+    },
+    paidAt: (parent) => parent.paid_at,
+    paidBy: async (parent) => {
+      if (!parent.paid_by) return null;
+
+      if (parent.paid_by_name || parent.paid_by_email) {
+        return {
+          id: parent.paid_by,
+          name: parent.paid_by_name,
+          email: parent.paid_by_email
+        };
+      }
+
+      const result = await query('SELECT * FROM users WHERE id = $1', [parent.paid_by]);
+      return result.rows[0] || null;
+    },
     // Campos presentes solo en signedDocuments
     signedAt: (parent) => parent.signed_at,
     signatureType: (parent) => parent.signature_type,
