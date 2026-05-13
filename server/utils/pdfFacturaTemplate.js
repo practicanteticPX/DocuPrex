@@ -1,6 +1,19 @@
 const puppeteerPool = require('./puppeteerPool');
 const { generateFacturaHTML } = require('./facturaTemplateHTML');
 
+function formatDateForDisplay(dateValue) {
+  if (!dateValue) return '';
+
+  const value = String(dateValue).trim();
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+
+  return value;
+}
+
 /**
  * Genera un PDF con el template de legalización de factura diligenciado
  * Renderiza HTML que replica EXACTAMENTE el formulario web
@@ -36,6 +49,9 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
       filasControl: templateData.filasControl || [],
       totalPorcentaje: templateData.totalPorcentaje || 0,
       observaciones: templateData.observaciones || '',
+      numeroCausacion: templateData.numeroCausacion || '',
+      observacionesCausacion: templateData.observacionesCausacion || templateData.descripcionCausacion || '',
+      fechaCausacion: templateData.fechaCausacion ? formatDateForDisplay(templateData.fechaCausacion) : '',
       firmas: firmas,
       retentionData: retentionData,
       isRejected: isRejected

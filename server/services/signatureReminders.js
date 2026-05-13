@@ -24,6 +24,7 @@ async function sendPendingSignatureReminders() {
         d.title as document_title,
         d.uploaded_by,
         uploader.name as uploader_name,
+        dt.code as document_type_code,
         -- Verificar si es el turno del firmante (no hay firmas pendientes con orderPosition menor)
         CASE
           WHEN NOT EXISTS (
@@ -42,6 +43,7 @@ async function sendPendingSignatureReminders() {
       JOIN users u ON s.signer_id = u.id
       JOIN documents d ON s.document_id = d.id
       JOIN users uploader ON d.uploaded_by = uploader.id
+      LEFT JOIN document_types dt ON d.document_type_id = dt.id
       WHERE s.status = 'pending'
         AND d.status = 'pending'
         AND s.created_at < NOW() - INTERVAL '2 days'
@@ -92,7 +94,8 @@ async function sendPendingSignatureReminders() {
           nombreFirmante: signature.signer_name,
           nombreDocumento: signature.document_title,
           documentoId: signature.document_id,
-          creadorDocumento: signature.uploader_name
+          creadorDocumento: signature.uploader_name,
+          tipoDocumento: signature.document_type_code === 'FV' ? 'factura' : signature.document_type_code === 'SA' ? 'anticipo' : 'documento'
         });
 
         if (result.success) {

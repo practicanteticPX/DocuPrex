@@ -82,6 +82,10 @@ const getNotificationMessage = (notification) => {
       return `Te inscribieron una factura en DocuPrex: ${documentTitle}`;
     case 'payable_invoice':
       return `Nueva factura por pagar disponible: ${documentTitle}`;
+    case 'payable_invoice_paid':
+      return `Tu factura fue marcada como pagada: ${documentTitle}`;
+    case 'treasury_advance_paid':
+      return `Tu anticipo fue marcado como pagado: ${documentTitle}`;
     case 'signature_request':
       return `${actorName} te asignó como firmante del documento: ${documentTitle}`;
     case 'document_signed':
@@ -106,6 +110,10 @@ const getNotificationType = (type) => {
       return 'Factura inscrita';
     case 'payable_invoice':
       return 'Factura por pagar';
+    case 'payable_invoice_paid':
+      return 'Factura pagada';
+    case 'treasury_advance_paid':
+      return 'Anticipo pagado';
     case 'signature_request':
       return 'Solicitud de firma recibida';
     case 'document_signed':

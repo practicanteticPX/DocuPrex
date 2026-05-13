@@ -36,6 +36,14 @@ const formatDate = (dateString) => {
   }
 };
 
+const formatDateForDisplay = (dateString) => {
+  const normalizedDate = formatDate(dateString);
+  if (!normalizedDate) return '';
+
+  const [year, month, day] = normalizedDate.split('-');
+  return `${day}/${month}/${year}`;
+};
+
 /**
  * Mensajes informativos para tooltips del checklist
  */
@@ -1366,8 +1374,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
               <div className="factura-field">
                 <label className="factura-label">Fecha Factura</label>
                 <Input
-                  type="date"
-                  value={fechaFactura}
+                  type="text"
+                  value={formatDateForDisplay(fechaFactura)}
                   disabled
                   className="factura-input-disabled"
                 />
@@ -1376,8 +1384,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
               <div className="factura-field">
                 <label className="factura-label">Fecha de Recepción</label>
                 <Input
-                  type="date"
-                  value={fechaRecepcion}
+                  type="text"
+                  value={formatDateForDisplay(fechaRecepcion)}
                   disabled
                   className="factura-input-disabled"
                 />

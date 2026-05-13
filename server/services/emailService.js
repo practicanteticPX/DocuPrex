@@ -60,6 +60,66 @@ async function sendEmail({ to, subject, html, text }) {
     throw error;
   }
 }
+
+function buildDocuPrexEmailTemplate({ title, message, buttonUrl, buttonText = 'Ver Documento' }) {
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title}</title>
+    </head>
+    <body style="margin:0;padding:0;width:100%;background-color:#f3f4f6;">
+      <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f3f4f6" style="width:100%;background-color:#f3f4f6;">
+        <tr>
+          <td style="height:64px;font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+        <tr>
+          <td align="center">
+            <table role="presentation" width="448" align="center" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:448px;margin:0 auto;background-color:#ffffff;">
+              <tr>
+                <td style="padding:32px;text-align:center;">
+                  <h1 style="margin:0 0 8px;font-family:'Poppins',Arial,sans-serif;font-size:20px;font-weight:600;color:#1f2937;">
+                    ${title}
+                  </h1>
+                  <p style="margin:0 0 32px;font-family:'Poppins',Arial,sans-serif;font-size:16px;line-height:1.55;color:#6b7280;">
+                    ${message}
+                  </p>
+                  <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto;">
+                    <tr>
+                      <td align="center" bgcolor="#10B981" style="background-color:#10B981;border-radius:8px;">
+                        <a href="${buttonUrl}" target="_blank" style="display:inline-block;text-decoration:none;font-family:'Poppins',Arial,sans-serif;font-size:16px;font-weight:600;padding:12px 24px;border:1px solid #10B981;border-radius:8px;">
+                          <span style="color:#ffffff;text-decoration:none;">${buttonText}</span>
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td align="center">
+            <table role="presentation" width="448" border="0" cellspacing="0" cellpadding="0" align="center" style="width:100%;max-width:448px;margin:0 auto;">
+              <tr>
+                <td style="padding:24px 0;text-align:center;font-family:'Poppins',Arial,sans-serif;font-size:12px;color:#6b7280;">
+                  <p style="margin:0;">&copy; ${new Date().getFullYear()} DocuPrex&reg; - Powered by Prexxa TIC</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="height:64px;font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+}
 /**
  * Notifica a un firmante que ha sido asignado a un documento
  * @param {Object} params - Parámetros de la notificación
@@ -74,12 +134,17 @@ async function notificarAsignacionFirmante({
   nombreFirmante,
   nombreDocumento,
   documentoId,
-  creadorDocumento
+  creadorDocumento,
+  tipoDocumento = 'documento'
 }) {
   const frontendUrl = serverConfig.frontendUrl;
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
-  const subject = 'Solicitud de Firma';
+  const noun = tipoDocumento === 'factura' ? 'factura' : tipoDocumento === 'anticipo' ? 'anticipo' : 'documento';
+  const article = tipoDocumento === 'factura' ? 'la' : 'el';
+  const pronoun = tipoDocumento === 'factura' ? 'la' : 'lo';
+
+  const subject = 'Solicitud de firma';
 
   const html = `
     <!DOCTYPE html>
@@ -158,9 +223,9 @@ async function notificarAsignacionFirmante({
                   <h1 style="margin-top: 0; margin-bottom: 8px; font-family: 'Poppins', Arial, sans-serif; font-size: 20px; font-weight: 600; color: #1f2937;">
                     Firma pendiente
                   </h1>
-                  
+
                   <p style="margin: 0; margin-bottom: 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; color: #6b7280;">
-                    <span style="font-weight: 500; color: #374151;">${creadorDocumento}</span> te ha enviado el documento "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>" para que lo firmes.
+                    <span style="font-weight: 500; color: #374151;">${creadorDocumento}</span> te ha enviado ${article} ${noun} "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>" para que ${pronoun} firmes.
                   </p>
                   
                   <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto;">
@@ -207,9 +272,9 @@ async function notificarAsignacionFirmante({
   const text = `
 Hola ${nombreFirmante},
 
-Has sido asignado como firmante de un documento en el sistema DocuPrex.
+Has sido asignado como firmante de ${article} ${noun} en el sistema DocuPrex.
 
-Documento: ${nombreDocumento}
+${noun.charAt(0).toUpperCase() + noun.slice(1)}: ${nombreDocumento}
 Solicitado por: ${creadorDocumento}
 
 Para revisar y firmar el documento, visita el siguiente enlace:
@@ -236,12 +301,27 @@ async function notificarDocumentoFirmadoCompleto({
   emails,
   nombreDocumento,
   documentoId,
-  urlDescarga
+  urlDescarga,
+  tipoDocumento = 'documento'
 }) {
   const frontendUrl = serverConfig.frontendUrl;
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
-  const subject = 'Documento Completado';
+  const noun = tipoDocumento === 'factura' ? 'factura' : tipoDocumento === 'anticipo' ? 'anticipo' : 'documento';
+  const nounCap = noun.charAt(0).toUpperCase() + noun.slice(1);
+  const article = tipoDocumento === 'factura' ? 'la' : 'el';
+  const articleCap = tipoDocumento === 'factura' ? 'La' : 'El';
+  const participle = tipoDocumento === 'factura' ? 'firmada' : 'firmado';
+  const subject = tipoDocumento === 'factura'
+    ? 'FV - Firmas completadas'
+    : tipoDocumento === 'anticipo'
+      ? 'SA - Firmas completadas'
+      : 'Documento Completado';
+  const emailTitle = tipoDocumento === 'factura'
+    ? 'Factura completada'
+    : tipoDocumento === 'anticipo'
+      ? 'Anticipo completado'
+      : 'Documento completado';
 
   const html = `  
         <!DOCTYPE html>
@@ -250,7 +330,7 @@ async function notificarDocumentoFirmadoCompleto({
       <meta charset="UTF-8">
       <meta http-equiv="X-UA-Compatible" content="IE=edge">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Documento Completado</title>
+      <title>${emailTitle}</title>
       <style>
         body {
           margin: 0;
@@ -317,11 +397,11 @@ async function notificarDocumentoFirmadoCompleto({
                 <td class="content" style="padding: 32px; text-align: center;">
                   
                   <h1 style="margin-top: 0; margin-bottom: 8px; font-family: 'Poppins', Arial, sans-serif; font-size: 20px; font-weight: 600; color: #1f2937;">
-                    Documento completado
+                    ${emailTitle}
                   </h1>
-                  
+
                   <p style="margin: 0; margin-bottom: 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; color: #6b7280;">
-                    El documento "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>" ha sido firmado por todas las partes.
+                    ${articleCap} ${noun} "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>" ha sido ${participle} por todas las partes.
                   </p>
                   
                   <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto;">
@@ -367,9 +447,9 @@ async function notificarDocumentoFirmadoCompleto({
   const text = `
 Estimado usuario,
 
-Te informamos que el siguiente documento ha sido firmado completamente por todas las partes involucradas.
+Te informamos que ${article} siguiente ${noun} ha sido ${participle} por todas las partes involucradas.
 
-Documento: ${nombreDocumento}
+${nounCap}: ${nombreDocumento}
 Estado: Completado
 Fecha: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
 
@@ -404,12 +484,21 @@ async function notificarDocumentoRechazado({
   nombreDocumento,
   documentoId,
   rechazadoPor,
-  motivoRechazo
+  motivoRechazo,
+  tipoDocumento = 'documento'
 }) {
   const frontendUrl = serverConfig.frontendUrl;
   const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
 
-  const subject = 'Documento rechazado';
+  const noun = tipoDocumento === 'factura' ? 'factura' : tipoDocumento === 'anticipo' ? 'anticipo' : 'documento';
+  const nounCap = noun.charAt(0).toUpperCase() + noun.slice(1);
+  const article = tipoDocumento === 'factura' ? 'la' : 'el';
+  const subject = tipoDocumento === 'factura'
+    ? 'Factura rechazada'
+    : tipoDocumento === 'anticipo'
+      ? 'Anticipo rechazado'
+      : 'Documento rechazado';
+  const emailTitle = subject;
 
   const html = `
     <!DOCTYPE html>
@@ -418,7 +507,7 @@ async function notificarDocumentoRechazado({
       <meta charset="UTF-8">
       <meta http-equiv="X-UA-Compatible" content="IE=edge">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Documento Rechazado</title>
+      <title>${emailTitle}</title>
       <style>
         body {
           margin: 0;
@@ -486,11 +575,11 @@ async function notificarDocumentoRechazado({
                 <td class="content" style="padding: 32px; text-align: center;">
                   
                   <h1 style="margin-top: 0; margin-bottom: 8px; font-family: 'Poppins', Arial, sans-serif; font-size: 20px; font-weight: 600; color: #1f2937;">
-                    Documento rechazado
+                    ${emailTitle}
                   </h1>
-                  
+
                   <p style="margin: 0; margin-bottom: 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; color: #6b7280;">
-                    <span style="font-weight: 500; color: #374151;">${rechazadoPor}</span> ha rechazado el documento "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>".
+                    <span style="font-weight: 500; color: #374151;">${rechazadoPor}</span> ha rechazado ${article} ${noun} "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>".
                   </p>
                   
                   <div style="margin-bottom: 32px; text-align: left; background-color: #fef2f2; padding: 12px 16px;">
@@ -538,9 +627,9 @@ async function notificarDocumentoRechazado({
   const text = `
 Estimado usuario,
 
-Te informamos que el siguiente documento ha sido rechazado.
+Te informamos que ${article} siguiente ${noun} ha sido rechazado.
 
-Documento: ${nombreDocumento}
+${nounCap}: ${nombreDocumento}
 Rechazado por: ${rechazadoPor}
 Fecha: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
 
@@ -564,6 +653,7 @@ Este es un correo automático, por favor no responder.
 
 module.exports = {
   sendEmail,
+  buildDocuPrexEmailTemplate,
   notificarAsignacionFirmante,
   notificarDocumentoFirmadoCompleto,
   notificarDocumentoRechazado

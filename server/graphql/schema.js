@@ -54,6 +54,9 @@ const typeDefs = gql`
     payableStatus: String
     paidAt: String
     paidBy: User
+    advancePaymentStatus: String
+    advancePaidAt: String
+    advancePaidBy: User
     # Campos calculados
     totalSigners: Int
     signedCount: Int
@@ -282,14 +285,16 @@ const typeDefs = gql`
 
     # Documentos
     uploadDocument(title: String!, description: String, documentTypeId: ID): UploadResponse!
+    createCausacionTestFactura: UploadResponse!
     updateDocument(id: ID!, title: String, description: String, status: String, documentTypeId: ID): Document!
     deleteDocument(id: ID!): Boolean!
     assignSigners(documentId: ID!, signerAssignments: [SignerAssignmentInput!]!): Boolean!
     updateFacturaTemplate(documentId: ID!, templateData: String!): UpdateFacturaTemplateResponse!
     updatePayableInvoiceStatus(documentId: ID!, paymentStatus: String!): Document!
+    updateTreasuryAdvancePaymentStatus(documentId: ID!, paymentStatus: String!): Document!
 
     # Firmas
-    signDocument(documentId: ID!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String): Signature!
+    signDocument(documentId: ID!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String, causacionData: String): Signature!
     rejectDocument(documentId: ID!, reason: String, realSignerName: String): Boolean!
 
     # Retenciones

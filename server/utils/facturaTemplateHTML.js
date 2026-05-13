@@ -50,6 +50,9 @@ function generateFacturaHTML(data) {
     filasControl = [],
     totalPorcentaje = 0,
     observaciones = '',
+    numeroCausacion = '',
+    observacionesCausacion = '',
+    fechaCausacion = '',
     firmas = {}, // Objeto con las firmas: { 'nombre_persona': 'nombre_firmante' }
     retentionData = [], // Array con las retenciones activas del documento
     isRejected = false // Si el documento fue rechazado
@@ -80,6 +83,14 @@ function generateFacturaHTML(data) {
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const formatDateForDisplay = (dateStr) => {
+    const normalizedDate = formatDate(dateStr);
+    if (!normalizedDate) return '';
+
+    const [year, month, day] = normalizedDate.split('-');
+    return `${day}/${month}/${year}`;
   };
 
   const calcularTotal = () => {
@@ -580,11 +591,11 @@ function generateFacturaHTML(data) {
         </div>
         <div class="factura-field">
           <label class="factura-label">Fecha Factura</label>
-          <input type="date" value="${formatDate(fechaFactura)}" class="ui-input" readonly />
+          <input type="text" value="${formatDateForDisplay(fechaFactura)}" class="ui-input" readonly />
         </div>
         <div class="factura-field">
           <label class="factura-label">Fecha de Recepción</label>
-          <input type="date" value="${formatDate(fechaRecepcion)}" class="ui-input" readonly />
+          <input type="text" value="${formatDateForDisplay(fechaRecepcion)}" class="ui-input" readonly />
         </div>
       </div>
       <div class="factura-field-checkbox-simple">
@@ -714,17 +725,46 @@ function generateFacturaHTML(data) {
 
     ${observaciones ? `
     <!-- Sección de Observaciones -->
-    <div class="factura-section">
-      <h2 class="factura-section-title">Observaciones</h2>
+    <div class="factura-section" style="padding: 8px 14px; margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid;">
+      <h2 class="factura-section-title" style="margin-bottom: 6px;">Observaciones</h2>
       <div class="factura-field">
         <textarea class="ui-input" readonly style="
-          min-height: 60px;
+          min-height: 38px;
+          height: 38px;
+          padding: 6px 10px;
           white-space: pre-wrap;
           overflow-wrap: break-word;
           resize: none;
-          line-height: 1.5;
+          line-height: 1.35;
           background: white;
         ">${observaciones}</textarea>
+      </div>
+    </div>
+    ` : ''}
+
+    ${(numeroCausacion || observacionesCausacion) ? `
+    <!-- SecciÃ³n de CausaciÃ³n -->
+    <div class="factura-section" style="padding: 8px 14px; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid;">
+      <h2 class="factura-section-title" style="margin-bottom: 6px;">Causacion</h2>
+      <div style="display: grid; grid-template-columns: 150px 150px 1fr; gap: 8px; align-items: stretch;">
+        ${numeroCausacion ? `
+        <div style="border: 1px solid #D1D5DB; border-radius: 6px; background: #FFFFFF; padding: 6px 8px; min-height: 40px;">
+          <div style="font-size: 11px; font-weight: 700; color: #172B4D; margin-bottom: 3px;">No. de Causacion</div>
+          <div style="font-size: 12px; color: #111827;">${numeroCausacion}</div>
+        </div>
+        ` : ''}
+        ${fechaCausacion ? `
+        <div style="border: 1px solid #D1D5DB; border-radius: 6px; background: #FFFFFF; padding: 6px 8px; min-height: 40px;">
+          <div style="font-size: 11px; font-weight: 700; color: #172B4D; margin-bottom: 3px;">Fecha de Causacion</div>
+          <div style="font-size: 12px; color: #111827;">${fechaCausacion}</div>
+        </div>
+        ` : ''}
+        ${observacionesCausacion ? `
+        <div style="border: 1px solid #D1D5DB; border-radius: 6px; background: #FFFFFF; padding: 6px 8px; min-height: 40px;">
+          <div style="font-size: 11px; font-weight: 700; color: #172B4D; margin-bottom: 3px;">Descripcion de Causacion</div>
+          <div style="font-size: 12px; color: #111827; white-space: pre-wrap; overflow-wrap: break-word; line-height: 1.25;">${observacionesCausacion}</div>
+        </div>
+        ` : ''}
       </div>
     </div>
     ` : ''}

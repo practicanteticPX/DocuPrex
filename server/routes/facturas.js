@@ -392,6 +392,7 @@ router.post('/desmarcar-en-proceso/:numeroControl', async (req, res) => {
 router.post('/marcar-causado/:numeroControl', async (req, res) => {
   try {
     const { numeroControl } = req.params;
+    const { numeroCausacion, observaciones } = req.body || {};
 
     if (!numeroControl || numeroControl.trim() === '') {
       return res.status(400).json({
@@ -402,10 +403,17 @@ router.post('/marcar-causado/:numeroControl', async (req, res) => {
 
     const result = await queryFacturas(
       `UPDATE crud_facturas."T_Facturas"
-       SET causado = TRUE
+       SET causado = TRUE,
+           fecha_causacion = COALESCE(fecha_causacion, CURRENT_DATE),
+           numero_causacion = COALESCE($2, numero_causacion),
+           observaciones = COALESCE($3, observaciones)
        WHERE numero_control = $1
-       RETURNING numero_control, causado`,
-      [numeroControl.trim()]
+       RETURNING numero_control, causado, fecha_causacion, numero_causacion, observaciones`,
+      [
+        numeroControl.trim(),
+        numeroCausacion ? String(numeroCausacion).trim() : null,
+        observaciones ? String(observaciones).trim() : null
+      ]
     );
 
     if (result.rows.length === 0) {

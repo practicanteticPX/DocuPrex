@@ -752,6 +752,168 @@ html:has(.pdf-viewer-minimal-overlay) {
   color: white !important;
 }
 
+.causacion-confirm-modal {
+  width: min(90vw, 420px) !important;
+  max-width: 420px !important;
+  max-height: calc(100vh - 28px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 22px 24px !important;
+  border-radius: 18px !important;
+  scrollbar-width: thin !important;
+  box-sizing: border-box !important;
+}
+
+.causacion-confirm-modal *,
+.causacion-confirm-modal *::before,
+.causacion-confirm-modal *::after {
+  box-sizing: border-box !important;
+}
+
+.causacion-confirm-modal .sign-confirm-icon {
+  width: 46px !important;
+  height: 46px !important;
+  margin-bottom: 10px !important;
+}
+
+.causacion-confirm-modal .sign-confirm-title {
+  font-size: 20px !important;
+  margin-bottom: 6px !important;
+}
+
+.causacion-confirm-modal .sign-confirm-message {
+  margin: 0 0 10px !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+
+.causacion-confirm-fields {
+  display: grid !important;
+  gap: 10px !important;
+  margin: 10px 0 14px !important;
+  text-align: left !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.causacion-confirm-field {
+  display: grid !important;
+  gap: 6px !important;
+  color: #1f2937 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.causacion-confirm-input,
+.causacion-confirm-textarea {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  border: 1px solid #d8dee8 !important;
+  border-radius: 9px !important;
+  padding: 0 12px !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  font: inherit !important;
+  font-weight: 500 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.causacion-confirm-input {
+  height: 38px !important;
+}
+
+.causacion-confirm-textarea {
+  min-height: 76px !important;
+  max-height: 108px !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  resize: vertical !important;
+}
+
+.causacion-confirm-input:-webkit-autofill,
+.causacion-confirm-textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #111827 !important;
+  caret-color: #111827 !important;
+}
+
+.causacion-confirm-input:focus,
+.causacion-confirm-textarea:focus {
+  border-color: #4F46E5 !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14) !important;
+}
+
+.causacion-confirm-input.disabled {
+  color: #667085 !important;
+  -webkit-text-fill-color: #667085 !important;
+  background: #f3f4f6 !important;
+}
+
+.causacion-confirm-modal .sign-confirm-actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+  margin-top: 4px !important;
+}
+
+.causacion-confirm-modal .sign-confirm-btn {
+  min-height: 42px !important;
+  padding: 10px 14px !important;
+  border-radius: 10px !important;
+  font-size: 14px !important;
+}
+
+.causacion-confirm-error {
+  color: #dc2626 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+@media (max-height: 640px), (max-width: 520px) {
+  .causacion-confirm-modal {
+    width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+
+  .causacion-confirm-modal .sign-confirm-icon {
+    width: 40px !important;
+    height: 40px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .causacion-confirm-modal .sign-confirm-title {
+    font-size: 18px !important;
+  }
+
+  .causacion-confirm-modal .sign-confirm-message {
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+  }
+
+  .causacion-confirm-fields {
+    gap: 10px !important;
+    margin: 12px 0 !important;
+  }
+
+  .causacion-confirm-input {
+    height: 36px !important;
+  }
+
+  .causacion-confirm-textarea {
+    min-height: 64px !important;
+    max-height: 86px !important;
+  }
+
+  .causacion-confirm-modal .sign-confirm-actions {
+    gap: 8px !important;
+  }
+}
+
 /* Botones de modales de error y rechazo en rojo */
 .error-modal .sign-confirm-btn.confirm,
 .success-modal.reject-success .sign-confirm-btn.confirm {

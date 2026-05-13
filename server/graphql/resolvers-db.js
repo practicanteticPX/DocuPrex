@@ -3,9 +3,12 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs').promises;
 const { query, pool } = require('../database/db');
+const { queryFacturas } = require('../database/facturas-db');
 const { authenticateUser, getAllUsers } = require('../services/ldap');
 const { addCoverPageWithSigners, updateSignersPage } = require('../utils/pdfCoverPage');
 const {
+  sendEmail,
+  buildDocuPrexEmailTemplate,
   notificarAsignacionFirmante,
   notificarDocumentoFirmadoCompleto,
   notificarDocumentoRechazado
@@ -26,6 +29,41 @@ let negotiationSignersTableExists = null;
 let availableSignersLastSyncAt = 0;
 let availableSignersSyncPromise = null;
 const AVAILABLE_SIGNERS_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const CAUSACION_TEST_USER_EMAILS = new Set([
+  'j.bustamante@prexxa.com.co',
+  'practicantetic@prexxa.com.co'
+]);
+
+const normalizeTestText = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toLowerCase();
+
+const isCausacionTestUser = (user) => {
+  if (!user) return false;
+
+  const email = normalizeTestText(user.email);
+  const username = normalizeTestText(user.username);
+  const name = normalizeTestText(user.name);
+
+  return CAUSACION_TEST_USER_EMAILS.has(email)
+    || username === 'j.bustamante'
+    || name === 'jesus bustamante';
+};
+
+const isCausacionTestDocument = (doc) => {
+  if (!doc || doc.document_type_code !== 'FV') return false;
+
+  const testText = [
+    doc.title,
+    doc.file_name,
+    doc.description,
+    doc.metadata
+  ].map(normalizeTestText).join(' ');
+
+  return testText.includes('prueba') || testText.includes('test');
+};
 
 async function checkSignaturesHasConsecutivoColumn() {
   if (signaturesHasConsecutivoColumn !== null) {
@@ -258,6 +296,7 @@ async function ensurePayableInvoicesTable() {
       payment_status VARCHAR(20) NOT NULL DEFAULT 'pending',
       paid_at TIMESTAMP,
       paid_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      creator_notified_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -279,6 +318,21 @@ async function ensurePayableInvoicesTable() {
   `);
 
   await query(`
+    ALTER TABLE payable_invoices
+    ADD COLUMN IF NOT EXISTS creator_notified_at TIMESTAMP
+  `);
+
+  await query(`
+    ALTER TABLE payable_invoices
+    DROP CONSTRAINT IF EXISTS payable_invoices_document_id_key
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_payable_invoices_document_user
+    ON payable_invoices(document_id, user_id)
+  `);
+
+  await query(`
     CREATE INDEX IF NOT EXISTS idx_payable_invoices_user_id
     ON payable_invoices(user_id)
   `);
@@ -291,6 +345,56 @@ async function ensurePayableInvoicesTable() {
   await query(`
     CREATE INDEX IF NOT EXISTS idx_payable_invoices_payment_status
     ON payable_invoices(payment_status)
+  `);
+}
+
+async function ensureTreasuryAdvancePaymentsTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS treasury_advance_payments (
+      id SERIAL PRIMARY KEY,
+      document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      payment_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      paid_at TIMESTAMP,
+      paid_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await query(`
+    ALTER TABLE treasury_advance_payments
+    ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) NOT NULL DEFAULT 'pending'
+  `);
+
+  await query(`
+    ALTER TABLE treasury_advance_payments
+    ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP
+  `);
+
+  await query(`
+    ALTER TABLE treasury_advance_payments
+    ADD COLUMN IF NOT EXISTS paid_by UUID REFERENCES users(id) ON DELETE SET NULL
+  `);
+
+  await query(`
+    ALTER TABLE treasury_advance_payments
+    ADD COLUMN IF NOT EXISTS creator_notified_at TIMESTAMP
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_treasury_advance_payments_document_user
+    ON treasury_advance_payments(document_id, user_id)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_treasury_advance_payments_user_id
+    ON treasury_advance_payments(user_id)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_treasury_advance_payments_status
+    ON treasury_advance_payments(payment_status)
   `);
 }
 
@@ -307,12 +411,187 @@ async function getMonicaBustamanteUser() {
   return result.rows[0] || null;
 }
 
+async function getPayableInvoiceUsers() {
+  const result = await query(
+    `SELECT id, name, email
+     FROM users
+     WHERE LOWER(TRIM(email)) IN ('m.bustamante@prexxa.com.co', 'practicantetic@prexxa.com.co', 'j.bustamante@prexxa.com.co')
+        OR LOWER(TRIM(name)) IN ('monica bustamante', 'jesus bustamante', 'jesús bustamante')
+     ORDER BY
+       CASE
+         WHEN LOWER(TRIM(email)) = 'm.bustamante@prexxa.com.co' THEN 0
+         WHEN LOWER(TRIM(name)) = 'monica bustamante' THEN 1
+         WHEN LOWER(TRIM(email)) IN ('practicantetic@prexxa.com.co', 'j.bustamante@prexxa.com.co') THEN 2
+         ELSE 3
+       END`
+  );
+
+  const seen = new Set();
+  return result.rows.filter(payableUser => {
+    const id = String(payableUser.id);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+async function isPayableInvoiceUser(userId) {
+  const payableUsers = await getPayableInvoiceUsers();
+  return payableUsers.some(payableUser => String(payableUser.id) === String(userId));
+}
+
+async function notifyTreasuryAdvancePaidCreator({ documentId, actorUserId }) {
+  const docResult = await query(
+    `SELECT
+       d.id,
+       d.title,
+       d.uploaded_by,
+       creator.name as creator_name,
+       creator.email as creator_email,
+       creator.email_notifications,
+       actor.name as actor_name
+     FROM documents d
+     JOIN users creator ON creator.id = d.uploaded_by
+     LEFT JOIN users actor ON actor.id = $2::uuid
+     WHERE d.id = $1`,
+    [documentId, actorUserId]
+  );
+
+  const doc = docResult.rows[0];
+  if (!doc?.uploaded_by) {
+    return false;
+  }
+
+  if (String(doc.uploaded_by) === String(actorUserId) && !isCausacionTestUser({
+    id: actorUserId,
+    name: doc.creator_name,
+    email: doc.creator_email
+  })) {
+    return false;
+  }
+
+  const notificationResult = await query(
+    `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+     SELECT $1::uuid, 'treasury_advance_paid', $2::uuid, $3::uuid, $4::varchar
+     WHERE NOT EXISTS (
+       SELECT 1 FROM notifications
+       WHERE user_id = $1::uuid
+         AND type = 'treasury_advance_paid'
+         AND document_id = $2::uuid
+     )
+     RETURNING id`,
+    [doc.uploaded_by, documentId, actorUserId, doc.title]
+  );
+
+  if (notificationResult.rows.length > 0) {
+    websocketService.emitNotificationCreated(doc.uploaded_by, {
+      id: notificationResult.rows[0].id,
+      type: 'treasury_advance_paid',
+      document_id: documentId,
+      actor_id: actorUserId,
+      document_title: doc.title
+    });
+  }
+
+  if (!doc.email_notifications) {
+    return;
+  }
+
+  const documentoUrl = `${serverConfig.frontendUrl}/documento/${documentId}`;
+  await sendEmail({
+    to: doc.creator_email,
+    subject: 'Anticipo pagado',
+    html: buildDocuPrexEmailTemplate({
+      title: 'Anticipo pagado',
+      message: `El anticipo "<span style="font-weight:500;color:#374151;">${doc.title}</span>" fue marcado como pagado por ${doc.actor_name || 'Tesorería'}.`,
+      buttonUrl: documentoUrl,
+      buttonText: 'Ver Documento'
+    }),
+    text: `Hola ${doc.creator_name || ''},\n\nEl anticipo "${doc.title}" fue marcado como pagado por ${doc.actor_name || 'Tesorería'}.\n\nVer documento: ${documentoUrl}\n\nEste es un correo automático, por favor no responder.`
+  });
+}
+
+async function notifyPayableInvoicePaidCreator({ documentId, actorUserId }) {
+  const docResult = await query(
+    `SELECT
+       d.id,
+       d.title,
+       d.uploaded_by,
+       creator.name as creator_name,
+       creator.email as creator_email,
+       creator.email_notifications,
+       actor.name as actor_name
+     FROM documents d
+     JOIN users creator ON creator.id = d.uploaded_by
+     LEFT JOIN users actor ON actor.id = $2::uuid
+     WHERE d.id = $1`,
+    [documentId, actorUserId]
+  );
+
+  const doc = docResult.rows[0];
+  if (!doc?.uploaded_by) {
+    return false;
+  }
+
+  if (String(doc.uploaded_by) === String(actorUserId) && !isCausacionTestUser({
+    id: actorUserId,
+    name: doc.creator_name,
+    email: doc.creator_email
+  })) {
+    return false;
+  }
+
+  const notificationResult = await query(
+    `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+     SELECT $1::uuid, 'payable_invoice_paid', $2::uuid, $3::uuid, $4::varchar
+     WHERE NOT EXISTS (
+       SELECT 1 FROM notifications
+       WHERE user_id = $1::uuid
+         AND type = 'payable_invoice_paid'
+         AND document_id = $2::uuid
+     )
+     RETURNING id`,
+    [doc.uploaded_by, documentId, actorUserId, doc.title]
+  );
+
+  if (notificationResult.rows.length === 0) {
+    return false;
+  }
+
+  websocketService.emitNotificationCreated(doc.uploaded_by, {
+    id: notificationResult.rows[0].id,
+    type: 'payable_invoice_paid',
+    document_id: documentId,
+    actor_id: actorUserId,
+    document_title: doc.title
+  });
+
+  if (!doc.email_notifications) {
+    return true;
+  }
+
+  const documentoUrl = `${serverConfig.frontendUrl}/documento/${documentId}`;
+  await sendEmail({
+    to: doc.creator_email,
+    subject: 'Factura pagada',
+    html: buildDocuPrexEmailTemplate({
+      title: 'Factura pagada',
+      message: `La factura "<span style="font-weight:500;color:#374151;">${doc.title}</span>" fue marcada como pagada por ${doc.actor_name || 'Tesorer?a'}.`,
+      buttonUrl: documentoUrl,
+      buttonText: 'Ver Documento'
+    }),
+    text: `Hola ${doc.creator_name || ''},\n\nLa factura "${doc.title}" fue marcada como Pagada por ${doc.actor_name || 'Tesorer?a'}.\n\nVer documento: ${documentoUrl}\n\nEste es un correo autom?tico, por favor no responder.`
+  });
+
+  return true;
+}
+
 async function assignCompletedInvoiceToPayables(documentId, actorUserId = null) {
   await ensurePayableInvoicesTable();
 
-  const monicaUser = await getMonicaBustamanteUser();
-  if (!monicaUser?.id) {
-    console.warn(`No se encontro Monica Bustamante para asignar factura por pagar del documento ${documentId}`);
+  const payableUsers = await getPayableInvoiceUsers();
+  if (payableUsers.length === 0) {
+    console.warn(`No se encontraron usuarios para asignar factura por pagar del documento ${documentId}`);
     return null;
   }
 
@@ -329,41 +608,48 @@ async function assignCompletedInvoiceToPayables(documentId, actorUserId = null) 
     return null;
   }
 
-  const insertResult = await query(
-    `INSERT INTO payable_invoices (document_id, user_id)
-     VALUES ($1, $2)
-     ON CONFLICT (document_id) DO UPDATE SET
-       user_id = EXCLUDED.user_id,
-       updated_at = CURRENT_TIMESTAMP
-     RETURNING id`,
-    [documentId, monicaUser.id]
-  );
+  const insertedRows = [];
 
-  const notificationResult = await query(
-    `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-     SELECT $1::uuid, 'payable_invoice', $2::uuid, $3::uuid, $4::varchar
-     WHERE NOT EXISTS (
-       SELECT 1 FROM notifications
-       WHERE user_id = $1::uuid
-         AND type = 'payable_invoice'
-         AND document_id = $2::uuid
-     )
-     RETURNING id`,
-    [monicaUser.id, documentId, actorUserId, doc.title]
-  );
+  for (const payableUser of payableUsers) {
+    const insertResult = await query(
+      `INSERT INTO payable_invoices (document_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT (document_id, user_id) DO UPDATE SET
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING id`,
+      [documentId, payableUser.id]
+    );
 
-  if (notificationResult.rows.length > 0) {
-    websocketService.emitNotificationCreated(monicaUser.id, {
-      id: notificationResult.rows[0].id,
-      type: 'payable_invoice',
-      document_id: documentId,
-      actor_id: actorUserId,
-      document_title: doc.title
-    });
+    if (insertResult.rows[0]) {
+      insertedRows.push(insertResult.rows[0]);
+    }
+
+    const notificationResult = await query(
+      `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+       SELECT $1::uuid, 'payable_invoice', $2::uuid, $3::uuid, $4::varchar
+       WHERE NOT EXISTS (
+         SELECT 1 FROM notifications
+         WHERE user_id = $1::uuid
+           AND type = 'payable_invoice'
+           AND document_id = $2::uuid
+       )
+       RETURNING id`,
+      [payableUser.id, documentId, actorUserId, doc.title]
+    );
+
+    if (notificationResult.rows.length > 0) {
+      websocketService.emitNotificationCreated(payableUser.id, {
+        id: notificationResult.rows[0].id,
+        type: 'payable_invoice',
+        document_id: documentId,
+        actor_id: actorUserId,
+        document_title: doc.title
+      });
+    }
   }
 
-  console.log(`Factura FV completada enviada a Facturas por pagar de Monica: ${doc.title}`);
-  return insertResult.rows[0] || null;
+  console.log(`Factura FV completada enviada a Facturas por pagar: ${doc.title}`);
+  return insertedRows[0] || null;
 }
 
 async function getNegociacionesSharedUserIds(user, realSignerName = null) {
@@ -878,6 +1164,7 @@ const resolvers = {
 
     pendingDocuments: async (_, __, { user }) => {
       if (!user) throw new Error('No autenticado');
+      const isTestSignatureUser = isCausacionTestUser(user);
 
       // Obtener grupos de causación del usuario
       const userGroups = await query(`
@@ -910,6 +1197,8 @@ const resolvers = {
               LEFT JOIN signatures s_prev ON ds_prev.document_id = s_prev.document_id
                 AND (
                   (ds_prev.is_causacion_group = false AND ds_prev.user_id = s_prev.signer_id)
+                  OR
+                  ($3::boolean = true AND s_prev.document_signer_id = ds_prev.id)
                   OR
                   (ds_prev.is_causacion_group = true AND s_prev.signer_id IN (
                     SELECT ci.user_id FROM causacion_integrantes ci
@@ -945,6 +1234,18 @@ const resolvers = {
           OR
           -- Caso 2: Usuario es miembro de un grupo de causación asignado
           (ds.is_causacion_group = true AND ds.grupo_codigo = ANY($2))
+          OR
+          ($3::boolean = true
+            AND dt.code = 'FV'
+            AND (
+              LOWER(COALESCE(d.title, '')) LIKE '%prueba%'
+              OR LOWER(COALESCE(d.title, '')) LIKE '%test%'
+              OR LOWER(COALESCE(d.file_name, '')) LIKE '%prueba%'
+              OR LOWER(COALESCE(d.file_name, '')) LIKE '%test%'
+              OR LOWER(COALESCE(d.description, '')) LIKE '%prueba%'
+              OR LOWER(COALESCE(d.metadata::text, '')) LIKE '%prueba%'
+            )
+          )
         )
           AND d.status NOT IN ('completed', 'archived', 'rejected')
           -- Solo mostrar si ya es su turno real de firma
@@ -954,6 +1255,8 @@ const resolvers = {
             LEFT JOIN signatures s_prev ON ds_prev.document_id = s_prev.document_id
               AND (
                 (ds_prev.is_causacion_group = false AND ds_prev.user_id = s_prev.signer_id)
+                OR
+                ($3::boolean = true AND s_prev.document_signer_id = ds_prev.id)
                 OR
                 (ds_prev.is_causacion_group = true AND s_prev.signer_id IN (
                   SELECT ci.user_id FROM causacion_integrantes ci
@@ -972,6 +1275,8 @@ const resolvers = {
             AND (
               (ds.is_causacion_group = false AND s.signer_id = $1 AND s.status IN ('signed', 'rejected'))
               OR
+              ($3::boolean = true AND s.document_signer_id = ds.id AND s.status IN ('signed', 'rejected'))
+              OR
               (ds.is_causacion_group = true AND s.status IN ('signed', 'rejected') AND s.signer_id IN (
                 SELECT ci.user_id FROM causacion_integrantes ci
                 JOIN causacion_grupos cg ON ci.grupo_id = cg.id
@@ -987,6 +1292,8 @@ const resolvers = {
               AND (
                 (ds_prev.is_causacion_group = false AND ds_prev.user_id = s_prev.signer_id)
                 OR
+                ($3::boolean = true AND s_prev.document_signer_id = ds_prev.id)
+                OR
                 (ds_prev.is_causacion_group = true AND s_prev.signer_id IN (
                   SELECT ci.user_id FROM causacion_integrantes ci
                   JOIN causacion_grupos cg ON ci.grupo_id = cg.id
@@ -997,8 +1304,8 @@ const resolvers = {
               AND ds_prev.order_position < ds.order_position
               AND s_prev.status = 'rejected'
           )
-        ORDER BY d.id, d.created_at DESC
-      `, [user.id, grupoCodigos]);
+        ORDER BY d.id, ds.order_position ASC, d.created_at DESC
+      `, [user.id, grupoCodigos, isTestSignatureUser]);
 
       return result.rows;
       } catch (err) {
@@ -1018,11 +1325,20 @@ const resolvers = {
           dt.name as document_type_name,
           dt.code as document_type_code,
           s.signed_at,
-          s.signature_type
+          s.signature_type,
+          s.signer_id as advance_payment_user_id,
+          COALESCE(tap.payment_status, 'pending') as advance_payment_status,
+          tap.paid_at as advance_paid_at,
+          tap.paid_by as advance_paid_by,
+          paid_user.name as advance_paid_by_name,
+          paid_user.email as advance_paid_by_email
         FROM signatures s
         JOIN documents d ON s.document_id = d.id
         JOIN users u ON d.uploaded_by = u.id
         LEFT JOIN document_types dt ON d.document_type_id = dt.id
+        LEFT JOIN treasury_advance_payments tap
+          ON tap.document_id = d.id AND tap.user_id = s.signer_id
+        LEFT JOIN users paid_user ON paid_user.id = tap.paid_by
         WHERE s.signer_id = $1
           AND s.status = 'signed'
           AND d.uploaded_by != $1
@@ -1043,8 +1359,7 @@ const resolvers = {
 
       await ensurePayableInvoicesTable();
 
-      const monicaUser = await getMonicaBustamanteUser();
-      if (!monicaUser || String(user.id) !== String(monicaUser.id)) {
+      if (!await isPayableInvoiceUser(user.id)) {
         return [];
       }
 
@@ -1866,6 +2181,229 @@ const resolvers = {
       };
     },
 
+    createCausacionTestFactura: async (_, __, { user }) => {
+      if (!user) throw new Error('No autenticado');
+      if (!isCausacionTestUser(user)) {
+        throw new Error('No autorizado');
+      }
+
+      const fvTypeResult = await query(
+        `SELECT id FROM document_types WHERE code = 'FV' LIMIT 1`
+      );
+
+      if (fvTypeResult.rows.length === 0) {
+        throw new Error('No existe el tipo documental FV');
+      }
+
+      const roleResult = await query(
+        `SELECT id, role_name, role_code
+         FROM document_type_roles
+         WHERE document_type_id = $1
+         ORDER BY order_position ASC`,
+        [fvTypeResult.rows[0].id]
+      );
+
+      const findRole = (...keys) => roleResult.rows.find(role => {
+        const text = normalizeForRoleMatch(`${role.role_name || ''} ${role.role_code || ''}`);
+        return keys.some(key => text.includes(normalizeForRoleMatch(key)));
+      });
+
+      const negociadorRole = findRole('NEGOCIADOR') || {};
+      const findRoleByCode = (...codes) => roleResult.rows.find(role => {
+        const code = normalizeForRoleMatch(role.role_code || '');
+        return codes.some(expectedCode => code === normalizeForRoleMatch(expectedCode));
+      });
+
+      const negociacionesRole = findRoleByCode('RESPONSABLE_NEGOCIACIONES') || findRole('NEGOCIACION') || {};
+      const respCuentaRole = findRoleByCode('RESPONSABLE_CUENTA_CONTABLE') || findRole('RESP_CUENTA', 'CUENTA CONTABLE', 'CONTABLE') || {};
+      const respCentroRole = findRoleByCode('RESPONSABLE_CENTRO_COSTOS') || findRole('RESP_CTRO_COST', 'CENTRO COSTO', 'CENTRO DE COSTO') || {};
+      const causacionRole = findRole('CAUSACION', 'CAUSACIÓN') || {};
+
+      const nextControlResult = await queryFacturas(
+        `SELECT GREATEST(COALESCE(MAX(numero_control), 900000), 900000) + 1 AS next_control
+         FROM crud_facturas."T_Facturas"`
+      );
+      const numeroControl = Number(nextControlResult.rows[0]?.next_control || Date.now().toString().slice(-6));
+      const numeroFactura = `PR-${numeroControl}`;
+      const today = new Date().toISOString().slice(0, 10);
+      const jesusName = user.name || 'Jesus Bustamante';
+      const testCuentaContable = '519595-JB';
+      const testNombreCuenta = 'CUENTA CONTABLE PRUEBA JESUS BUSTAMANTE';
+      const testCentroCosto = 'PX-JB-PRUEBA';
+      const testNombreCentroCosto = 'CENTRO DE COSTOS PRUEBA JESUS BUSTAMANTE';
+
+      await queryFacturas(
+        `INSERT INTO crud_facturas."T_CentrosCostos" ("Cia_CC", "CentroCosto", "Responsable")
+         SELECT $1::varchar, $2::varchar, $3::varchar
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM crud_facturas."T_CentrosCostos"
+           WHERE "Cia_CC" = $1::varchar
+         )`,
+        [testCentroCosto, testNombreCentroCosto, jesusName]
+      );
+
+      await queryFacturas(
+        `INSERT INTO crud_facturas."T_Facturas" (
+           numero_control, cia, cia_nit, nit, proveedor, numero_factura,
+           fecha_radicado, fecha_factura, factura_credito, acuse_recibo_sci,
+           entregada_a, fecha_entrega, en_proceso, finalizado, causado
+         )
+         VALUES ($1, 'PX', 'PX + 900000000-1', '900000000', 'PROVEEDOR PRUEBA CAUSACION', $2,
+           CURRENT_DATE, CURRENT_DATE, false, false, $3, CURRENT_DATE, true, false, false)`,
+        [numeroControl, numeroFactura, jesusName]
+      );
+
+      const templateData = {
+        consecutivo: String(numeroControl),
+        cia: 'PX',
+        numeroFactura,
+        proveedor: 'PROVEEDOR PRUEBA CAUSACION',
+        fechaFactura: today,
+        fechaRecepcion: today,
+        legalizaAnticipo: false,
+        checklistRevision: {
+          facturaOriginal: true,
+          ordenCompra: true,
+          entradaAlmacen: true
+        },
+        nombreNegociador: jesusName,
+        cargoNegociador: 'Entorno de pruebas',
+        filasControl: [
+          {
+            noCuentaContable: testCuentaContable,
+            respCuentaContable: jesusName,
+            cargoCuentaContable: 'Responsable cuenta contable prueba',
+            nombreCuentaContable: testNombreCuenta,
+            centroCostos: testCentroCosto,
+            respCentroCostos: jesusName,
+            cargoCentroCostos: 'Responsable centro de costos prueba',
+            concepto: 'Prueba de causacion autonoma',
+            porcentaje: '100'
+          }
+        ],
+        totalPorcentaje: 100,
+        observaciones: 'Factura generada automaticamente para pruebas de causacion.'
+      };
+
+      const fileName = `FV_PRUEBA_CAUSACION_${numeroControl}.pdf`;
+      const relativeDir = 'uploads/causacion_tests';
+      const relativePath = `${relativeDir}/${fileName}`;
+      const absoluteDir = path.join(__dirname, '..', relativeDir);
+      const absolutePath = path.join(absoluteDir, fileName);
+
+      await fs.mkdir(absoluteDir, { recursive: true });
+      const pdfBuffer = await generateFacturaTemplatePDF(templateData, {}, false, []);
+      await fs.writeFile(absolutePath, pdfBuffer);
+
+      const documentResult = await query(
+        `INSERT INTO documents (
+           title, description, file_name, file_path, file_size, mime_type,
+           uploaded_by, document_type_id, status, metadata, consecutivo
+         )
+         VALUES ($1, $2, $3, $4, $5, 'application/pdf', $6, $7, 'pending', $8, $9)
+         RETURNING *`,
+        [
+          `FV - PRUEBA CAUSACION - ${numeroControl}`,
+          'Documento generado automaticamente para pruebas de causacion.',
+          fileName,
+          relativePath,
+          pdfBuffer.length,
+          user.id,
+          fvTypeResult.rows[0].id,
+          templateData,
+          String(numeroControl)
+        ]
+      );
+
+      const documentId = documentResult.rows[0].id;
+      const testCausacionGroupResult = await query(
+        `INSERT INTO causacion_grupos (codigo, nombre, descripcion, activo)
+         VALUES ('causacion_prueba_jesus', 'Causacion prueba Jesus Bustamante', 'Grupo de causacion exclusivo para pruebas autonomas de Jesus Bustamante', true)
+         ON CONFLICT (codigo) DO UPDATE
+         SET nombre = EXCLUDED.nombre,
+             descripcion = EXCLUDED.descripcion,
+             activo = true,
+             updated_at = CURRENT_TIMESTAMP
+         RETURNING id, codigo`
+      );
+
+      await query(
+        `INSERT INTO causacion_integrantes (grupo_id, user_id, cargo, activo)
+         VALUES ($1, $2, 'Causacion prueba', true)
+         ON CONFLICT (grupo_id, user_id) DO UPDATE
+         SET cargo = EXCLUDED.cargo,
+             activo = true,
+             updated_at = CURRENT_TIMESTAMP`,
+        [testCausacionGroupResult.rows[0].id, user.id]
+      );
+
+      const testSignerUsers = [];
+      for (const testUser of [
+        { name: 'Prueba Negociador Docuprex', email: 'prueba.negociador@docuprex.test', adUsername: 'prueba.negociador' },
+        { name: 'Prueba Negociaciones Docuprex', email: 'prueba.negociaciones@docuprex.test', adUsername: 'prueba.negociaciones' },
+        { name: 'Prueba Cuenta Contable Docuprex', email: 'prueba.cuenta@docuprex.test', adUsername: 'prueba.cuenta' },
+        { name: 'Prueba Responsable Centro Costos', email: 'prueba.respcc@docuprex.test', adUsername: 'prueba.respcc' },
+        { name: 'Prueba Causacion Docuprex', email: 'prueba.causacion@docuprex.test', adUsername: 'prueba.causacion' }
+      ]) {
+        const testUserResult = await query(
+          `INSERT INTO users (name, email, ad_username, role, is_active, email_notifications)
+           VALUES ($1, $2, $3, 'user', true, false)
+           ON CONFLICT (email) DO UPDATE
+           SET name = EXCLUDED.name,
+               ad_username = EXCLUDED.ad_username,
+               is_active = true,
+               email_notifications = false
+           RETURNING id`,
+          [testUser.name, testUser.email, testUser.adUsername]
+        );
+        testSignerUsers.push(testUserResult.rows[0].id);
+      }
+
+      const signerRows = [
+        { order: 1, role: negociadorRole, roleName: negociadorRole.role_name || 'Negociador', userId: testSignerUsers[0], isGroup: false },
+        { order: 2, role: negociacionesRole, roleName: negociacionesRole.role_name || 'Negociaciones', userId: testSignerUsers[1], isGroup: false },
+        { order: 3, role: respCuentaRole, roleName: respCuentaRole.role_name || 'Responsable cuenta contable', userId: testSignerUsers[2], isGroup: false },
+        { order: 4, role: respCentroRole, roleName: respCentroRole.role_name || 'Responsable centro de costos', userId: testSignerUsers[3], isGroup: false },
+        { order: 5, role: causacionRole, roleName: causacionRole.role_name || 'Causación', userId: testSignerUsers[4], isGroup: true, grupoCodigo: testCausacionGroupResult.rows[0].codigo }
+      ];
+
+      for (const signer of signerRows) {
+        const documentSignerResult = await query(
+          `INSERT INTO document_signers (
+             document_id, user_id, order_position, is_required,
+             assigned_role_id, role_name, assigned_role_ids, role_names,
+             is_causacion_group, grupo_codigo
+           )
+           VALUES ($1, $2, $3, TRUE, $4, $5, $6::uuid[], $7::text[], $8, $9)
+           RETURNING id`,
+          [
+            documentId,
+            signer.userId,
+            signer.order,
+            signer.role.id || null,
+            signer.roleName,
+            signer.role.id ? [signer.role.id] : [],
+            [signer.roleName],
+            Boolean(signer.isGroup),
+            signer.grupoCodigo || null
+          ]
+        );
+
+        await query(
+          `INSERT INTO signatures (document_id, signer_id, document_signer_id, status, signature_type)
+           VALUES ($1, $2, $3, 'pending', 'digital')`,
+          [documentId, signer.userId, documentSignerResult.rows[0].id]
+        );
+      }
+
+      return {
+        success: true,
+        message: 'Factura de prueba creada exitosamente',
+        document: documentResult.rows[0]
+      };
+    },
+
     /**
      * Updates document metadata (title, description, or status)
      *
@@ -1912,8 +2450,7 @@ const resolvers = {
 
       await ensurePayableInvoicesTable();
 
-      const monicaUser = await getMonicaBustamanteUser();
-      if (!monicaUser || String(user.id) !== String(monicaUser.id)) {
+      if (!await isPayableInvoiceUser(user.id)) {
         throw new Error('No autorizado');
       }
 
@@ -1929,13 +2466,48 @@ const resolvers = {
              paid_by = CASE WHEN $1::varchar = 'paid' THEN $4::uuid ELSE NULL END,
              updated_at = CURRENT_TIMESTAMP
          WHERE document_id = $2
-           AND user_id = $3::uuid
+           AND EXISTS (
+             SELECT 1
+             FROM payable_invoices current_pi
+             WHERE current_pi.document_id = $2
+               AND current_pi.user_id = $3::uuid
+           )
          RETURNING *`,
-        [normalizedStatus, documentId, monicaUser.id, user.id]
+        [normalizedStatus, documentId, user.id, user.id]
       );
 
       if (result.rows.length === 0) {
         throw new Error('Factura por pagar no encontrada');
+      }
+
+      const paidNotificationResult = normalizedStatus === 'paid'
+        ? await query(
+          `SELECT id
+           FROM notifications
+           WHERE document_id = $1
+             AND type = 'payable_invoice_paid'
+           LIMIT 1`,
+          [documentId]
+        )
+        : { rows: [] };
+
+      if (normalizedStatus === 'paid' && paidNotificationResult.rows.length === 0) {
+        let notificationCreated = false;
+        try {
+          notificationCreated = await notifyPayableInvoicePaidCreator({ documentId, actorUserId: user.id });
+        } catch (notifyError) {
+          console.error('Error notificando factura pagada al creador:', notifyError);
+        }
+
+        if (notificationCreated) {
+          await query(
+            `UPDATE payable_invoices
+             SET creator_notified_at = COALESCE(creator_notified_at, CURRENT_TIMESTAMP)
+             WHERE document_id = $1
+               AND user_id = $2::uuid`,
+            [documentId, user.id]
+          );
+        }
       }
 
       websocketService.emitDocumentUpdated(documentId, 'payable_status_updated', {
@@ -1962,7 +2534,124 @@ const resolvers = {
         LEFT JOIN document_types dt ON d.document_type_id = dt.id
         WHERE pi.document_id = $1
           AND pi.user_id = $2::uuid
-      `, [documentId, monicaUser.id]);
+      `, [documentId, user.id]);
+
+      return docResult.rows[0];
+    },
+
+    updateTreasuryAdvancePaymentStatus: async (_, { documentId, paymentStatus }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+
+      await ensureTreasuryAdvancePaymentsTable();
+
+      if (!await isPayableInvoiceUser(user.id)) {
+        throw new Error('No autorizado');
+      }
+
+      const normalizedStatus = String(paymentStatus || '').trim().toLowerCase();
+      if (!['pending', 'paid'].includes(normalizedStatus)) {
+        throw new Error('Estado de pago invalido');
+      }
+
+      const assignmentResult = await query(`
+        SELECT ds.document_id, ds.user_id
+        FROM document_signers ds
+        JOIN documents d ON d.id = ds.document_id
+        JOIN document_types dt ON d.document_type_id = dt.id
+        JOIN signatures s ON s.document_id = ds.document_id
+          AND s.signer_id = ds.user_id
+          AND s.status = 'signed'
+        WHERE ds.document_id = $1
+          AND ds.user_id = $2::uuid
+          AND dt.code = 'SA'
+          AND (
+            LOWER(COALESCE(ds.role_name, '')) LIKE '%tesorer%'
+            OR EXISTS (
+              SELECT 1
+              FROM unnest(COALESCE(ds.role_names, ARRAY[]::text[])) AS role_name
+              WHERE LOWER(role_name) LIKE '%tesorer%'
+            )
+          )
+        LIMIT 1
+      `, [documentId, user.id]);
+
+      if (assignmentResult.rows.length === 0) {
+        throw new Error('El estado de pago solo se puede cambiar despues de firmar el anticipo por Tesoreria');
+      }
+
+      const paymentResult = await query(
+        `INSERT INTO treasury_advance_payments (
+           document_id,
+           user_id,
+           payment_status,
+           paid_at,
+           paid_by,
+           creator_notified_at,
+           updated_at
+         )
+         VALUES (
+           $1,
+           $2::uuid,
+           $3::varchar,
+           CASE WHEN $3::varchar = 'paid' THEN CURRENT_TIMESTAMP ELSE NULL END,
+           CASE WHEN $3::varchar = 'paid' THEN $2::uuid ELSE NULL END,
+           NULL,
+           CURRENT_TIMESTAMP
+         )
+         ON CONFLICT (document_id, user_id) DO UPDATE SET
+           payment_status = EXCLUDED.payment_status,
+           paid_at = CASE WHEN EXCLUDED.payment_status = 'paid' THEN COALESCE(treasury_advance_payments.paid_at, CURRENT_TIMESTAMP) ELSE NULL END,
+           paid_by = CASE WHEN EXCLUDED.payment_status = 'paid' THEN $2::uuid ELSE NULL END,
+           updated_at = CURRENT_TIMESTAMP
+         RETURNING *`,
+        [documentId, user.id, normalizedStatus]
+      );
+
+      const paymentRow = paymentResult.rows[0];
+      if (normalizedStatus === 'paid' && !paymentRow.creator_notified_at) {
+        try {
+          await notifyTreasuryAdvancePaidCreator({ documentId, actorUserId: user.id });
+        } catch (notifyError) {
+          console.error('Error notificando anticipo pagado al creador:', notifyError);
+        }
+
+        await query(
+          `UPDATE treasury_advance_payments
+           SET creator_notified_at = COALESCE(creator_notified_at, CURRENT_TIMESTAMP)
+           WHERE document_id = $1 AND user_id = $2::uuid`,
+          [documentId, user.id]
+        );
+      }
+
+      websocketService.emitDocumentUpdated(documentId, 'treasury_advance_payment_status_updated', {
+        paymentStatus: normalizedStatus,
+        userId: user.id
+      });
+
+      const docResult = await query(`
+        SELECT DISTINCT
+          d.*,
+          u.name as uploaded_by_name,
+          u.email as uploaded_by_email,
+          dt.name as document_type_name,
+          dt.code as document_type_code,
+          ds.user_id as advance_payment_user_id,
+          COALESCE(tap.payment_status, 'pending') as advance_payment_status,
+          tap.paid_at as advance_paid_at,
+          tap.paid_by as advance_paid_by,
+          paid_user.name as advance_paid_by_name,
+          paid_user.email as advance_paid_by_email
+        FROM document_signers ds
+        JOIN documents d ON d.id = ds.document_id
+        JOIN users u ON d.uploaded_by = u.id
+        LEFT JOIN document_types dt ON d.document_type_id = dt.id
+        LEFT JOIN treasury_advance_payments tap
+          ON tap.document_id = d.id AND tap.user_id = ds.user_id
+        LEFT JOIN users paid_user ON paid_user.id = tap.paid_by
+        WHERE ds.document_id = $1
+          AND ds.user_id = $2::uuid
+        LIMIT 1
+      `, [documentId, user.id]);
 
       return docResult.rows[0];
     },
@@ -2048,6 +2737,120 @@ const resolvers = {
 
         if (roleIds.length > 3 || roleNames.length > 3) {
           throw new Error('Un firmante no puede tener más de 3 roles asignados');
+        }
+      }
+
+      const normalizeSARoleKey = (roleName) => String(roleName || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+
+      const getSARoleKey = (roleName) => {
+        const raw = normalizeSARoleKey(roleName);
+
+        if (raw.includes('solicit')) return 'solicitante';
+        if (raw.includes('aprob')) return 'aprobador';
+        if (raw.includes('financier') || (raw.includes('marcela') && raw.includes('arango'))) return 'financiera';
+        if (raw.includes('negoci')) return 'negociaciones';
+        if (raw.includes('gerencia')) return raw.includes('ejecut') ? 'gerencia_ejecutiva' : 'gerencia';
+        if (raw.includes('tesorer')) return 'tesoreria';
+
+        return raw;
+      };
+
+      if (doc.document_type_code === 'SA') {
+        const assignedRoleKeys = new Set(
+          userAssignments.flatMap(assignment => normalizeRoles(assignment).roleNames.map(getSARoleKey))
+        );
+        const requiredRoleKeys = ['solicitante', 'aprobador', 'financiera', 'tesoreria'];
+        const missingRequiredRole = requiredRoleKeys.find(roleKey => !assignedRoleKeys.has(roleKey));
+
+        if (missingRequiredRole) {
+          const roleLabels = {
+            solicitante: 'Solicitante',
+            aprobador: 'Aprobador',
+            financiera: 'Financiera',
+            tesoreria: 'Tesoreria'
+          };
+          throw new Error(`Falta asignar el rol obligatorio ${roleLabels[missingRequiredRole]}`);
+        }
+
+        const financieraAssignment = userAssignments.find(assignment =>
+          normalizeRoles(assignment).roleNames.some(roleName => getSARoleKey(roleName) === 'financiera')
+        );
+
+        const marcelaUserResult = await query(
+          `SELECT id
+           FROM users
+           WHERE id = $1
+             AND (
+               LOWER(TRIM(name)) IN ('marcela arango', 'jesus bustamante', 'jesús bustamante')
+               OR LOWER(TRIM(email)) IN ('m.arango@prexxa.com.co', 'j.bustamante@prexxa.com.co', 'practicantetic@prexxa.com.co')
+             )
+           LIMIT 1`,
+          [financieraAssignment.userId]
+        );
+
+        if (marcelaUserResult.rows.length === 0) {
+          throw new Error('El rol Financiera solo puede ser asignado a Marcela Arango o Jesus Bustamante');
+        }
+
+        const tesoreriaAssignment = userAssignments.find(assignment =>
+          normalizeRoles(assignment).roleNames.some(roleName => getSARoleKey(roleName) === 'tesoreria')
+        );
+
+        const tesoreriaUserResult = await query(
+          `SELECT id
+           FROM users
+           WHERE id = $1
+             AND (
+               LOWER(TRIM(name)) IN ('monica bustamante', 'jesus bustamante', 'jesús bustamante')
+               OR LOWER(TRIM(email)) IN ('m.bustamante@prexxa.com.co', 'j.bustamante@prexxa.com.co', 'practicantetic@prexxa.com.co')
+             )
+           LIMIT 1`,
+          [tesoreriaAssignment.userId]
+        );
+
+        if (tesoreriaUserResult.rows.length === 0) {
+          throw new Error('El rol Tesoreria solo puede ser asignado a Monica Bustamante o Jesus Bustamante');
+        }
+
+        const roleOrderWeight = {
+          solicitante: 1,
+          aprobador: 2,
+          negociaciones: 3,
+          financiera: 4,
+          gerencia: 5,
+          gerencia_ejecutiva: 5,
+          tesoreria: 6
+        };
+        const findRolePosition = (roleKey) => {
+          const assignmentIndex = signerAssignments.findIndex(assignment =>
+            normalizeRoles(assignment).roleNames.some(roleName => getSARoleKey(roleName) === roleKey)
+          );
+
+          if (assignmentIndex === -1) {
+            return -1;
+          }
+
+          return assignmentIndex * 10 + (roleOrderWeight[roleKey] || 9);
+        };
+        const aprobadorPosition = findRolePosition('aprobador');
+        const negociacionesPosition = findRolePosition('negociaciones');
+        const financieraPosition = findRolePosition('financiera');
+        const tesoreriaPosition = findRolePosition('tesoreria');
+
+        if (aprobadorPosition !== -1 && financieraPosition <= aprobadorPosition) {
+          throw new Error('Financiera debe firmar despues del Aprobador');
+        }
+
+        if (negociacionesPosition !== -1 && financieraPosition <= negociacionesPosition) {
+          throw new Error('Financiera debe firmar despues de Negociaciones');
+        }
+
+        if (tesoreriaPosition !== -1 && tesoreriaPosition <= financieraPosition) {
+          throw new Error('Tesoreria debe firmar despues de Financiera');
         }
       }
 
@@ -2211,7 +3014,8 @@ const resolvers = {
                     nombreFirmante: member.name,
                     nombreDocumento: doc.title,
                     documentoId: documentId,
-                    creadorDocumento: user.name
+                    creadorDocumento: user.name,
+                    tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                   });
                 } catch (emailError) {
                   console.error(`Error al enviar correo a ${member.email}:`, emailError);
@@ -2256,7 +3060,8 @@ const resolvers = {
                   nombreFirmante: signer.name,
                   nombreDocumento: doc.title,
                   documentoId: documentId,
-                  creadorDocumento: user.name
+                  creadorDocumento: user.name,
+                  tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                 });
               } catch (emailError) {
                 console.error(`Error al enviar correo a ${signer.email}:`, emailError);
@@ -2360,10 +3165,10 @@ const resolvers = {
                JOIN causacion_grupos cg ON ci.grupo_id = cg.id
                WHERE cg.codigo = $1
                  AND ci.activo = true
-                 AND NOT (ci.user_id = ANY($2))
+                 AND ($3::boolean = true OR NOT (ci.user_id = ANY($2)))
                ORDER BY ci.created_at ASC NULLS LAST, ci.user_id ASC
                LIMIT 1`,
-              [assignment.grupoCodigo, Array.from(reservedUserIds)]
+              [assignment.grupoCodigo, Array.from(reservedUserIds), assignment.grupoCodigo === 'causacion_prueba_jesus']
             );
 
             if (representativeResult.rows.length === 0) {
@@ -2693,10 +3498,10 @@ const resolvers = {
             JOIN causacion_grupos cg ON ci.grupo_id = cg.id
             WHERE cg.codigo = $1
               AND ci.activo = true
-              AND NOT (ci.user_id = ANY($2))
+              AND ($3::boolean = true OR NOT (ci.user_id = ANY($2)))
             ORDER BY ci.created_at ASC NULLS LAST, ci.user_id ASC
             LIMIT 1
-          `, [grupoAssignment.grupoCodigo, Array.from(reservedUserIds)]);
+          `, [grupoAssignment.grupoCodigo, Array.from(reservedUserIds), grupoAssignment.grupoCodigo === 'causacion_prueba_jesus']);
 
           if (representativeResult.rows.length === 0) {
             throw new Error(`El grupo de causación ${grupoAssignment.grupoCodigo} no tiene integrantes activos disponibles porque sus miembros ya están asignados individualmente en este documento`);
@@ -2916,7 +3721,8 @@ const resolvers = {
                         nombreFirmante: member.name,
                         nombreDocumento: docTitle,
                         documentoId: documentId,
-                        creadorDocumento: creatorName
+                        creadorDocumento: creatorName,
+                        tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                       });
                       console.log(`📧 Correo enviado a miembro del grupo: ${member.email}`);
                     } catch (emailError) {
@@ -2970,7 +3776,8 @@ const resolvers = {
                           nombreFirmante: signer.name,
                           nombreDocumento: docTitle,
                           documentoId: documentId,
-                          creadorDocumento: creatorName
+                          creadorDocumento: creatorName,
+                          tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                         });
                         console.log(`📧 Correo enviado al primer firmante: ${signer.email}`);
                       } else {
@@ -3405,6 +4212,10 @@ const resolvers = {
 
         if (doc.uploaded_by !== user.id) {
           throw new Error('Solo el creador del documento puede editar la planilla');
+        }
+
+        if (isCausacionTestDocument(doc)) {
+          throw new Error('Las facturas de prueba de causación ya vienen con firmantes asignados y no se editan desde la planilla');
         }
 
         // Parsear templateData
@@ -4026,10 +4837,10 @@ const resolvers = {
               JOIN causacion_grupos cg ON ci.grupo_id = cg.id
               WHERE cg.codigo = $1
                 AND ci.activo = true
-                AND NOT (ci.user_id = ANY($2))
+                AND ($3::boolean = true OR NOT (ci.user_id = ANY($2)))
               ORDER BY ci.created_at ASC NULLS LAST, ci.user_id ASC
               LIMIT 1
-            `, [firmante.grupoCodigo, Array.from(reservedUserIds)]);
+            `, [firmante.grupoCodigo, Array.from(reservedUserIds), firmante.grupoCodigo === 'causacion_prueba_jesus']);
 
             if (representativeResult.rows.length === 0) {
               throw new Error(`El grupo de causación ${firmante.grupoCodigo} no tiene integrantes activos disponibles porque sus miembros ya están asignados individualmente en este documento`);
@@ -4151,12 +4962,14 @@ const resolvers = {
                 if (userResult.rows.length > 0) {
                   const signerUser = userResult.rows[0];
                   if (signerUser.email_notifications) {
-                    await notificarAsignacionFirmante(
-                      signerUser.email,
-                      signerUser.name,
-                      doc.title,
-                      user.name
-                    );
+                    await notificarAsignacionFirmante({
+                      email: signerUser.email,
+                      nombreFirmante: signerUser.name,
+                      nombreDocumento: doc.title,
+                      documentoId: documentId,
+                      creadorDocumento: user.name,
+                      tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
+                    });
                     console.log(`📧 Correo enviado a: ${signerUser.email} (firmante NUEVO)`);
                   }
                 }
@@ -4348,7 +5161,8 @@ const resolvers = {
                       nombreFirmante: member.name,
                       nombreDocumento: doc.title,
                       documentoId: documentId,
-                      creadorDocumento: user.name
+                      creadorDocumento: user.name,
+                      tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                     });
                   } catch (emailError) {
                     console.error(`Error enviando correo a miembro de causacion ${member.email}:`, emailError);
@@ -4390,7 +5204,8 @@ const resolvers = {
                       nombreFirmante: signerUser.name,
                       nombreDocumento: doc.title,
                       documentoId: documentId,
-                      creadorDocumento: user.name
+                      creadorDocumento: user.name,
+                      tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                     });
                   } catch (emailError) {
                     console.error(`Error enviando correo a firmante activo ${signerUser.email}:`, emailError);
@@ -4704,7 +5519,10 @@ const resolvers = {
         );
 
         const docResult = await query(
-          'SELECT title, uploaded_by FROM documents WHERE id = $1',
+          `SELECT d.title, d.uploaded_by, dt.code as document_type_code
+           FROM documents d
+           LEFT JOIN document_types dt ON d.document_type_id = dt.id
+           WHERE d.id = $1`,
           [documentId]
         );
 
@@ -4759,7 +5577,8 @@ const resolvers = {
                     nombreDocumento: doc.title,
                     documentoId: documentId,
                     rechazadoPor: rejectorName,
-                    motivoRechazo: reason || 'Sin motivo especificado'
+                    motivoRechazo: reason || 'Sin motivo especificado',
+                    tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                   });
 
                   console.log(`✅ Correo de rechazo enviado al creador: ${creator.email}`);
@@ -5109,7 +5928,7 @@ const resolvers = {
      * @returns {Promise<Object>} Signature record
      * @throws {Error} When unauthorized, not in sequence (non-owner), or not assigned to document
      */
-    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentions }, { user }) => {
+    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentions, causacionData }, { user }) => {
       if (!user) throw new Error('No autenticado');
       const workflowUserIds = await getNegociacionesSharedUserIds(user, realSignerName);
       for (const workflowUserId of workflowUserIds) {
@@ -5145,7 +5964,10 @@ const resolvers = {
       };
 
       const docOwnerCheck = await query(
-        'SELECT uploaded_by FROM documents WHERE id = $1',
+        `SELECT d.uploaded_by, d.title, d.file_name, d.description, d.metadata, dt.code as document_type_code
+         FROM documents d
+         LEFT JOIN document_types dt ON d.document_type_id = dt.id
+         WHERE d.id = $1`,
         [documentId]
       );
 
@@ -5154,6 +5976,7 @@ const resolvers = {
       }
 
       const isOwner = docOwnerCheck.rows[0].uploaded_by === user.id;
+      const isCausacionTestMode = isCausacionTestUser(user) && isCausacionTestDocument(docOwnerCheck.rows[0]);
 
       // Validar orden secuencial de firma - primero buscar asignación directa
       let orderCheck = await query(
@@ -5168,6 +5991,7 @@ const resolvers = {
       );
 
       let isCausacionGroupMember = false;
+      let isCausacionTestSignature = false;
       let grupoCodigo = null;
       let targetDocumentSignerId = null;
       const pendingDirectSignerRow = orderCheck.rows.find(row => !['signed', 'rejected'].includes(row.signature_status));
@@ -5185,12 +6009,45 @@ const resolvers = {
             AND ci.activo = true
         `, [documentId, user.id]);
 
-        if (groupCheck.rows.length === 0) {
+        if (isCausacionTestMode) {
+          const testSignerCheck = await query(`
+            SELECT
+              ds.id as document_signer_id,
+              ds.order_position,
+              ds.user_id,
+              ds.role_name,
+              ds.role_names,
+              ds.is_causacion_group,
+              ds.grupo_codigo,
+              cg.nombre as grupo_nombre,
+              COALESCE(s.status, 'pending') as signature_status
+            FROM document_signers ds
+            LEFT JOIN signatures s ON ${signatureJoinCondition}
+            LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+            WHERE ds.document_id = $1
+              AND COALESCE(s.status, 'pending') NOT IN ('signed', 'rejected')
+            ORDER BY ds.order_position ASC
+            LIMIT 1
+          `, [documentId]);
+
+          if (testSignerCheck.rows.length === 0) {
+            throw new Error('No hay firmantes pendientes en esta factura de prueba');
+          }
+
+          const testSignerRow = testSignerCheck.rows[0];
+          isCausacionTestSignature = true;
+          isCausacionGroupMember = Boolean(testSignerRow.is_causacion_group);
+          grupoCodigo = testSignerRow.grupo_codigo;
+          targetDocumentSignerId = testSignerRow.document_signer_id;
+          orderCheck = { rows: [testSignerRow] };
+          console.log(`Usuario ${user.name} firmando en entorno de pruebas el turno ${testSignerRow.order_position}`);
+        } else if (groupCheck.rows.length === 0) {
           throw new Error('No estás asignado para firmar este documento');
         }
 
+        if (!isCausacionTestSignature || isCausacionGroupMember) {
         // Verificar que nadie del grupo haya firmado ya
-        grupoCodigo = groupCheck.rows[0].grupo_codigo;
+        grupoCodigo = grupoCodigo || groupCheck.rows[0].grupo_codigo;
         const existingGroupSignature = await query(`
           SELECT s.id, u.name as signer_name
           FROM signatures s
@@ -5205,7 +6062,7 @@ const resolvers = {
             )
             ${csConstraint ? 'AND s.document_signer_id = $3' : ''}
         `, csConstraint
-          ? [documentId, grupoCodigo, groupCheck.rows[0].document_signer_id]
+          ? [documentId, grupoCodigo, targetDocumentSignerId || groupCheck.rows[0].document_signer_id]
           : [documentId, grupoCodigo]);
 
         if (existingGroupSignature.rows.length > 0) {
@@ -5213,8 +6070,9 @@ const resolvers = {
         }
 
         isCausacionGroupMember = true;
-        targetDocumentSignerId = groupCheck.rows[0].document_signer_id;
-        orderCheck = { rows: [{ document_signer_id: targetDocumentSignerId, order_position: groupCheck.rows[0].order_position, grupo_codigo: grupoCodigo }] };
+        targetDocumentSignerId = targetDocumentSignerId || groupCheck.rows[0].document_signer_id;
+        orderCheck = { rows: [{ document_signer_id: targetDocumentSignerId, order_position: orderCheck.rows[0].order_position, grupo_codigo: grupoCodigo }] };
+        }
         console.log(`👥 Usuario ${user.name} firmando como miembro del grupo ${grupoCodigo}`);
       } else {
         targetDocumentSignerId = pendingDirectSignerRow.document_signer_id;
@@ -5223,6 +6081,36 @@ const resolvers = {
 
       const currentSignerRow = orderCheck.rows[0];
       const currentOrder = orderCheck.rows[0].order_position;
+
+      const docCausacionInfoResult = await query(
+        `SELECT d.consecutivo, dt.code as document_type_code
+         FROM documents d
+         LEFT JOIN document_types dt ON d.document_type_id = dt.id
+         WHERE d.id = $1`,
+        [documentId]
+      );
+      const docCausacionInfo = docCausacionInfoResult.rows[0] || {};
+      const requiresCausacionData = docCausacionInfo.document_type_code === 'FV'
+        && (isCausacionGroupMember || (isCausacionTestMode && hasRoleContaining(currentSignerRow, 'CAUSACION')));
+      let parsedCausacionData = null;
+
+      if (requiresCausacionData) {
+        try {
+          parsedCausacionData = typeof causacionData === 'string' && causacionData.trim()
+            ? JSON.parse(causacionData)
+            : null;
+        } catch (error) {
+          throw new Error('Los datos de causación no tienen un formato válido');
+        }
+
+        if (!parsedCausacionData?.numeroCausacion || !String(parsedCausacionData.numeroCausacion).trim()) {
+          throw new Error('Debes ingresar el No. de Causación antes de firmar');
+        }
+
+        if (!parsedCausacionData?.observaciones || !String(parsedCausacionData.observaciones).trim()) {
+          throw new Error('Debes ingresar las observaciones de causación antes de firmar');
+        }
+      }
 
       // EXCEPCIÓN: Si el usuario es el propietario del documento, puede firmar sin importar el orden
       if (currentOrder > 1 && !isOwner) {
@@ -5268,8 +6156,13 @@ const resolvers = {
               `SELECT s.status, u.name as signer_name
                FROM signatures s
                JOIN users u ON s.signer_id = u.id
-               WHERE s.document_id = $1 AND s.signer_id = $2 AND s.status = 'signed'`,
-              [documentId, prevInfo.user_id]
+               WHERE s.document_id = $1
+                 AND s.status = 'signed'
+                 AND (
+                   s.signer_id = $2
+                   OR ($3::boolean = true AND s.document_signer_id = $4)
+                 )`,
+              [documentId, prevInfo.user_id, isCausacionTestMode, prevInfo.id]
             );
 
             previousSigned = userSigCheck.rows.length > 0;
@@ -5284,10 +6177,21 @@ const resolvers = {
       }
 
       // Para grupos de causación, siempre guardar el nombre del firmante real
-      const effectiveRealSignerName = isCausacionGroupMember ? user.name : (realSignerName || null);
+      const effectiveRealSignerName = (isCausacionGroupMember || isCausacionTestSignature) ? user.name : (realSignerName || null);
 
       const hasDocumentSignerIdColumn = await checkSignaturesHasDocumentSignerIdColumn();
       const effectiveSignerUserId = isCausacionGroupMember ? user.id : (orderCheck.rows[0]?.user_id || user.id);
+
+      if (isCausacionGroupMember && hasDocumentSignerIdColumn && targetDocumentSignerId) {
+        await query(
+          `UPDATE signatures
+           SET signer_id = $1
+           WHERE document_signer_id = $2
+             AND status NOT IN ('signed', 'rejected')`,
+          [user.id, targetDocumentSignerId]
+        );
+      }
+
       const existingSignature = (hasDocumentSignerIdColumn && targetDocumentSignerId)
         ? await query(
           `SELECT * FROM signatures WHERE document_signer_id = $1`,
@@ -5402,6 +6306,46 @@ const resolvers = {
 
       if (result.rows.length === 0) {
         throw new Error('Error al registrar la firma');
+      }
+
+      if (requiresCausacionData && docCausacionInfo.consecutivo) {
+        const numeroCausacionValue = String(parsedCausacionData.numeroCausacion).trim();
+        const observacionesCausacionValue = String(parsedCausacionData.observaciones).trim();
+        const fechaCausacionValue = new Date().toISOString().slice(0, 10);
+
+        const causacionUpdate = await queryFacturas(
+          `UPDATE crud_facturas."T_Facturas"
+           SET causado = TRUE,
+               fecha_causacion = CURRENT_DATE,
+               numero_causacion = $2,
+               observaciones = $3
+           WHERE numero_control = $1
+          RETURNING numero_control, causado, fecha_causacion, numero_causacion, observaciones`,
+          [
+            String(docCausacionInfo.consecutivo).trim(),
+            numeroCausacionValue,
+            observacionesCausacionValue
+          ]
+        );
+
+        if (causacionUpdate.rows.length === 0) {
+          throw new Error('No se encontro la factura para guardar la causacion');
+        }
+
+        await query(
+          `UPDATE documents
+           SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+           WHERE id = $1`,
+          [
+            documentId,
+            JSON.stringify({
+              numeroCausacion: numeroCausacionValue,
+              observacionesCausacion: observacionesCausacionValue,
+              descripcionCausacion: observacionesCausacionValue,
+              fechaCausacion: fechaCausacionValue
+            })
+          ]
+        );
       }
 
       const shouldAutoSignNegociaciones = !isCausacionGroupMember
@@ -5799,7 +6743,10 @@ const resolvers = {
       // ========== GESTIONAR NOTIFICACIONES INTERNAS ==========
       try {
         const docResult = await query(
-          'SELECT title, uploaded_by, file_path FROM documents WHERE id = $1',
+          `SELECT d.title, d.uploaded_by, d.file_path, dt.code as document_type_code
+           FROM documents d
+           LEFT JOIN document_types dt ON d.document_type_id = dt.id
+           WHERE d.id = $1`,
           [documentId]
         );
 
@@ -5954,7 +6901,8 @@ const resolvers = {
                         nombreFirmante: member.name,
                         nombreDocumento: doc.title,
                         documentoId: documentId,
-                        creadorDocumento: creatorName
+                        creadorDocumento: creatorName,
+                        tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                       });
                       console.log(`📧 Correo enviado a miembro del grupo: ${member.email}`);
                     } catch (emailError) {
@@ -6011,7 +6959,8 @@ const resolvers = {
                           nombreFirmante: nextSigner.name,
                           nombreDocumento: doc.title,
                           documentoId: documentId,
-                          creadorDocumento: creatorName
+                          creadorDocumento: creatorName,
+                          tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                         });
                         console.log(`📧 Correo enviado al siguiente firmante: ${nextSigner.email}`);
                       } catch (emailError) {
@@ -6026,7 +6975,6 @@ const resolvers = {
 
           // 4. Si el documento fue COMPLETADO, gestionar notificaciones especiales
           if (newStatus === 'completed') {
-            // ya que ahora tendrá una notificación de documento completado
             await query(
               `DELETE FROM notifications
                WHERE document_id = $1
@@ -6034,12 +6982,29 @@ const resolvers = {
                AND type = 'document_signed'`,
               [documentId, doc.uploaded_by]
             );
+            websocketService.emitNotificationDeleted(documentId, null, doc.uploaded_by, 'document_signed');
 
-            await query(
+            const completedNotifResult = await query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
-               VALUES ($1, $2, $3, $4, $5)`,
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id`,
               [doc.uploaded_by, 'document_completed', documentId, user.id, doc.title]
             );
+
+            if (completedNotifResult.rows.length > 0) {
+              websocketService.emitNotificationCreated(doc.uploaded_by, {
+                id: completedNotifResult.rows[0].id,
+                type: 'document_completed',
+                document_id: documentId,
+                actor_id: user.id,
+                document_title: doc.title,
+                actor: {
+                  id: user.id,
+                  name: user.name,
+                  email: user.email
+                }
+              });
+            }
           }
 
           // ========== ENVIAR CORREO AL CREADOR SI DOCUMENTO COMPLETADO ==========
@@ -6063,7 +7028,8 @@ const resolvers = {
                     emails: [creator.email],
                     nombreDocumento: doc.title,
                     documentoId: documentId,
-                    urlDescarga
+                    urlDescarga,
+                    tipoDocumento: doc.document_type_code === 'FV' ? 'factura' : doc.document_type_code === 'SA' ? 'anticipo' : 'documento'
                   });
 
                   console.log(`✅ Correo de documento completado enviado al creador: ${creator.email}`);
@@ -6246,7 +7212,7 @@ const resolvers = {
               );
 
               // Si es del grupo de causación, marcar la factura como causada
-              if (isCausacionRole) {
+              if (isCausacionRole && docData.__legacyMarcarCausado) {
                 try {
                   await axios.post(
                     `${backendHost}/api/facturas/marcar-causado/${docData.consecutivo}`,
@@ -7333,6 +8299,40 @@ const resolvers = {
       }
 
       const result = await query('SELECT * FROM users WHERE id = $1', [parent.paid_by]);
+      return result.rows[0] || null;
+    },
+    advancePaymentStatus: async (parent) => {
+      if (parent.advance_payment_status) return parent.advance_payment_status;
+
+      const result = parent.advance_payment_user_id
+        ? await query(
+            'SELECT payment_status FROM treasury_advance_payments WHERE document_id = $1 AND user_id = $2 LIMIT 1',
+            [parent.id, parent.advance_payment_user_id]
+          )
+        : await query(
+            `SELECT payment_status
+             FROM treasury_advance_payments
+             WHERE document_id = $1
+             ORDER BY updated_at DESC
+             LIMIT 1`,
+            [parent.id]
+          );
+
+      return result.rows[0]?.payment_status || null;
+    },
+    advancePaidAt: (parent) => parent.advance_paid_at,
+    advancePaidBy: async (parent) => {
+      if (!parent.advance_paid_by) return null;
+
+      if (parent.advance_paid_by_name || parent.advance_paid_by_email) {
+        return {
+          id: parent.advance_paid_by,
+          name: parent.advance_paid_by_name,
+          email: parent.advance_paid_by_email
+        };
+      }
+
+      const result = await query('SELECT * FROM users WHERE id = $1', [parent.advance_paid_by]);
       return result.rows[0] || null;
     },
     // Campos presentes solo en signedDocuments

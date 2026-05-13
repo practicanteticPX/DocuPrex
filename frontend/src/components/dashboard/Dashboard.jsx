@@ -104,6 +104,7 @@ function Dashboard({ user, onLogout }) {
   const [saTitleCategory, setSaTitleCategory] = useState('');
   const [documentDescription, setDocumentDescription] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [creatingCausacionTest, setCreatingCausacionTest] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [showCreationLoader, setShowCreationLoader] = useState(false);
   const [error, setError] = useState('');
@@ -118,7 +119,9 @@ function Dashboard({ user, onLogout }) {
   const [retainedDocuments, setRetainedDocuments] = useState([]);
   const [payableInvoices, setPayableInvoices] = useState([]);
   const [payableStatusDropdownOpen, setPayableStatusDropdownOpen] = useState(false);
+  const [treasuryAdvanceStatusDropdownOpen, setTreasuryAdvanceStatusDropdownOpen] = useState(false);
   const [updatingPayableStatus, setUpdatingPayableStatus] = useState(false);
+  const [updatingTreasuryAdvanceStatus, setUpdatingTreasuryAdvanceStatus] = useState(false);
   const [loadingPending, setLoadingPending] = useState(false);
   const [loadingSigned, setLoadingSigned] = useState(false);
   const [loadingMy, setLoadingMy] = useState(false);
@@ -142,6 +145,10 @@ function Dashboard({ user, onLogout }) {
   });
   const [showWaitingTurnScreen, setShowWaitingTurnScreen] = useState(false);
   const [showSignConfirm, setShowSignConfirm] = useState(false);
+  const [showCausacionConfirm, setShowCausacionConfirm] = useState(false);
+  const [pendingCausacionSignDocId, setPendingCausacionSignDocId] = useState(null);
+  const [causacionForm, setCausacionForm] = useState({ numeroCausacion: '', observaciones: '' });
+  const [causacionError, setCausacionError] = useState('');
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState('');
@@ -225,6 +232,7 @@ function Dashboard({ user, onLogout }) {
     { name: 'Solicitante', required: true },
     { name: 'Aprobador', required: true },
     { name: 'Negociaciones', required: false },
+    { name: 'Financiera', required: true },
     { name: 'Gerencia', required: false },
     { name: 'Tesorería', required: true } // SIEMPRE último
   ];
@@ -244,6 +252,7 @@ function Dashboard({ user, onLogout }) {
     if (raw.includes('aprob')) return 'aprobador';
     if (raw.includes('negociador')) return 'negociador';
     if (raw.includes('negoci')) return 'negociaciones';
+    if (raw.includes('financier') || raw.includes('marcela arango')) return 'financiera';
     if (raw.includes('gerencia')) return raw.includes('ejecut') ? 'gerencia_ejecutiva' : 'gerencia';
     if (raw.includes('tesorer')) return 'tesoreria';
 
@@ -262,6 +271,8 @@ function Dashboard({ user, onLogout }) {
         return 'Negociador';
       case 'negociaciones':
         return 'Negociaciones';
+      case 'financiera':
+        return 'Financiera';
       case 'gerencia':
         return 'Gerencia';
       case 'gerencia_ejecutiva':
@@ -280,6 +291,7 @@ function Dashboard({ user, onLogout }) {
       solicitante: ['Solicitante'],
       aprobador: ['Aprobador'],
       negociaciones: ['Negociaciones'],
+      financiera: ['Financiera', 'Área Financiera', 'Area Financiera', 'Marcela Arango'],
       gerencia: ['Gerencia', 'Gerencia Ejecutiva'],
       gerencia_ejecutiva: ['Gerencia', 'Gerencia Ejecutiva'],
       tesoreria: ['Tesorería', 'Tesoreria']
@@ -451,9 +463,20 @@ function Dashboard({ user, onLogout }) {
       return signerName.includes('juan duque');
     }
 
+    if (currentRoleName === 'financiera') {
+      return signerName === 'marcela arango' ||
+        signerEmail === 'm.arango@prexxa.com.co' ||
+        signerName === 'jesus bustamante' ||
+        signerEmail === 'j.bustamante@prexxa.com.co' ||
+        signerEmail === 'practicantetic@prexxa.com.co';
+    }
+
     if (currentRoleName === 'tesoreria') {
       return signerName === 'monica bustamante' ||
-        signerEmail === 'm.bustamante@prexxa.com.co';
+        signerEmail === 'm.bustamante@prexxa.com.co' ||
+        signerName === 'jesus bustamante' ||
+        signerEmail === 'j.bustamante@prexxa.com.co' ||
+        signerEmail === 'practicantetic@prexxa.com.co';
     }
 
     return true;
@@ -696,6 +719,14 @@ function Dashboard({ user, onLogout }) {
 
     newSocket.on('document:updated', (data) => {
       console.log('📤 Documento actualizado recibido:', data);
+      if (data?.action === 'treasury_advance_payment_status_updated') {
+        const nextStatus = data?.paymentStatus || data?.advancePaymentStatus;
+        setViewingDocument(prev => (
+          prev && String(prev.id) === String(data.documentId)
+            ? { ...prev, advancePaymentStatus: nextStatus, advancePaidAt: data.paidAt || prev.advancePaidAt }
+            : prev
+        ));
+      }
       reloadAllData();
     });
 
@@ -1209,7 +1240,7 @@ function Dashboard({ user, onLogout }) {
           }
 
           // Roles obligatorios para SA
-          const hasAllRequired = ['Solicitante', 'Aprobador', 'Tesoreria'].every(requiredRole => {
+          const hasAllRequired = ['Solicitante', 'Aprobador', 'Financiera', 'Tesoreria'].every(requiredRole => {
             const acceptedNames = getSARoleAliases(requiredRole).map(getSARoleKey);
             return assignedRoleNames.some(roleName => acceptedNames.includes(getSARoleKey(roleName)));
           });
@@ -1219,7 +1250,7 @@ function Dashboard({ user, onLogout }) {
           }
 
           // Mínimo 3 firmantes (los obligatorios), máximo 5 (obligatorios + opcionales)
-          if (selectedSigners.length < 3 || selectedSigners.length > 5) {
+          if (assignedRoleNames.length < 4 || assignedRoleNames.length > 6) {
             return false;
           }
 
@@ -1473,7 +1504,7 @@ function Dashboard({ user, onLogout }) {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [viewingDocument, showSignConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showReleaseSuccess, showOrderError, showQuickSignConfirm, confirmDeleteOpen, rejectionReasonPopup, showReleasingLoader, showNoTypeSignersEditor, showSAEditor]);
+  }, [viewingDocument, showSignConfirm, showCausacionConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showReleaseSuccess, showOrderError, showQuickSignConfirm, confirmDeleteOpen, rejectionReasonPopup, showReleasingLoader, showNoTypeSignersEditor, showSAEditor]);
 
   // Cargar documentos pendientes al montar o cambiar de tab
   useEffect(() => {
@@ -1810,6 +1841,10 @@ function Dashboard({ user, onLogout }) {
                 fileName
                 fileSize
                 consecutivo
+                payableStatus
+                paidAt
+                advancePaymentStatus
+                advancePaidAt
                 metadata
                 documentType {
                   id
@@ -1906,6 +1941,10 @@ function Dashboard({ user, onLogout }) {
                 fileSize
                 status
                 consecutivo
+                payableStatus
+                paidAt
+                advancePaymentStatus
+                advancePaidAt
                 createdAt
                 totalSigners
                 signedCount
@@ -2335,6 +2374,8 @@ function Dashboard({ user, onLogout }) {
                 consecutivo
                 payableStatus
                 paidAt
+                advancePaymentStatus
+                advancePaidAt
                 createdAt
                 completedAt
                 metadata
@@ -2698,6 +2739,7 @@ function Dashboard({ user, onLogout }) {
       'Solicitante': 1,
       'Aprobador': 2,
       'Negociaciones': 3,
+      'Financiera': 4,
       'Gerencia': 4,
       'Gerencia Ejecutiva': 4,
       'Tesoreria': 5,
@@ -3485,6 +3527,48 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  const handleCreateCausacionTestFactura = async () => {
+    if (creatingCausacionTest) return;
+
+    setCreatingCausacionTest(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation CreateCausacionTestFactura {
+              createCausacionTestFactura {
+                success
+                message
+                document {
+                  id
+                  title
+                }
+              }
+            }
+          `
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      showNotif('Factura de prueba creada', 'Ya puedes firmar cada rol desde Pendientes de Firma.', 'success');
+      await loadPendingDocuments();
+      await loadMyDocuments();
+      setActiveTab('pending');
+    } catch (err) {
+      showNotif('Error', err.message || 'No se pudo crear la factura de prueba', 'error');
+    } finally {
+      setCreatingCausacionTest(false);
+    }
+  };
+
   /**
    * Firmar documento REAL usando GraphQL
    */
@@ -3539,12 +3623,85 @@ function Dashboard({ user, onLogout }) {
     return false;
   };
 
+  const isCausacionSignature = (sig) => {
+      const roleText = [
+        sig.roleName,
+        sig.roleCode,
+        ...(Array.isArray(sig.roleNames) ? sig.roleNames : []),
+        ...(Array.isArray(sig.roleCodes) ? sig.roleCodes : [])
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+    return roleText.includes('causaci') || sig.isCausacionGroup;
+  };
+
+  const getSignatureStatus = (sig) => sig?.status || sig?.signature?.status || 'pending';
+
+  const getCurrentCausacionSignature = (doc) => {
+    if (!doc || doc.documentType?.code !== 'FV') return null;
+
+    if (isCausacionTestUser() && isCausacionTestDocument(doc)) {
+      const currentTestSigner = (doc.signatures || [])
+        .slice()
+        .sort((a, b) => Number(a.orderPosition || 0) - Number(b.orderPosition || 0))
+        .find(sig => getSignatureStatus(sig) === 'pending');
+
+      return currentTestSigner && isCausacionSignature(currentTestSigner)
+        ? currentTestSigner
+        : null;
+    }
+
+    return (doc.signatures || []).find(sig => {
+      if (getSignatureStatus(sig) !== 'pending') return false;
+
+      const directSigner = String(sig.signer?.id || sig.signerId || '') === String(user?.id || '');
+      const groupMember = Array.isArray(sig.members) && sig.members.some(member =>
+        String(member.userId || member.user?.id || '') === String(user?.id || '') && member.activo !== false
+      );
+
+      return isCausacionSignature(sig) && (directSigner || groupMember || sig.isCausacionGroup);
+    });
+  };
+
+  const isCausacionTestUser = () => {
+    const email = String(user?.email || '').trim().toLowerCase();
+    const username = String(user?.username || '').trim().toLowerCase();
+    const name = normalizeTextForComparison(user?.name);
+
+    return email === 'j.bustamante@prexxa.com.co'
+      || email === 'practicantetic@prexxa.com.co'
+      || username === 'j.bustamante'
+      || name === 'jesus bustamante';
+  };
+
+  const isCausacionTestDocument = (doc) => {
+    if (!doc || doc.documentType?.code !== 'FV') return false;
+
+    const text = [
+      doc.title,
+      doc.fileName,
+      doc.description,
+      typeof doc.metadata === 'string' ? doc.metadata : JSON.stringify(doc.metadata || {})
+    ].map(normalizeTextForComparison).join(' ');
+
+    return text.includes('prueba') || text.includes('test');
+  };
+
+  const getPendingTestSigner = (signers) => (
+    (signers || [])
+      .slice()
+      .sort((a, b) => Number(a.orderPosition || 0) - Number(b.orderPosition || 0))
+      .find(s => !s.signature?.status || s.signature?.status === 'pending')
+  );
+
   /**
    * Maneja el inicio del proceso de firma
    * Si es usuario Negociaciones, muestra modal de selección primero
    * Si es RESP_CTRO_COST en documento FV, muestra modal de retención
    */
-  const initiateSignDocument = (docId) => {
+  const initiateSignDocument = (docId, options = {}) => {
     console.log('🔍 initiateSignDocument - docId:', docId);
     console.log('🔍 initiateSignDocument - isNegociacionesUser:', isNegociacionesUser());
 
@@ -3560,6 +3717,15 @@ function Dashboard({ user, onLogout }) {
 
       // Verificar si debe mostrar modal de retención
       const isFV = doc && doc.documentType && doc.documentType.code === 'FV';
+      const causacionSignature = getCurrentCausacionSignature(doc);
+      if (isFV && causacionSignature && !options.causacionData) {
+        setPendingCausacionSignDocId(docId);
+        setCausacionForm({ numeroCausacion: '', observaciones: '' });
+        setCausacionError('');
+        setShowCausacionConfirm(true);
+        return;
+      }
+
       const isRespCtroCost = doc && hasRespCtroCostRole(doc);
 
       if (isFV && isRespCtroCost) {
@@ -3619,7 +3785,7 @@ function Dashboard({ user, onLogout }) {
         setShowRetentionModal(true);
       } else {
         // Firmar directamente sin retención
-        handleSignDocument(docId);
+        handleSignDocument(docId, null, null, options.causacionData || null);
       }
     }
   };
@@ -3627,7 +3793,7 @@ function Dashboard({ user, onLogout }) {
   /**
    * Firma el documento (función interna, llamada después del modal si es necesario)
    */
-  const handleSignDocument = async (docId, realSigner = null, retention = null) => {
+  const handleSignDocument = async (docId, realSigner = null, retention = null, causacionData = null) => {
     // Prevenir múltiples clicks
     if (signing) {
       console.warn('Ya se está procesando una firma');
@@ -3658,14 +3824,16 @@ function Dashboard({ user, onLogout }) {
               $signatureData: String!,
               $consecutivo: String,
               $realSignerName: String,
-              $retentions: String
+              $retentions: String,
+              $causacionData: String
             ) {
               signDocument(
                 documentId: $documentId,
                 signatureData: $signatureData,
                 consecutivo: $consecutivo,
                 realSignerName: $realSignerName,
-                retentions: $retentions
+                retentions: $retentions,
+                causacionData: $causacionData
               ) {
                 id
                 status
@@ -3680,7 +3848,8 @@ function Dashboard({ user, onLogout }) {
             signatureData: signatureData,
             consecutivo: consecutivo || null,
             realSignerName: realSigner || null,
-            retentions: retention ? JSON.stringify(retention) : null
+            retentions: retention ? JSON.stringify(retention) : null,
+            causacionData: causacionData ? JSON.stringify(causacionData) : null
           }
         },
         {
@@ -3706,7 +3875,7 @@ function Dashboard({ user, onLogout }) {
           signerSignature.roleName.toLowerCase().includes('causacion')
         );
 
-        if (isCausacion) {
+        if (isCausacion && causacionData?.__legacyMarcarCausado) {
           try {
             const causadoResponse = await axios.post(
               `${BACKEND_HOST}/api/facturas/marcar-causado/${documentToSign.consecutivo}`,
@@ -4121,6 +4290,8 @@ function Dashboard({ user, onLogout }) {
                 status
                 payableStatus
                 paidAt
+                advancePaymentStatus
+                advancePaidAt
                 documentType {
                   id
                   code
@@ -4149,6 +4320,10 @@ function Dashboard({ user, onLogout }) {
                   signedAt
                   rejectedAt
                   rejectionReason
+                  roleCode
+                  roleName
+                  roleNames
+                  roleCodes
                   realSignerName
                 }
               }
@@ -4262,6 +4437,8 @@ function Dashboard({ user, onLogout }) {
         targetTab = 'rejected';
       } else if (notification.type === 'payable_invoice') {
         targetTab = 'payable-invoices';
+      } else if (notification.type === 'payable_invoice_paid') {
+        targetTab = getOwnerDocumentTab(doc);
       }
 
       // Cambiar a la pestaña correspondiente y abrir el documento
@@ -4339,6 +4516,39 @@ function Dashboard({ user, onLogout }) {
       setShowSignConfirm(false);
       // No cerrar el viewer aquí, dejar que el usuario cierre el popup de éxito
     }
+  };
+
+  const handleCancelCausacionSign = () => {
+    setShowCausacionConfirm(false);
+    setPendingCausacionSignDocId(null);
+    setCausacionForm({ numeroCausacion: '', observaciones: '' });
+    setCausacionError('');
+  };
+
+  const handleConfirmCausacionSign = () => {
+    const numeroCausacion = causacionForm.numeroCausacion.trim();
+    const observaciones = causacionForm.observaciones.trim();
+
+    if (!numeroCausacion) {
+      setCausacionError('Ingresa el No. de Causacion.');
+      return;
+    }
+
+    if (!observaciones) {
+      setCausacionError('Ingresa las observaciones de causacion.');
+      return;
+    }
+
+    const docId = pendingCausacionSignDocId;
+    setShowCausacionConfirm(false);
+    setPendingCausacionSignDocId(null);
+    setCausacionError('');
+    initiateSignDocument(docId, {
+      causacionData: {
+        numeroCausacion,
+        observaciones
+      }
+    });
   };
 
   const handleSaveConsecutivo = () => {
@@ -4505,6 +4715,10 @@ function Dashboard({ user, onLogout }) {
       return false;
     }
 
+    if (isCausacionTestUser() && isCausacionTestDocument(doc)) {
+      return false;
+    }
+
     // Verificar que el usuario es el creador
     const isCreator = doc.uploadedBy && (
       doc.uploadedBy.email === user?.email ||
@@ -4597,6 +4811,19 @@ function Dashboard({ user, onLogout }) {
       .trim()
   );
 
+  const documentMatchesSearch = (doc, searchTerm) => {
+    const query = normalizeTextForComparison(searchTerm);
+    if (!query) return true;
+
+    const searchableText = [
+      doc?.title,
+      doc?.uploadedBy?.name,
+      doc?.uploadedBy?.email
+    ].map(normalizeTextForComparison).join(' ');
+
+    return searchableText.includes(query);
+  };
+
   const isFacturacionInvoiceDocument = (doc) => {
     if (!doc || doc.documentType?.code !== 'FV') {
       return false;
@@ -4615,16 +4842,87 @@ function Dashboard({ user, onLogout }) {
     isFacturacionInvoiceDocument(doc) ? 'my-invoices' : 'my-documents'
   );
 
+  const getMyInvoiceStatusKey = (doc) => {
+    const hasAssignedSigners = Number(doc?.totalSigners || 0) > 0 || (doc?.signatures || []).length > 0;
+    if (!hasAssignedSigners && doc?.status !== 'completed' && doc?.status !== 'rejected') {
+      return 'received';
+    }
+    return doc?.status;
+  };
+
+  const matchesMyInvoiceStatusFilter = (doc, statusFilter) => {
+    const statusKey = getMyInvoiceStatusKey(doc);
+    return statusFilter === 'all'
+      || (statusFilter === 'pending' && (statusKey === 'pending' || statusKey === 'in_progress'))
+      || statusKey === statusFilter;
+  };
+
   const isMonicaBustamanteUser = () => {
     const normalizedName = normalizeTextForComparison(user?.name);
     const normalizedEmail = normalizeTextForComparison(user?.email);
-    return normalizedEmail === 'm.bustamante@prexxa.com.co' || normalizedName === 'monica bustamante';
+    return normalizedEmail === 'm.bustamante@prexxa.com.co'
+      || normalizedName === 'monica bustamante'
+      || normalizedEmail === 'practicantetic@prexxa.com.co'
+      || normalizedEmail === 'j.bustamante@prexxa.com.co'
+      || normalizedName === 'jesus bustamante';
   };
 
   const getPayableStatus = (doc) => (doc?.payableStatus === 'paid' ? 'paid' : 'pending');
+  const getTreasuryAdvanceStatus = (doc) => (doc?.advancePaymentStatus === 'paid' ? 'paid' : 'pending');
+
+  const matchesDocumentTypeFilter = (doc, typeFilters) => {
+    if (!typeFilters || typeFilters.length === 0) {
+      return true;
+    }
+
+    const docTypeCode = doc?.documentType?.code;
+
+    return typeFilters.some(typeCode => {
+      if (typeCode === 'NONE') {
+        return !docTypeCode;
+      }
+
+      if (typeCode === 'SA_PAID') {
+        return docTypeCode === 'SA' && getTreasuryAdvanceStatus(doc) === 'paid';
+      }
+
+      if (typeCode === 'SA_PENDING') {
+        return docTypeCode === 'SA' && getTreasuryAdvanceStatus(doc) !== 'paid';
+      }
+
+      return docTypeCode === typeCode;
+    });
+  };
+
+  const renderAdvancePaymentIndicator = (doc) => {
+    const isPaidAdvance = doc?.documentType?.code === 'SA' && getTreasuryAdvanceStatus(doc) === 'paid';
+    const isPaidInvoice = doc?.documentType?.code === 'FV' && getPayableStatus(doc) === 'paid';
+
+    if (!isPaidAdvance && !isPaidInvoice) {
+      return null;
+    }
+
+    const label = isPaidInvoice ? 'Factura pagada' : 'Anticipo pagado';
+
+    return (
+      <span className="advance-payment-indicator" title={label} aria-label={label}>
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2.75C6.891 2.75 2.75 6.891 2.75 12S6.891 21.25 12 21.25 21.25 17.109 21.25 12 17.109 2.75 12 2.75Z" stroke="currentColor" strokeWidth="2"/>
+          <path d="M12 6.75V17.25M15.25 9.25C15.25 8.145 13.795 7.25 12 7.25S8.75 8.145 8.75 9.25 10.205 11.25 12 11.25 15.25 12.145 15.25 13.25 13.795 15.25 12 15.25 8.75 14.355 8.75 13.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </span>
+    );
+  };
 
   const getPayableStatusMeta = (doc) => {
     const status = getPayableStatus(doc);
+    return status === 'paid'
+      ? { label: 'Pagado', className: 'paid' }
+      : { label: 'Pendiente', className: 'pending' };
+  };
+
+  const getTreasuryAdvanceStatusMeta = (doc) => {
+    const status = getTreasuryAdvanceStatus(doc);
     return status === 'paid'
       ? { label: 'Pagado', className: 'paid' }
       : { label: 'Pendiente', className: 'pending' };
@@ -4634,6 +4932,32 @@ function Dashboard({ user, onLogout }) {
     isMonicaBustamanteUser()
     && viewingDocument?.documentType?.code === 'FV'
     && (activeTab === 'payable-invoices' || viewingDocument?.payableStatus)
+  );
+
+  const isViewingSignedTreasuryAdvance = () => {
+    if (!isMonicaBustamanteUser() || viewingDocument?.documentType?.code !== 'SA') {
+      return false;
+    }
+
+    return (viewingDocument?.signatures || []).some(signature => {
+      const signerId = signature?.signer?.id || signature?.signerId;
+      const roleNames = [
+        signature?.roleName,
+        ...(Array.isArray(signature?.roleNames) ? signature.roleNames : []),
+        signature?.roleCode,
+        ...(Array.isArray(signature?.roleCodes) ? signature.roleCodes : [])
+      ];
+
+      return String(signerId) === String(user?.id)
+        && signature?.status === 'signed'
+        && roleNames.some(roleName => getSARoleKey(roleName) === 'tesoreria');
+    });
+  };
+
+  const isViewingCreatorTreasuryAdvancePaymentStatus = () => (
+    viewingDocument?.documentType?.code === 'SA'
+    && viewingDocument?.advancePaymentStatus
+    && String(viewingDocument?.uploadedBy?.id || viewingDocument?.uploadedById) === String(user?.id)
   );
 
   const handleUpdatePayableStatus = async (paymentStatus) => {
@@ -4691,6 +5015,62 @@ function Dashboard({ user, onLogout }) {
       showNotif('Error', `No se pudo actualizar el estado de pago: ${err.message}`, 'error');
     } finally {
       setUpdatingPayableStatus(false);
+    }
+  };
+
+  const handleUpdateTreasuryAdvanceStatus = async (paymentStatus) => {
+    if (!viewingDocument || updatingTreasuryAdvanceStatus) return;
+
+    setUpdatingTreasuryAdvanceStatus(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            mutation UpdateTreasuryAdvancePaymentStatus($documentId: ID!, $paymentStatus: String!) {
+              updateTreasuryAdvancePaymentStatus(documentId: $documentId, paymentStatus: $paymentStatus) {
+                id
+                advancePaymentStatus
+                advancePaidAt
+              }
+            }
+          `,
+          variables: {
+            documentId: viewingDocument.id,
+            paymentStatus
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const updatedDoc = response.data.data.updateTreasuryAdvancePaymentStatus;
+      setViewingDocument(prev => prev ? ({
+        ...prev,
+        advancePaymentStatus: updatedDoc.advancePaymentStatus,
+        advancePaidAt: updatedDoc.advancePaidAt
+      }) : prev);
+
+      setSignedDocuments(prev => prev.map(doc => (
+        doc.id === viewingDocument.id
+          ? { ...doc, advancePaymentStatus: updatedDoc.advancePaymentStatus, advancePaidAt: updatedDoc.advancePaidAt }
+          : doc
+      )));
+
+      setTreasuryAdvanceStatusDropdownOpen(false);
+    } catch (err) {
+      console.error('Error al actualizar estado de pago del anticipo:', err);
+      showNotif('Error', `No se pudo actualizar el estado de pago: ${err.message}`, 'error');
+    } finally {
+      setUpdatingTreasuryAdvanceStatus(false);
     }
   };
 
@@ -5081,7 +5461,7 @@ function Dashboard({ user, onLogout }) {
       return;
     }
 
-    const requiredRoles = ['Solicitante', 'Aprobador', 'Tesoreria'];
+    const requiredRoles = ['Solicitante', 'Aprobador', 'Financiera', 'Tesoreria'];
     const missingRequiredRole = requiredRoles.find(roleName => !getSAAssignedSignerFromList(editingSASigners, roleName));
     if (missingRequiredRole) {
       showNotif('Error', `Debes mantener asignado el rol ${formatSARoleLabel(missingRequiredRole)}`, 'error');
@@ -5891,14 +6271,31 @@ function Dashboard({ user, onLogout }) {
                           </p>
                         )}
                       </div>
-                      <button type="button" className="help-button" onClick={() => setShowHelpModal(true)}>
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M12 17H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        <span>Necesito ayuda</span>
-                      </button>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        {isCausacionTestUser() && (
+                          <button
+                            type="button"
+                            className="help-button"
+                            onClick={handleCreateCausacionTestFactura}
+                            disabled={creatingCausacionTest}
+                            style={{ color: '#4F46E5', borderColor: '#c7d2fe', background: '#eef2ff' }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M9 8H15M9 12H15M9 16H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            <span>{creatingCausacionTest ? 'Creando...' : 'Factura prueba causacion'}</span>
+                          </button>
+                        )}
+                        <button type="button" className="help-button" onClick={() => setShowHelpModal(true)}>
+                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M12 17H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span>Necesito ayuda</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -6448,17 +6845,17 @@ function Dashboard({ user, onLogout }) {
                                         </h3>
                                       </div>
                                       <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: 0 }}>
-                                        {saWizardStep === 0
-                                          ? 'Quien solicita el anticipo'
-                                          : saWizardStep === 1
-                                          ? 'Quien aprueba el anticipo'
-                                          : saWizardStep === 2
-                                          ? 'Selecciona el usuario representante de negociaciones o haz clic en "No aplica" para omitir esta firma'
-                                          : saWizardStep === 3
-                                          ? 'Selecciona el usuario o haz clic en "No aplica" para omitir esta firma'
-                                          : saRoles[saWizardStep].required
-                                          ? 'Selecciona un usuario para este rol obligatorio'
-                                          : 'Selecciona un usuario o haz clic en "No aplica" para omitir este rol'}
+                                        {(() => {
+                                          const roleKey = getSARoleKey(saRoles[saWizardStep].name);
+                                          if (roleKey === 'solicitante') return 'Quien solicita el anticipo';
+                                          if (roleKey === 'aprobador') return 'Quien aprueba el anticipo';
+                                          if (roleKey === 'negociaciones') return 'Selecciona el usuario representante de negociaciones o haz clic en "No aplica" para omitir esta firma';
+                                          if (roleKey === 'financiera') return 'Selecciona a la persona de Financiera que debe firmar este anticipo';
+                                          if (roleKey === 'tesoreria') return 'Selecciona la persona de Tesoreria que revisara el pago del anticipo';
+                                          return saRoles[saWizardStep].required
+                                            ? 'Selecciona un usuario para este rol obligatorio'
+                                            : 'Selecciona un usuario o haz clic en "No aplica" para omitir este rol';
+                                        })()}
                                       </p>
                                     </div>
 
@@ -7086,10 +7483,8 @@ function Dashboard({ user, onLogout }) {
                   <p className="section-subtitle-minimal">
                     {(() => {
                       const filteredCount = pendingDocuments.filter(doc => {
-                        const matchesSearch = doc.title.toLowerCase().includes(pendingDocsSearchTerm.toLowerCase());
-                        const matchesType = pendingDocsTypeFilter.length === 0 ||
-                          pendingDocsTypeFilter.includes(doc.documentType?.code) ||
-                          (pendingDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                        const matchesSearch = documentMatchesSearch(doc, pendingDocsSearchTerm);
+                        const matchesType = matchesDocumentTypeFilter(doc, pendingDocsTypeFilter);
                         return matchesSearch && matchesType;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} por completar o firmar`;
@@ -7108,7 +7503,7 @@ function Dashboard({ user, onLogout }) {
                     <input
                       type="text"
                       className="filter-search-input"
-                      placeholder="Buscar por nombre de documento..."
+                      placeholder="Buscar por documento o creador..."
                       value={pendingDocsSearchTerm}
                       onChange={(e) => setPendingDocsSearchTerm(e.target.value)}
                     />
@@ -7168,6 +7563,22 @@ function Dashboard({ user, onLogout }) {
                             />
                             <span>Solicitudes de Anticipo</span>
                           </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={pendingDocsTypeFilter.includes('SA_PAID')}
+                              onChange={() => toggleDocTypeFilter('pending', 'SA_PAID')}
+                            />
+                            <span>Pagadas</span>
+                          </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={pendingDocsTypeFilter.includes('SA_PENDING')}
+                              onChange={() => toggleDocTypeFilter('pending', 'SA_PENDING')}
+                            />
+                            <span>Pendientes</span>
+                          </label>
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
@@ -7202,10 +7613,8 @@ function Dashboard({ user, onLogout }) {
                 (() => {
                   // Filtrar documentos por búsqueda y tipo
                   const filteredDocs = pendingDocuments.filter(doc => {
-                    const matchesSearch = doc.title.toLowerCase().includes(pendingDocsSearchTerm.toLowerCase());
-                    const matchesType = pendingDocsTypeFilter.length === 0 ||
-                      pendingDocsTypeFilter.includes(doc.documentType?.code) ||
-                      (pendingDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                    const matchesSearch = documentMatchesSearch(doc, pendingDocsSearchTerm);
+                    const matchesType = matchesDocumentTypeFilter(doc, pendingDocsTypeFilter);
                     return matchesSearch && matchesType;
                   });
 
@@ -7304,7 +7713,10 @@ function Dashboard({ user, onLogout }) {
                       <div key={doc.id} className={`my-doc-card-reference ${isMyTurn ? 'my-turn-to-sign' : ''}`}>
                         <div className="doc-content-wrapper">
                           <div className="doc-header-row">
-                            <h3 className="doc-title-reference">{doc.title}</h3>
+                            <h3 className="doc-title-reference">
+                              <span>{doc.title}</span>
+                              {renderAdvancePaymentIndicator(doc)}
+                            </h3>
                             <div
                               className="status-badge-clean"
                               style={{
@@ -7432,7 +7844,9 @@ function Dashboard({ user, onLogout }) {
                                 );
 
                                 const signers = response.data?.data?.documentSigners || [];
-                                const currentUserSigner = signers.find(s => s.userId === user.id);
+                                const currentUserSigner = isCausacionTestUser() && isCausacionTestDocument(doc)
+                                  ? getPendingTestSigner(signers)
+                                  : signers.find(s => s.userId === user.id);
                                 const canCurrentUserSign = Boolean(currentUserSigner) && (
                                   !currentUserSigner.signature?.status ||
                                   currentUserSigner.signature?.status === 'pending'
@@ -7506,13 +7920,11 @@ function Dashboard({ user, onLogout }) {
                   <p className="section-subtitle-minimal">
                     {(() => {
                       const filteredCount = signedDocuments.filter(doc => {
-                        const matchesSearch = doc.title.toLowerCase().includes(signedDocsSearchTerm.toLowerCase());
+                        const matchesSearch = documentMatchesSearch(doc, signedDocsSearchTerm);
                         const matchesStatus = signedDocsStatusFilter === 'all' ||
                                              (signedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                              doc.status === signedDocsStatusFilter;
-                        const matchesType = signedDocsTypeFilter.length === 0 ||
-                          signedDocsTypeFilter.includes(doc.documentType?.code) ||
-                          (signedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                        const matchesType = matchesDocumentTypeFilter(doc, signedDocsTypeFilter);
                         return matchesSearch && matchesStatus && matchesType;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''}`;
@@ -7531,7 +7943,7 @@ function Dashboard({ user, onLogout }) {
                     <input
                       type="text"
                       className="filter-search-input"
-                      placeholder="Buscar por nombre de documento..."
+                      placeholder="Buscar por documento o creador..."
                       value={signedDocsSearchTerm}
                       onChange={(e) => setSignedDocsSearchTerm(e.target.value)}
                     />
@@ -7620,6 +8032,22 @@ function Dashboard({ user, onLogout }) {
                             />
                             <span>Solicitudes de Anticipo</span>
                           </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={signedDocsTypeFilter.includes('SA_PAID')}
+                              onChange={() => toggleDocTypeFilter('signed', 'SA_PAID')}
+                            />
+                            <span>Pagadas</span>
+                          </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={signedDocsTypeFilter.includes('SA_PENDING')}
+                              onChange={() => toggleDocTypeFilter('signed', 'SA_PENDING')}
+                            />
+                            <span>Pendientes</span>
+                          </label>
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
@@ -7656,7 +8084,7 @@ function Dashboard({ user, onLogout }) {
                   // Filtrar documentos
                   const filteredDocs = signedDocuments.filter(doc => {
                     // Filtro por búsqueda de texto
-                    const matchesSearch = doc.title.toLowerCase().includes(signedDocsSearchTerm.toLowerCase());
+                    const matchesSearch = documentMatchesSearch(doc, signedDocsSearchTerm);
 
                     // Filtro por estado
                     const matchesStatus = signedDocsStatusFilter === 'all' ||
@@ -7664,9 +8092,7 @@ function Dashboard({ user, onLogout }) {
                                          doc.status === signedDocsStatusFilter;
 
                     // Filtro por tipo de documento
-                    const matchesType = signedDocsTypeFilter.length === 0 ||
-                      signedDocsTypeFilter.includes(doc.documentType?.code) ||
-                      (signedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                    const matchesType = matchesDocumentTypeFilter(doc, signedDocsTypeFilter);
 
                     return matchesSearch && matchesStatus && matchesType;
                   });
@@ -7710,7 +8136,10 @@ function Dashboard({ user, onLogout }) {
                       <div key={doc.id} className="my-doc-card-reference">
                         <div className="doc-content-wrapper">
                           <div className="doc-header-row">
-                            <h3 className="doc-title-reference">{doc.title}</h3>
+                            <h3 className="doc-title-reference">
+                              <span>{doc.title}</span>
+                              {renderAdvancePaymentIndicator(doc)}
+                            </h3>
                             <div
                               className="status-badge-clean"
                               style={{
@@ -7838,13 +8267,11 @@ function Dashboard({ user, onLogout }) {
                   <p className="section-subtitle-minimal">
                     {(() => {
                       const filteredCount = myRegularDocuments.filter(doc => {
-                        const matchesSearch = doc.title.toLowerCase().includes(myDocsSearchTerm.toLowerCase());
+                        const matchesSearch = documentMatchesSearch(doc, myDocsSearchTerm);
                         const matchesStatus = myDocsStatusFilter === 'all' ||
                                              (myDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                              doc.status === myDocsStatusFilter;
-                        const matchesType = effectiveMyDocsTypeFilter.length === 0 ||
-                          effectiveMyDocsTypeFilter.includes(doc.documentType?.code) ||
-                          (effectiveMyDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                        const matchesType = matchesDocumentTypeFilter(doc, effectiveMyDocsTypeFilter);
                         return matchesSearch && matchesStatus && matchesType;
                       }).length;
                       return (
@@ -7868,7 +8295,7 @@ function Dashboard({ user, onLogout }) {
                     <input
                       type="text"
                       className="filter-search-input"
-                      placeholder="Buscar por nombre de documento..."
+                      placeholder="Buscar por documento o creador..."
                       value={myDocsSearchTerm}
                       onChange={(e) => setMyDocsSearchTerm(e.target.value)}
                     />
@@ -7966,6 +8393,22 @@ function Dashboard({ user, onLogout }) {
                             />
                             <span>Solicitudes de Anticipo</span>
                           </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={effectiveMyDocsTypeFilter.includes('SA_PAID')}
+                              onChange={() => toggleDocTypeFilter('my', 'SA_PAID')}
+                            />
+                            <span>Pagadas</span>
+                          </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={effectiveMyDocsTypeFilter.includes('SA_PENDING')}
+                              onChange={() => toggleDocTypeFilter('my', 'SA_PENDING')}
+                            />
+                            <span>Pendientes</span>
+                          </label>
                         </div>
                       </div>
                       )}
@@ -7995,7 +8438,7 @@ function Dashboard({ user, onLogout }) {
                     // Filtrar documentos
                     const filteredDocs = myRegularDocuments.filter(doc => {
                       // Filtro por búsqueda de texto
-                      const matchesSearch = doc.title.toLowerCase().includes(myDocsSearchTerm.toLowerCase());
+                      const matchesSearch = documentMatchesSearch(doc, myDocsSearchTerm);
 
                       // Filtro por estado
                       const matchesStatus = myDocsStatusFilter === 'all' ||
@@ -8003,9 +8446,7 @@ function Dashboard({ user, onLogout }) {
                                            doc.status === myDocsStatusFilter;
 
                       // Filtro por tipo de documento
-                      const matchesType = effectiveMyDocsTypeFilter.length === 0 ||
-                        effectiveMyDocsTypeFilter.includes(doc.documentType?.code) ||
-                        (effectiveMyDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                      const matchesType = matchesDocumentTypeFilter(doc, effectiveMyDocsTypeFilter);
 
                       return matchesSearch && matchesStatus && matchesType;
                     });
@@ -8051,7 +8492,10 @@ function Dashboard({ user, onLogout }) {
                           {/* Layout completo: título arriba, fecha abajo, firmantes horizontales */}
                           <div className="doc-content-wrapper">
                             <div className="doc-header-row">
-                              <h3 className="doc-title-reference">{doc.title}</h3>
+                              <h3 className="doc-title-reference">
+                                <span>{doc.title}</span>
+                                {renderAdvancePaymentIndicator(doc)}
+                              </h3>
 
                               <div
                                 className="status-badge-clean"
@@ -8214,10 +8658,8 @@ function Dashboard({ user, onLogout }) {
                   <p className="section-subtitle-minimal">
                     {(() => {
                       const filteredCount = myInvoiceDocuments.filter(doc => {
-                        const matchesSearch = doc.title.toLowerCase().includes(myInvoicesSearchTerm.toLowerCase());
-                        const matchesStatus = myInvoicesStatusFilter === 'all' ||
-                                             (myInvoicesStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
-                                             doc.status === myInvoicesStatusFilter;
+                        const matchesSearch = documentMatchesSearch(doc, myInvoicesSearchTerm);
+                        const matchesStatus = matchesMyInvoiceStatusFilter(doc, myInvoicesStatusFilter);
                         return matchesSearch && matchesStatus;
                       }).length;
                       return (
@@ -8286,6 +8728,15 @@ function Dashboard({ user, onLogout }) {
                       En curso
                     </button>
                     <button
+                      className={`filter-status-btn filter-status-btn-received ${myInvoicesStatusFilter === 'received' ? 'active' : ''}`}
+                      onClick={() => setMyInvoicesStatusFilter('received')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12H15M9 16H13M7 3H13L19 9V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Recibidas
+                    </button>
+                    <button
                       className={`filter-status-btn filter-status-btn-rejected ${myInvoicesStatusFilter === 'rejected' ? 'active' : ''}`}
                       onClick={() => setMyInvoicesStatusFilter('rejected')}
                     >
@@ -8318,10 +8769,8 @@ function Dashboard({ user, onLogout }) {
                 <>
                   {(() => {
                     const filteredDocs = myInvoiceDocuments.filter(doc => {
-                      const matchesSearch = doc.title.toLowerCase().includes(myInvoicesSearchTerm.toLowerCase());
-                      const matchesStatus = myInvoicesStatusFilter === 'all' ||
-                                           (myInvoicesStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
-                                           doc.status === myInvoicesStatusFilter;
+                      const matchesSearch = documentMatchesSearch(doc, myInvoicesSearchTerm);
+                      const matchesStatus = matchesMyInvoiceStatusFilter(doc, myInvoicesStatusFilter);
                       return matchesSearch && matchesStatus;
                     });
 
@@ -8348,6 +8797,7 @@ function Dashboard({ user, onLogout }) {
                         {filteredDocs.map((doc) => {
                           const getStatusConfig = (status) => {
                             const statusMap = {
+                              received: { label: 'Recibida', color: '#1D4ED8', bg: '#DBEAFE' },
                               pending: { label: 'En curso', color: '#92400E', bg: '#FEF3C7' },
                               in_progress: { label: 'En curso', color: '#92400E', bg: '#FEF3C7' },
                               completed: { label: 'Firmado', color: '#065F46', bg: '#D1FAE5'},
@@ -8357,14 +8807,17 @@ function Dashboard({ user, onLogout }) {
                             return statusMap[status] || statusMap.pending;
                           };
 
-                          const statusConfig = getStatusConfig(doc.status);
+                          const statusConfig = getStatusConfig(getMyInvoiceStatusKey(doc));
                           const signatures = doc.signatures || [];
 
                           return (
                             <div key={doc.id} className="my-doc-card-reference">
                               <div className="doc-content-wrapper">
                                 <div className="doc-header-row">
-                                  <h3 className="doc-title-reference">{doc.title}</h3>
+                                  <h3 className="doc-title-reference">
+                                    <span>{doc.title}</span>
+                                    {renderAdvancePaymentIndicator(doc)}
+                                  </h3>
 
                                   <div
                                     className="status-badge-clean"
@@ -8486,7 +8939,7 @@ function Dashboard({ user, onLogout }) {
             <div key="payable-invoices-tab" className="section my-documents-section-clean">
               {(() => {
                 const visiblePayableInvoices = payableInvoices.filter(doc => {
-                  const matchesSearch = doc.title.toLowerCase().includes(payableInvoicesSearchTerm.toLowerCase());
+                  const matchesSearch = documentMatchesSearch(doc, payableInvoicesSearchTerm);
                   const matchesStatus = payableInvoicesStatusFilter === 'all'
                     || getPayableStatus(doc) === payableInvoicesStatusFilter;
 
@@ -8579,7 +9032,7 @@ function Dashboard({ user, onLogout }) {
                     </svg>
                   </div>
                   <h3 className="empty-title-minimal">No hay facturas por pagar</h3>
-                  <p className="empty-text-minimal">Las facturas FV completamente firmadas aparecerÃ¡n aquÃ­</p>
+                  <p className="empty-text-minimal">Las facturas FV completamente firmadas aparecerán aquí</p>
                 </div>
               ) : (
                 (() => {
@@ -8608,7 +9061,10 @@ function Dashboard({ user, onLogout }) {
                           <div key={doc.id} className="my-doc-card-reference">
                             <div className="doc-content-wrapper">
                               <div className="doc-header-row">
-                                <h3 className="doc-title-reference">{doc.title}</h3>
+                                <h3 className="doc-title-reference">
+                                  <span>{doc.title}</span>
+                                  {renderAdvancePaymentIndicator(doc)}
+                                </h3>
                                 <div className={`payable-status-badge ${getPayableStatusMeta(doc).className}`}>
                                   {getPayableStatusMeta(doc).label}
                                 </div>
@@ -8685,13 +9141,11 @@ function Dashboard({ user, onLogout }) {
                     {(() => {
                       const allRejected = [...rejectedByMe, ...rejectedByOthers];
                       const filteredCount = allRejected.filter(doc => {
-                        const matchesSearch = doc.title.toLowerCase().includes(rejectedDocsSearchTerm.toLowerCase());
+                        const matchesSearch = documentMatchesSearch(doc, rejectedDocsSearchTerm);
                         const matchesFilter = rejectedDocsFilter === 'all' ||
                                             (rejectedDocsFilter === 'byMe' && rejectedByMe.some(d => d.id === doc.id)) ||
                                             (rejectedDocsFilter === 'byOthers' && rejectedByOthers.some(d => d.id === doc.id));
-                        const matchesType = rejectedDocsTypeFilter.length === 0 ||
-                          rejectedDocsTypeFilter.includes(doc.documentType?.code) ||
-                          (rejectedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                        const matchesType = matchesDocumentTypeFilter(doc, rejectedDocsTypeFilter);
                         return matchesSearch && matchesFilter && matchesType;
                       }).length;
                       return `${filteredCount} documento${filteredCount !== 1 ? 's' : ''} rechazado${filteredCount !== 1 ? 's' : ''}`;
@@ -8710,7 +9164,7 @@ function Dashboard({ user, onLogout }) {
                     <input
                       type="text"
                       className="filter-search-input"
-                      placeholder="Buscar por nombre de documento..."
+                      placeholder="Buscar por documento o creador..."
                       value={rejectedDocsSearchTerm}
                       onChange={(e) => setRejectedDocsSearchTerm(e.target.value)}
                     />
@@ -8799,6 +9253,22 @@ function Dashboard({ user, onLogout }) {
                             />
                             <span>Solicitudes de Anticipo</span>
                           </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={rejectedDocsTypeFilter.includes('SA_PAID')}
+                              onChange={() => toggleDocTypeFilter('rejected', 'SA_PAID')}
+                            />
+                            <span>Pagadas</span>
+                          </label>
+                          <label className="type-filter-option type-filter-option-nested">
+                            <input
+                              type="checkbox"
+                              checked={rejectedDocsTypeFilter.includes('SA_PENDING')}
+                              onChange={() => toggleDocTypeFilter('rejected', 'SA_PENDING')}
+                            />
+                            <span>Pendientes</span>
+                          </label>
                           <label className="type-filter-option">
                             <input
                               type="checkbox"
@@ -8840,13 +9310,11 @@ function Dashboard({ user, onLogout }) {
 
                   // Filtrar por búsqueda, filtro y tipo
                   const filteredDocs = allRejected.filter(doc => {
-                    const matchesSearch = doc.title.toLowerCase().includes(rejectedDocsSearchTerm.toLowerCase());
+                    const matchesSearch = documentMatchesSearch(doc, rejectedDocsSearchTerm);
                     const matchesFilter = rejectedDocsFilter === 'all' ||
                                         (rejectedDocsFilter === 'byMe' && doc.rejectedBy === 'me') ||
                                         (rejectedDocsFilter === 'byOthers' && doc.rejectedBy === 'others');
-                    const matchesType = rejectedDocsTypeFilter.length === 0 ||
-                      rejectedDocsTypeFilter.includes(doc.documentType?.code) ||
-                      (rejectedDocsTypeFilter.includes('NONE') && !doc.documentType?.code);
+                    const matchesType = matchesDocumentTypeFilter(doc, rejectedDocsTypeFilter);
                     return matchesSearch && matchesFilter && matchesType;
                   });
 
@@ -8880,7 +9348,10 @@ function Dashboard({ user, onLogout }) {
                           <div key={doc.id} className="my-doc-card-reference">
                             <div className="doc-content-wrapper">
                               <div className="doc-header-row">
-                                <h3 className="doc-title-reference">{doc.title}</h3>
+                                <h3 className="doc-title-reference">
+                                  <span>{doc.title}</span>
+                                  {renderAdvancePaymentIndicator(doc)}
+                                </h3>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   {/* Badge clickeable para ver razón de rechazo */}
@@ -8994,7 +9465,7 @@ function Dashboard({ user, onLogout }) {
                   <p className="section-subtitle-minimal">
                     {(() => {
                       const filteredCount = retainedDocuments.filter(doc => {
-                        const matchesSearch = doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase());
+                        const matchesSearch = documentMatchesSearch(doc, retainedDocsSearchTerm);
                         const matchesStatus = retainedDocsStatusFilter === 'all' ||
                                              (retainedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                              doc.status === retainedDocsStatusFilter;
@@ -9084,7 +9555,7 @@ function Dashboard({ user, onLogout }) {
               ) : (
                 (() => {
                   const filteredDocs = retainedDocuments.filter(doc => {
-                    const matchesSearch = doc.title.toLowerCase().includes(retainedDocsSearchTerm.toLowerCase());
+                    const matchesSearch = documentMatchesSearch(doc, retainedDocsSearchTerm);
                     const matchesStatus = retainedDocsStatusFilter === 'all' ||
                                          (retainedDocsStatusFilter === 'pending' && (doc.status === 'pending' || doc.status === 'in_progress')) ||
                                          doc.status === retainedDocsStatusFilter;
@@ -9123,7 +9594,10 @@ function Dashboard({ user, onLogout }) {
                           {/* Layout completo: título arriba, fecha abajo, firmantes horizontales */}
                           <div className="doc-content-wrapper">
                             <div className="doc-header-row">
-                              <h3 className="doc-title-reference">{doc.title}</h3>
+                              <h3 className="doc-title-reference">
+                                <span>{doc.title}</span>
+                                {renderAdvancePaymentIndicator(doc)}
+                              </h3>
 
                               <div
                                 className="status-badge-clean"
@@ -9260,10 +9734,12 @@ function Dashboard({ user, onLogout }) {
             </div>
             <div className="pdf-viewer-header-right">
               {isViewingPayableInvoice() && (
-                <details className="payable-status-control">
-                  <summary
+                <div className={`payable-status-control ${payableStatusDropdownOpen ? 'open' : ''}`}>
+                  <button
+                    type="button"
                     className={`payable-status-trigger ${getPayableStatusMeta(viewingDocument).className}`}
                     title="Cambiar estado de pago"
+                    onClick={() => setPayableStatusDropdownOpen(open => !open)}
                   >
                     {getPayableStatus(viewingDocument) === 'paid' ? (
                       <svg className="payable-status-icon paid" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -9278,14 +9754,13 @@ function Dashboard({ user, onLogout }) {
                     <svg className="payable-chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                  </summary>
+                  </button>
 
                   <div className="payable-status-menu">
                     <button
                       type="button"
                       className={`payable-status-option ${getPayableStatus(viewingDocument) === 'pending' ? 'selected' : ''}`}
-                      onClick={(e) => {
-                        e.currentTarget.closest('details')?.removeAttribute('open');
+                      onClick={() => {
                         handleUpdatePayableStatus('pending');
                       }}
                       disabled={updatingPayableStatus}
@@ -9305,8 +9780,7 @@ function Dashboard({ user, onLogout }) {
                     <button
                       type="button"
                       className={`payable-status-option ${getPayableStatus(viewingDocument) === 'paid' ? 'selected' : ''}`}
-                      onClick={(e) => {
-                        e.currentTarget.closest('details')?.removeAttribute('open');
+                      onClick={() => {
                         handleUpdatePayableStatus('paid');
                       }}
                       disabled={updatingPayableStatus}
@@ -9324,7 +9798,75 @@ function Dashboard({ user, onLogout }) {
                       )}
                     </button>
                   </div>
-                </details>
+                </div>
+              )}
+              {isViewingSignedTreasuryAdvance() && (
+                <div className={`payable-status-control ${treasuryAdvanceStatusDropdownOpen ? 'open' : ''}`}>
+                  <button
+                    type="button"
+                    className={`payable-status-trigger ${getTreasuryAdvanceStatusMeta(viewingDocument).className}`}
+                    title="Cambiar estado de pago del anticipo"
+                    onClick={() => setTreasuryAdvanceStatusDropdownOpen(open => !open)}
+                  >
+                    {getTreasuryAdvanceStatus(viewingDocument) === 'paid' ? (
+                      <svg className="payable-status-icon paid" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    ) : (
+                      <svg className="payable-status-icon pending" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 7V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                    {getTreasuryAdvanceStatusMeta(viewingDocument).label}
+                    <svg className="payable-chevron" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+
+                  <div className="payable-status-menu">
+                    <button
+                      type="button"
+                      className={`payable-status-option ${getTreasuryAdvanceStatus(viewingDocument) === 'pending' ? 'selected' : ''}`}
+                      onClick={() => handleUpdateTreasuryAdvanceStatus('pending')}
+                      disabled={updatingTreasuryAdvanceStatus}
+                    >
+                      <span className="option-left">
+                        <svg className="option-icon pending" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 7V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Pendiente
+                      </span>
+                      {getTreasuryAdvanceStatus(viewingDocument) === 'pending' && (
+                        <svg className="option-check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className={`payable-status-option ${getTreasuryAdvanceStatus(viewingDocument) === 'paid' ? 'selected' : ''}`}
+                      onClick={() => handleUpdateTreasuryAdvanceStatus('paid')}
+                      disabled={updatingTreasuryAdvanceStatus}
+                    >
+                      <span className="option-left">
+                        <svg className="option-icon paid" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Pagado
+                      </span>
+                      {getTreasuryAdvanceStatus(viewingDocument) === 'paid' && (
+                        <svg className="option-check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {isViewingCreatorTreasuryAdvancePaymentStatus() && (
+                <div className={`payable-status-badge ${getTreasuryAdvanceStatusMeta(viewingDocument).className}`}>
+                  {getTreasuryAdvanceStatusMeta(viewingDocument).label}
+                </div>
               )}
               {isViewingPending && !isWaitingTurn && (
                 <>
@@ -9504,6 +10046,76 @@ function Dashboard({ user, onLogout }) {
                     disabled={signing}
                   >
                     {signing ? 'Firmando...' : 'Firmar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCausacionConfirm && (
+            <div className="sign-confirm-overlay">
+              <div className="sign-confirm-modal causacion-confirm-modal">
+                <div className="sign-confirm-icon">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 11H15M9 15H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H13.5858C13.851 3 14.1054 3.10536 14.2929 3.29289L18.7071 7.70711C18.8946 7.89464 19 8.149 19 8.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <h3 className="sign-confirm-title">Datos de causacion</h3>
+                <p className="sign-confirm-message">
+                  Completa estos datos para causar la factura y firmarla con tu usuario.
+                </p>
+                <div className="causacion-confirm-fields">
+                  <label className="causacion-confirm-field">
+                    Fecha de causacion
+                    <input
+                      value={new Date().toLocaleDateString('es-CO')}
+                      disabled
+                      className="causacion-confirm-input disabled"
+                    />
+                  </label>
+                  <label className="causacion-confirm-field">
+                    No. de Causacion
+                    <input
+                      value={causacionForm.numeroCausacion}
+                      onChange={(e) => {
+                        setCausacionForm(prev => ({ ...prev, numeroCausacion: e.target.value }));
+                        setCausacionError('');
+                      }}
+                      className="causacion-confirm-input"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="causacion-confirm-field">
+                    Observaciones
+                    <textarea
+                      value={causacionForm.observaciones}
+                      onChange={(e) => {
+                        setCausacionForm(prev => ({ ...prev, observaciones: e.target.value }));
+                        setCausacionError('');
+                      }}
+                      rows="4"
+                      className="causacion-confirm-textarea"
+                      autoComplete="off"
+                    />
+                  </label>
+                  {causacionError && (
+                    <div className="causacion-confirm-error">{causacionError}</div>
+                  )}
+                </div>
+                <div className="sign-confirm-actions">
+                  <button
+                    className="sign-confirm-btn cancel"
+                    onClick={handleCancelCausacionSign}
+                    disabled={signing}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="sign-confirm-btn confirm"
+                    onClick={handleConfirmCausacionSign}
+                    disabled={signing}
+                  >
+                    Guardar y firmar
                   </button>
                 </div>
               </div>
@@ -10705,7 +11317,7 @@ function Dashboard({ user, onLogout }) {
               <div className="sa-editor-left">
                 <h4 className="sa-editor-section-title">Roles editables</h4>
                 <div className="sa-editor-role-list">
-                  {['Solicitante', 'Aprobador', 'Negociaciones', 'Gerencia', 'Tesoreria'].map((roleName) => {
+                  {['Solicitante', 'Aprobador', 'Negociaciones', 'Financiera', 'Gerencia', 'Tesoreria'].map((roleName) => {
                     const assignedSigner = getSAAssignedSignerFromList(editingSASigners, roleName);
                     const roleKey = getSARoleKey(roleName);
                     const isLocked = roleKey === 'tesoreria' || Boolean(editingSARoleLocks[roleKey]);

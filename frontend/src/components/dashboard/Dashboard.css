@@ -5086,7 +5086,15 @@
   display: none;
 }
 
+.payable-status-control.open .payable-status-menu {
+  display: block;
+}
+
 .payable-status-control[open] .payable-chevron {
+  transform: rotate(180deg);
+}
+
+.payable-status-control.open .payable-chevron {
   transform: rotate(180deg);
 }
 
@@ -7885,6 +7893,28 @@ html:has(.pdf-viewer-minimal-overlay) {
   color: #065F46;
 }
 
+.filter-status-btn-received:hover {
+  background: #DBEAFE;
+  border-color: #60A5FA;
+  color: #1D4ED8;
+  box-shadow: 0 2px 6px rgba(96, 165, 250, 0.18);
+}
+
+.filter-status-btn-received:hover svg {
+  color: #1D4ED8;
+}
+
+.filter-status-btn-received.active {
+  background: #DBEAFE;
+  border-color: #60A5FA;
+  color: #1D4ED8;
+  box-shadow: 0 2px 6px rgba(96, 165, 250, 0.18);
+}
+
+.filter-status-btn-received.active svg {
+  color: #1D4ED8;
+}
+
 .filter-status-btn-pending:hover {
   background: #FEF3C7;
   border-color: #92400E;
@@ -8030,6 +8060,11 @@ html:has(.pdf-viewer-minimal-overlay) {
   background: #F9FAFB;
 }
 
+.type-filter-option-nested {
+  margin-left: 24px;
+  padding-left: 10px;
+}
+
 .type-filter-option input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
@@ -8072,6 +8107,35 @@ html:has(.pdf-viewer-minimal-overlay) {
   color: #374151;
   font-weight: 500;
   line-height: 1.4;
+}
+
+.doc-title-reference {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doc-title-reference > span {
+  min-width: 0;
+}
+
+.advance-payment-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: #2563EB;
+  background: #EFF6FF;
+  border: 1.5px solid #3B82F6;
+  border-radius: 999px;
+}
+
+.advance-payment-indicator svg {
+  width: 15px;
+  height: 15px;
 }
 
 /* Responsive */
