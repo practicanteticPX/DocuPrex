@@ -4082,6 +4082,50 @@ function Dashboard({ user, onLogout }) {
         }
       }
 
+      // Refresh viewingDocument if the rejected doc is currently open
+      if (viewingDocument && String(viewingDocument.id) === String(docId)) {
+        try {
+          const freshResp = await axios.post(
+            API_URL,
+            {
+              query: `
+                query($id: ID!) {
+                  document(id: $id) {
+                    id
+                    status
+                    signatures {
+                      id status signedAt rejectionReason rejectedAt
+                      roleName roleNames roleCode roleCodes
+                      orderPosition realSignerName isCausacionGroup grupoCodigo grupoNombre
+                      members { userId activo userName }
+                      signer { id name email }
+                    }
+                  }
+                }
+              `,
+              variables: { id: docId }
+            },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const freshDoc = freshResp.data?.data?.document;
+          if (freshDoc) {
+            setViewingDocument(prev => prev ? {
+              ...prev,
+              status: freshDoc.status,
+              signatures: freshDoc.signatures,
+              pdfVersion: Date.now()
+            } : prev);
+          }
+        } catch (refreshErr) {
+          // Non-fatal: fallback to status-only update
+          setViewingDocument(prev => prev && String(prev.id) === String(docId) ? {
+            ...prev,
+            status: 'rejected',
+            pdfVersion: Date.now()
+          } : prev);
+        }
+      }
+
       // Mostrar popup de éxito
       setShowRejectSuccess(true);
 

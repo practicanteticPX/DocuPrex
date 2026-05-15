@@ -18,6 +18,7 @@ const { generateFacturaTemplatePDF } = require('../utils/pdfFacturaTemplate');
 const { mergePDFs, cleanupTempFiles } = require('../utils/pdfMerger');
 const { addStampToPdf } = require('../utils/pdfStamp');
 const serverConfig = require('../config/server');
+const { moveToCausado } = require('../services/facturaFileService');
 const websocketService = require('../services/websocket');
 const { createSession, validateSession, closeSession } = require('../utils/sessionManager');
 
@@ -1785,7 +1786,12 @@ const resolvers = {
         ORDER BY nombre ASC
       `);
 
-      return result.rows;
+      // Groups marked as test (contain 'prueba' in name) are only visible to the test user
+      if (isCausacionTestUser(user)) {
+        return result.rows;
+      }
+
+      return result.rows.filter(g => !g.nombre.toLowerCase().includes('prueba'));
     },
 
     causacionGrupo: async (_, { codigo }, { user }) => {
@@ -3976,10 +3982,16 @@ const resolvers = {
           }
         }
 
+        const sentAtResult3 = await query(
+          `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
+          [documentId]
+        );
+
         const documentInfo = {
           title: docInfo.title,
           fileName: docInfo.file_name,
           createdAt: docInfo.created_at,
+          sentAt: sentAtResult3.rows[0]?.sent_at || null,
           uploadedBy: docInfo.uploader_name || 'Sistema',
           documentTypeName: docInfo.document_type_name || null,
           cia: cia
@@ -5278,10 +5290,16 @@ const resolvers = {
         }));
 
         // Preparar información del documento para la portada
+        const sentAtResult4 = await query(
+          `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
+          [documentId]
+        );
+
         const documentInfo = {
           title: doc.title,
           fileName: doc.file_name,
           createdAt: doc.created_at,
+          sentAt: sentAtResult4.rows[0]?.sent_at || null,
           uploadedBy: doc.uploader_name || user.name,
           documentTypeName: doc.document_type_name || 'Factura',
           cia: parsedTemplateData.cia || null
@@ -5403,19 +5421,56 @@ const resolvers = {
       );
       const pendingDirectSignerRow = orderCheck.rows.find(row => !['signed', 'rejected'].includes(row.signature_status));
 
+      // Check causacion group membership when not found as direct signer
+      let causacionGroupSignerRow = null;
       if (orderCheck.rows.length === 0 || !pendingDirectSignerRow) {
-        throw new Error('No estás asignado a este documento');
+        const docOwnerForReject = await query(
+          `SELECT d.uploaded_by, u.name as owner_name, u.email as owner_email
+           FROM documents d JOIN users u ON u.id = d.uploaded_by WHERE d.id = $1`,
+          [documentId]
+        );
+        const isCausacionTestModeReject = isCausacionTestUser(user)
+          && docOwnerForReject.rows[0]
+          && isCausacionTestDocument(docOwnerForReject.rows[0]);
+
+        const causacionGroupCheck = await query(
+          `SELECT ds.id as document_signer_id, ds.order_position, ds.user_id, ds.grupo_codigo,
+                  COALESCE(s.status, 'pending') as signature_status
+           FROM document_signers ds
+           LEFT JOIN signatures s ON ${signatureJoinCondition}
+           WHERE ds.document_id = $1
+             AND ds.is_causacion_group = TRUE
+             AND COALESCE(s.status, 'pending') = 'pending'
+             AND (
+               EXISTS (
+                 SELECT 1 FROM causacion_integrantes ci
+                 JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                 WHERE cg.codigo = ds.grupo_codigo AND ci.user_id = $2 AND ci.activo = true
+               )
+               OR $3::boolean = true
+             )
+           ORDER BY ds.order_position ASC
+           LIMIT 1`,
+          [documentId, user.id, isCausacionTestModeReject]
+        );
+
+        if (causacionGroupCheck.rows.length > 0) {
+          causacionGroupSignerRow = causacionGroupCheck.rows[0];
+        } else {
+          throw new Error('No estás asignado a este documento');
+        }
       }
 
-      const activeSignerRow = orderCheck.rows.find(row => !['signed', 'rejected'].includes(row.signature_status));
+      const activeSignerRow = causacionGroupSignerRow
+        || orderCheck.rows.find(row => !['signed', 'rejected'].includes(row.signature_status));
       if (!activeSignerRow) {
         throw new Error('Ya no tienes una firma pendiente para rechazar en este documento');
       }
 
       const currentOrder = activeSignerRow.order_position;
 
-      // Si no es el primer firmante, validar que el anterior haya firmado
-      if (currentOrder > 1) {
+      // Causacion group members can reject at any point regardless of signing order
+      if (currentOrder > 1 && !causacionGroupSignerRow) {
         const previousSignerCheck = await query(
           `SELECT s.status, u.name as signer_name
           FROM document_signers ds
@@ -5440,34 +5495,59 @@ const resolvers = {
       const hasDocumentSignerIdColumn = await checkSignaturesHasDocumentSignerIdColumn();
       const hasRealSignerNameColumn = await checkSignaturesHasRealSignerNameColumn();
 
-      if (hasDocumentSignerIdColumn && hasRealSignerNameColumn) {
-        await query(
-          `UPDATE signatures
-           SET status = $1,
-               rejection_reason = $2,
-               rejected_at = $3,
-               signed_at = $3,
-               real_signer_name = COALESCE($4, real_signer_name),
-               updated_at = CURRENT_TIMESTAMP
-           WHERE document_signer_id = $5`,
-          ['rejected', reason || '', now, realSignerName || null, activeSignerRow.document_signer_id]
-        );
-      } else if (hasDocumentSignerIdColumn) {
-        await query(
-          `UPDATE signatures
-           SET status = $1,
-               rejection_reason = $2,
-               rejected_at = $3,
-               signed_at = $3,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE document_signer_id = $4`,
-          ['rejected', reason || '', now, activeSignerRow.document_signer_id]
-        );
+      const effectiveSignerUserId = causacionGroupSignerRow ? user.id : (activeSignerRow.user_id || user.id);
+      const targetDocumentSignerId = activeSignerRow.document_signer_id;
+      const effectiveRealSignerName = causacionGroupSignerRow ? user.name : (realSignerName || null);
+
+      // Causacion group slots have no pre-existing signature row — check and INSERT or UPDATE
+      const existingRejectionSig = (hasDocumentSignerIdColumn && targetDocumentSignerId)
+        ? await query(`SELECT id FROM signatures WHERE document_signer_id = $1`, [targetDocumentSignerId])
+        : await query(`SELECT id FROM signatures WHERE document_id = $1 AND signer_id = $2`, [documentId, effectiveSignerUserId]);
+
+      if (existingRejectionSig.rows.length > 0) {
+        if (hasDocumentSignerIdColumn && hasRealSignerNameColumn) {
+          await query(
+            `UPDATE signatures
+             SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3,
+                 real_signer_name = COALESCE($4, real_signer_name), updated_at = CURRENT_TIMESTAMP
+             WHERE document_signer_id = $5`,
+            ['rejected', reason || '', now, effectiveRealSignerName, targetDocumentSignerId]
+          );
+        } else if (hasDocumentSignerIdColumn) {
+          await query(
+            `UPDATE signatures
+             SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3, updated_at = CURRENT_TIMESTAMP
+             WHERE document_signer_id = $4`,
+            ['rejected', reason || '', now, targetDocumentSignerId]
+          );
+        } else {
+          await query(
+            `UPDATE signatures SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3
+             WHERE document_id = $4 AND signer_id = $5`,
+            ['rejected', reason || '', now, documentId, effectiveSignerUserId]
+          );
+        }
       } else {
-        await query(
-          'UPDATE signatures SET status = $1, rejection_reason = $2, rejected_at = $3, signed_at = $3 WHERE document_id = $4 AND signer_id = $5',
-          ['rejected', reason || '', now, documentId, activeSignerRow.user_id]
-        );
+        // No existing row (causacion group slot not yet touched) — INSERT
+        if (hasDocumentSignerIdColumn && hasRealSignerNameColumn) {
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, document_signer_id, status, rejection_reason, rejected_at, signed_at, real_signer_name)
+             VALUES ($1, $2, $3, 'rejected', $4, $5, $5, $6)`,
+            [documentId, effectiveSignerUserId, targetDocumentSignerId, reason || '', now, effectiveRealSignerName]
+          );
+        } else if (hasDocumentSignerIdColumn) {
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, document_signer_id, status, rejection_reason, rejected_at, signed_at)
+             VALUES ($1, $2, $3, 'rejected', $4, $5, $5)`,
+            [documentId, effectiveSignerUserId, targetDocumentSignerId, reason || '', now]
+          );
+        } else {
+          await query(
+            `INSERT INTO signatures (document_id, signer_id, status, rejection_reason, rejected_at, signed_at)
+             VALUES ($1, $2, 'rejected', $3, $4, $4)`,
+            [documentId, effectiveSignerUserId, reason || '', now]
+          );
+        }
       }
 
       const statusResult = await query(
@@ -5677,10 +5757,16 @@ const resolvers = {
           });
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
+          const sentAtResult = await query(
+            `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
+            [documentId]
+          );
+
           const documentInfo = {
             title: docInfo.title,
             fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
+            sentAt: sentAtResult.rows[0]?.sent_at || null,
             uploadedBy: docInfo.uploader_name || 'Sistema',
             documentTypeName: docInfo.document_type_name || null
           };
@@ -5832,24 +5918,22 @@ const resolvers = {
             console.log('📋 Backups encontrados:', backupFilePaths);
             console.log('📋 Campo original_pdf_backup:', doc.original_pdf_backup);
 
-            if (backupFilePaths.length === 0) {
-              console.log('⚠️ No se encontraron backups del PDF original. No se puede regenerar.');
-              throw new Error('No se encontraron backups del PDF original para regenerar');
-            }
-
-            // Merge: planilla + backups (sin página de firmantes aún)
-            // ORDEN CORRECTO: 1. Planilla con RECHAZADO, 2. PDFs originales
-            const filesToMerge = [
-              tempPlanillaPath,
-              ...backupFilePaths.map(bp => path.join(__dirname, '..', 'uploads', bp.replace(/^uploads\//, '')))
-            ];
-
-            console.log('📋 Archivos a fusionar (orden: planilla + backups):', filesToMerge);
-
-            // Fusionar en un archivo temporal (NO en currentPdfPath todavía)
             const tempMergedPath = path.join(tempDir, `merged_rejected_${documentId}_${Date.now()}.pdf`);
-            await mergePDFs(filesToMerge, tempMergedPath);
-            console.log('✅ PDF base fusionado (planilla + backups) en temporal');
+
+            if (backupFilePaths.length === 0) {
+              console.log('⚠️ No hay backups del PDF original — usando solo la planilla como base del PDF rechazado.');
+              await fs.copyFile(tempPlanillaPath, tempMergedPath);
+            } else {
+              // Merge: planilla + backups (sin página de firmantes aún)
+              // ORDEN CORRECTO: 1. Planilla con RECHAZADO, 2. PDFs originales
+              const filesToMerge = [
+                tempPlanillaPath,
+                ...backupFilePaths.map(bp => path.join(__dirname, '..', 'uploads', bp.replace(/^uploads\//, '')))
+              ];
+              console.log('📋 Archivos a fusionar (orden: planilla + backups):', filesToMerge);
+              await mergePDFs(filesToMerge, tempMergedPath);
+              console.log('✅ PDF base fusionado (planilla + backups) en temporal');
+            }
 
             // Limpiar planilla temporal
             await cleanupTempFiles([tempPlanillaPath]);
@@ -6083,7 +6167,10 @@ const resolvers = {
       const currentOrder = orderCheck.rows[0].order_position;
 
       const docCausacionInfoResult = await query(
-        `SELECT d.consecutivo, dt.code as document_type_code
+        `SELECT d.consecutivo, d.file_path, d.file_name,
+                d.metadata->>'cia' as cia,
+                d.metadata->>'numeroFactura' as numero_factura,
+                dt.code as document_type_code
          FROM documents d
          LEFT JOIN document_types dt ON d.document_type_id = dt.id
          WHERE d.id = $1`,
@@ -6346,6 +6433,37 @@ const resolvers = {
             })
           ]
         );
+
+        // Mover el PDF al Archivo Contable (local → sync a S: via script)
+        const nitRow = await queryFacturas(
+          `SELECT nit, fecha_factura FROM crud_facturas."T_Facturas" WHERE numero_control = $1`,
+          [String(docCausacionInfo.consecutivo).trim()]
+        );
+
+        if (nitRow.rows[0]?.nit && docCausacionInfo.cia && docCausacionInfo.numero_factura && docCausacionInfo.file_path) {
+          const fechaFactura = nitRow.rows[0].fecha_factura
+            ? new Date(nitRow.rows[0].fecha_factura)
+            : new Date();
+
+          const moved = await moveToCausado(
+            docCausacionInfo.file_path,
+            docCausacionInfo.cia,
+            nitRow.rows[0].nit,
+            docCausacionInfo.numero_factura,
+            numeroCausacionValue,
+            fechaFactura
+          ).catch(err => {
+            console.error('⚠️ No se pudo mover archivo causado:', err.message);
+            return null;
+          });
+
+          if (moved) {
+            await query(
+              `UPDATE documents SET file_path = $2, file_name = $3 WHERE id = $1`,
+              [documentId, moved.newRelativePath, moved.newFileName]
+            );
+          }
+        }
       }
 
       const shouldAutoSignNegociaciones = !isCausacionGroupMember
@@ -7128,10 +7246,16 @@ const resolvers = {
           });
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
+          const sentAtResult2 = await query(
+            `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
+            [documentId]
+          );
+
           const documentInfo = {
             title: docInfo.title,
             fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
+            sentAt: sentAtResult2.rows[0]?.sent_at || null,
             uploadedBy: docInfo.uploader_name || 'Sistema',
             documentTypeName: docInfo.document_type_name || null
           };

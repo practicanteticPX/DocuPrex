@@ -55,12 +55,15 @@ router.get('/cuentas-contables', async (req, res) => {
  */
 router.get('/centros-costos', async (req, res) => {
   try {
-    const result = await queryFacturas(
+    const result = await queryCuentas(
       `SELECT
-        "Cia_CC" as codigo,
-        "Responsable" as responsable
-       FROM crud_facturas."T_CentrosCostos"
-       ORDER BY "Cia_CC" ASC`,
+        "CCN4" as codigo,
+        "nombreCCN4" as nombre,
+        "nombreResponsable" as responsable
+       FROM public.v_centros_costos
+       WHERE "activoCCN4" = true
+         AND "nombreResponsable" IS NOT NULL
+       ORDER BY "CCN4" ASC`,
       []
     );
 

@@ -148,8 +148,11 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     yPosition -= 25;
 
     // ========== INFORMACIÓN DEL DOCUMENTO - ESTILO ZAPSIGN (SIN CAJA) ==========
-    // 1. Fecha de creación
-    coverPage.drawText('Fecha de creación:', {
+    // 1. Fecha de envío / creación
+    const dateLabel = documentInfo.sentAt ? 'Fecha de recepción:' : 'Fecha de creación:';
+    const dateSource = documentInfo.sentAt || documentInfo.createdAt;
+
+    coverPage.drawText(dateLabel, {
       x: margin,
       y: yPosition,
       size: 9,
@@ -159,8 +162,8 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 16;
 
-    const createdDate = documentInfo.createdAt
-      ? new Date(documentInfo.createdAt).toLocaleString('es-CO', {
+    const createdDate = dateSource
+      ? new Date(dateSource).toLocaleString('es-CO', {
           timeZone: 'America/Bogota',
           day: '2-digit',
           month: 'long',
@@ -331,20 +334,36 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
         yPosition -= 16;
 
         const reason = rejectedSigner.rejection_reason;
-        const maxReasonLength = 80;
-        const displayReason = reason.length > maxReasonLength
-          ? reason.substring(0, maxReasonLength) + '...'
-          : reason;
+        const reasonFontSize = 10;
+        const maxLineWidth = width - margin * 2;
+        const words = reason.split(' ');
+        const reasonLines = [];
+        let currentLine = '';
 
-        coverPage.drawText(displayReason, {
-          x: margin,
-          y: yPosition,
-          size: 10,
-          font: fontRegular,
-          color: rgb(0.15, 0.15, 0.15),
-        });
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          const testWidth = fontRegular.widthOfTextAtSize(testLine, reasonFontSize);
+          if (testWidth > maxLineWidth && currentLine) {
+            reasonLines.push(currentLine);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+        if (currentLine) reasonLines.push(currentLine);
 
-        yPosition -= 25;
+        for (const line of reasonLines) {
+          coverPage.drawText(line, {
+            x: margin,
+            y: yPosition,
+            size: reasonFontSize,
+            font: fontRegular,
+            color: rgb(0.15, 0.15, 0.15),
+          });
+          yPosition -= 14;
+        }
+
+        yPosition -= 11;
       }
     }
 

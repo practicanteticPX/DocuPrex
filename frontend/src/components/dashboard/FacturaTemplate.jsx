@@ -851,7 +851,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
     const filtroUpper = filtro.toUpperCase();
     return centros.filter(centro =>
-      centro.codigo.toString().toUpperCase().includes(filtroUpper)
+      centro.codigo.toString().toUpperCase().includes(filtroUpper) ||
+      (centro.nombre || '').toUpperCase().includes(filtroUpper)
     );
   };
 
@@ -999,8 +1000,33 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
       }
     };
 
+    const handleScroll = () => {
+      Object.keys(dropdownRefs.current).forEach((id) => {
+        if (dropdownRefs.current[id]) {
+          const rect = dropdownRefs.current[id].getBoundingClientRect();
+          setDropdownPositions(prev => ({ ...prev, [id]: { top: rect.bottom, left: rect.left, width: rect.width } }));
+        }
+      });
+
+      Object.keys(dropdownCentrosRefs.current).forEach((id) => {
+        if (dropdownCentrosRefs.current[id]) {
+          const rect = dropdownCentrosRefs.current[id].getBoundingClientRect();
+          setDropdownCentrosPositions(prev => ({ ...prev, [id]: { top: rect.bottom, left: rect.left, width: rect.width } }));
+        }
+      });
+
+      if (dropdownNegociadoresRef.current) {
+        const rect = dropdownNegociadoresRef.current.getBoundingClientRect();
+        setDropdownNegociadoresPosition({ top: rect.bottom, left: rect.left, width: rect.width });
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('scroll', handleScroll, true);
+    };
   }, [tooltipAbierto]);
 
   const calcularTotalPorcentaje = () => {

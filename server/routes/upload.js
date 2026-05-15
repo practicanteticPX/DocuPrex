@@ -4,8 +4,10 @@ const fs = require('fs');
 const { uploadSinglePDF, uploadMultiplePDFs, normalizeUserName, uploadDir } = require('../utils/fileUpload');
 const { mergePDFs, cleanupTempFiles, validatePDFs } = require('../utils/pdfMerger');
 const { query } = require('../database/db');
+const { queryFacturas } = require('../database/facturas-db');
 const jwt = require('jsonwebtoken');
 const pdfLogger = require('../utils/pdfLogger');
+const { moveToSinCausar } = require('../services/facturaFileService');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
@@ -59,16 +61,13 @@ router.post('/upload', authenticate, (req, res) => {
     const { title, description, documentTypeId, consecutivo, templateData } = req.body;
 
     try {
-      // Construir ruta: usuario/archivo.pdf
       const normalizedUserName = normalizeUserName(req.user.name);
-      const relativePath = `uploads/${normalizedUserName}/${req.file.filename}`;
+      let currentRelativePath = `uploads/${normalizedUserName}/${req.file.filename}`;
+      let currentFileName = req.file.filename;
 
-      // Usar el título proporcionado por el usuario, o el nombre del archivo como fallback
-      // Limpiar espacios extra: trim + reemplazar múltiples espacios por uno solo
       let docTitle = title?.trim() || path.basename(req.file.originalname, path.extname(req.file.originalname));
-      docTitle = docTitle.replace(/\s+/g, ' '); // Reemplazar múltiples espacios por uno solo
+      docTitle = docTitle.replace(/\s+/g, ' ');
 
-      // Parsear templateData si viene como string JSON
       let parsedMetadata = {};
       if (templateData) {
         try {
@@ -79,7 +78,7 @@ router.post('/upload', authenticate, (req, res) => {
         }
       }
 
-      // 🔑 HACER BACKUP DEL PDF INDIVIDUAL ANTES DE PROCESARLO
+      // 🔑 BACKUP DEL PDF INDIVIDUAL ANTES DE PROCESARLO
       const backupDir = path.join(__dirname, '..', 'uploads', 'originals');
       const fs = require('fs').promises;
       await fs.mkdir(backupDir, { recursive: true });
@@ -90,6 +89,30 @@ router.post('/upload', authenticate, (req, res) => {
 
       await fs.copyFile(req.file.path, backupPath);
       console.log(`✅ Backup guardado: ${req.file.originalname}`);
+
+      // Para FV desde facturacion: mover a "Facturas sin causar/{creador}/{nit}_{#factura}.pdf"
+      if (documentTypeId && consecutivo?.trim()) {
+        try {
+          const dtResult = await query(`SELECT code FROM document_types WHERE id = $1`, [documentTypeId]);
+          if (dtResult.rows[0]?.code === 'FV') {
+            const nitResult = await queryFacturas(
+              `SELECT nit, numero_factura FROM crud_facturas."T_Facturas" WHERE numero_control = $1`,
+              [consecutivo.trim()]
+            );
+
+            if (nitResult.rows[0]?.nit) {
+              const { nit, numero_factura } = nitResult.rows[0];
+              const moved = await moveToSinCausar(req.file.path, nit, numero_factura, req.user.name);
+              currentRelativePath = moved.newRelativePath;
+              currentFileName = moved.newFileName;
+              console.log(`📂 FV guardada en Facturas sin causar: ${currentRelativePath}`);
+            }
+          }
+        } catch (moveErr) {
+          // Non-fatal: file stays in default location if move fails
+          console.error('⚠️ No se pudo mover a Facturas sin causar:', moveErr.message);
+        }
+      }
 
       // Guardar el documento en la base de datos
       const result = await query(
@@ -111,8 +134,8 @@ router.post('/upload', authenticate, (req, res) => {
         [
           docTitle,
           description?.trim() || null,
-          req.file.filename,
-          relativePath,
+          currentFileName,
+          currentRelativePath,
           req.file.size,
           req.file.mimetype,
           'pending',
@@ -120,7 +143,7 @@ router.post('/upload', authenticate, (req, res) => {
           documentTypeId || null,
           consecutivo?.trim() || null,
           JSON.stringify(parsedMetadata),
-          JSON.stringify([relativeBackupPath])  // Array con 1 solo elemento
+          JSON.stringify([relativeBackupPath])
         ]
       );
 
@@ -357,9 +380,35 @@ router.post('/upload-unified', authenticate, (req, res) => {
         }
       }
 
+      // Para FV desde facturacion: mover el PDF unificado a "Facturas sin causar"
+      let currentRelativePath = `uploads/${normalizedUserName}/${mergedFileName}`;
+      let currentFileName = mergedFileName;
+
+      if (documentTypeId && consecutivo?.trim()) {
+        try {
+          const dtResult = await query(`SELECT code FROM document_types WHERE id = $1`, [documentTypeId]);
+          if (dtResult.rows[0]?.code === 'FV') {
+            const nitResult = await queryFacturas(
+              `SELECT nit, numero_factura FROM crud_facturas."T_Facturas" WHERE numero_control = $1`,
+              [consecutivo.trim()]
+            );
+
+            if (nitResult.rows[0]?.nit) {
+              const { nit, numero_factura } = nitResult.rows[0];
+              const moved = await moveToSinCausar(mergedPdfPath, nit, numero_factura, req.user.name);
+              currentRelativePath = moved.newRelativePath;
+              currentFileName = moved.newFileName;
+              mergedPdfPath = null; // file was moved, nothing to clean up
+              console.log(`📂 FV unificada guardada en Facturas sin causar: ${currentRelativePath}`);
+            }
+          }
+        } catch (moveErr) {
+          console.error('⚠️ No se pudo mover FV unificada a Facturas sin causar:', moveErr.message);
+        }
+      }
+
       // Guardar el documento unificado en la base de datos
       const docTitle = title?.trim() || 'Documento Unificado';
-      const relativePath = `uploads/${normalizedUserName}/${mergedFileName}`;
 
       const result = await query(
         `INSERT INTO documents (
@@ -380,8 +429,8 @@ router.post('/upload-unified', authenticate, (req, res) => {
         [
           docTitle,
           description?.trim() || null,
-          mergedFileName,
-          relativePath,
+          currentFileName,
+          currentRelativePath,
           mergeResult.fileSize,
           'application/pdf',
           'pending',
