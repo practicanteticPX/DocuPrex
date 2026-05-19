@@ -651,10 +651,104 @@ Este es un correo automático, por favor no responder.
   return await Promise.all(promises);
 }
 
+/**
+ * Notifica al rechazante que el creador ya corrigió el documento
+ * y debe proceder a revisarlo y firmarlo nuevamente.
+ */
+async function notificarFacturaCorregida({
+  email,
+  nombreRechazante,
+  nombreDocumento,
+  documentoId,
+  notasCorreccion
+}) {
+  const frontendUrl = serverConfig.frontendUrl;
+  const documentoUrl = `${frontendUrl}/documento/${documentoId}`;
+
+  const subject = 'Factura corregida - Requiere tu revisión';
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${subject}</title>
+      <style>
+        body { margin: 0; padding: 0; width: 100%; background-color: #f3f4f6; font-family: 'Poppins', Arial, sans-serif; }
+        .container { width: 100%; max-width: 448px; margin: 0 auto; background-color: #ffffff; }
+        .content { padding: 32px; text-align: center; }
+        h1 { margin-top: 0; margin-bottom: 8px; font-family: 'Poppins', Arial, sans-serif; font-size: 20px; font-weight: 600; color: #1f2937; }
+        p { margin: 0; margin-bottom: 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; color: #6b7280; }
+        .footer { padding: 24px 0; text-align: center; font-family: 'Poppins', Arial, sans-serif; font-size: 12px; color: #6b7280; }
+      </style>
+    </head>
+    <body style="margin: 0; padding: 0; width: 100%; background-color: #f3f4f6;">
+      <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f3f4f6" style="width: 100%; background-color: #f3f4f6;">
+        <tr><td style="height: 64px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
+        <tr>
+          <td align="center">
+            <table class="container" role="presentation" width="448" align="center" style="width: 100%; max-width: 448px; margin: 0 auto; background-color: #ffffff;" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="content" style="padding: 32px; text-align: center;">
+                  <h1 style="margin-top: 0; margin-bottom: 8px; font-family: 'Poppins', Arial, sans-serif; font-size: 20px; font-weight: 600; color: #1f2937;">Factura Corregida</h1>
+                  <p style="margin: 0; margin-bottom: 32px; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; color: #6b7280;">
+                    Hola <span style="font-weight: 500; color: #374151;">${nombreRechazante}</span>, la factura "<span style="font-weight: 500; color: #374151;">${nombreDocumento}</span>" que rechazaste ha sido corregida y está lista para tu revisión.
+                  </p>
+                  ${notasCorreccion ? `
+                  <div style="margin-bottom: 32px; text-align: left; background-color: #fffbeb; padding: 12px 16px; border-left: 4px solid #f59e0b;">
+                    <p style="margin: 0; font-family: 'Poppins', Arial, sans-serif; font-size: 15px; color: #374151; margin-bottom: 4px; font-weight: 600;">Notas de corrección:</p>
+                    <p style="margin: 0; font-family: 'Poppins', Arial, sans-serif; font-size: 15px; color: #6b7280; font-style: italic;">${notasCorreccion}</p>
+                  </div>` : ''}
+                  <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto;">
+                    <tr>
+                      <td align="center" bgcolor="#F59E0B" style="background-color: #F59E0B; border-radius: 8px;">
+                        <a href="${documentoUrl}" target="_blank" style="display: inline-block; text-decoration: none; font-family: 'Poppins', Arial, sans-serif; font-size: 16px; font-weight: 600; padding: 12px 24px; border: 1px solid #F59E0B; border-radius: 8px; color: #ffffff;">Revisar y Firmar</a>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td align="center">
+            <table role="presentation" width="448" border="0" cellspacing="0" cellpadding="0" align="center" style="width: 100%; max-width: 448px; margin: 0 auto;">
+              <tr>
+                <td class="footer" style="padding: 24px 0; text-align: center; font-family: 'Poppins', Arial, sans-serif; font-size: 12px; color: #6b7280;">
+                  <p style="margin: 0;">&copy; ${new Date().getFullYear()} DocuPrex&reg; - Powered by Prexxa TIC</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr><td style="height: 64px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  const text = `
+Hola ${nombreRechazante},
+
+La factura "${nombreDocumento}" que rechazaste ha sido corregida y está lista para tu revisión y firma en DocuPrex.
+${notasCorreccion ? `\nNotas de corrección: ${notasCorreccion}\n` : ''}
+Revisar y firmar: ${documentoUrl}
+
+Este es un correo automático, por favor no responder.
+© ${new Date().getFullYear()} DocuPrex - Sistema de Firmas Digitales
+  `;
+
+  return sendEmail({ to: email, subject, html, text });
+}
+
 module.exports = {
   sendEmail,
   buildDocuPrexEmailTemplate,
   notificarAsignacionFirmante,
   notificarDocumentoFirmadoCompleto,
-  notificarDocumentoRechazado
+  notificarDocumentoRechazado,
+  notificarFacturaCorregida
 };

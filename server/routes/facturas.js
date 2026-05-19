@@ -7,6 +7,8 @@ const { queryCuentas } = require('../database/cuentas-db');
 const { query } = require('../database/db');
 const { getUserUploadDir, normalizeFileName } = require('../utils/fileUpload');
 const websocketService = require('../services/websocket');
+const { notificarFacturaCorregida } = require('../services/emailService');
+const { updateSignersPage } = require('../utils/pdfCoverPage');
 
 const DOCUPREX_INGEST_TOKEN = process.env.DOCUPREX_INGEST_TOKEN || '';
 
@@ -358,9 +360,10 @@ router.post('/desmarcar-en-proceso/:numeroControl', async (req, res) => {
 
     const result = await queryFacturas(
       `UPDATE crud_facturas."T_Facturas"
-       SET en_proceso = FALSE, causado = FALSE, finalizado = FALSE
+       SET en_proceso = FALSE, causado = FALSE, finalizado = FALSE,
+           rechazada = FALSE, corregida = FALSE
        WHERE numero_control = $1
-       RETURNING numero_control, en_proceso, causado, finalizado`,
+       RETURNING numero_control, en_proceso, causado, finalizado, rechazada, corregida`,
       [numeroControl.trim()]
     );
 
@@ -389,13 +392,271 @@ router.post('/desmarcar-en-proceso/:numeroControl', async (req, res) => {
 });
 
 /**
+ * POST /api/facturas/marcar-rechazada/:numeroControl
+ * Marca una factura como rechazada cuando se rechaza el documento en DocuPrex
+ */
+router.post('/marcar-rechazada/:numeroControl', async (req, res) => {
+  try {
+    const { numeroControl } = req.params;
+
+    if (!numeroControl || numeroControl.trim() === '') {
+      return res.status(400).json({ success: false, message: 'El consecutivo es requerido' });
+    }
+
+    const result = await queryFacturas(
+      `UPDATE crud_facturas."T_Facturas"
+       SET en_proceso = FALSE, rechazada = TRUE, corregida = FALSE
+       WHERE numero_control = $1
+       RETURNING numero_control, en_proceso, rechazada, corregida`,
+      [numeroControl.trim()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'No se encontró la factura' });
+    }
+
+    console.log(`✅ Factura ${numeroControl} marcada como rechazada`);
+    return res.status(200).json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('❌ Error marcando factura como rechazada:', error);
+    return res.status(500).json({ success: false, message: 'Error interno', error: error.message });
+  }
+});
+
+/**
+ * POST /api/facturas/marcar-corregida/:numeroControl
+ * Marca una factura como corregida y resetea la firma rechazada en DocuPrex para que el
+ * rechazante pueda volver a firmar. Acepta { documentId, notasCorreccion } en el body.
+ */
+router.post('/marcar-corregida/:numeroControl', async (req, res) => {
+  try {
+    const { numeroControl } = req.params;
+    const { documentId, notasCorreccion } = req.body || {};
+
+    if (!numeroControl || numeroControl.trim() === '') {
+      return res.status(400).json({ success: false, message: 'El consecutivo es requerido' });
+    }
+
+    const result = await queryFacturas(
+      `UPDATE crud_facturas."T_Facturas"
+       SET corregida = TRUE, rechazada = FALSE
+       WHERE numero_control = $1
+       RETURNING numero_control, rechazada, corregida`,
+      [numeroControl.trim()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'No se encontró la factura' });
+    }
+
+    // Si se proporcionó documentId, actualizar DocuPrex: resetear firma rechazada y notificar
+    if (documentId) {
+      try {
+        const rejectedSigResult = await query(
+          `SELECT s.id, s.signer_id, u.email, u.name
+           FROM signatures s
+           JOIN users u ON u.id = s.signer_id
+           WHERE s.document_id = $1 AND s.status = 'rejected'
+           LIMIT 1`,
+          [documentId]
+        );
+
+        if (rejectedSigResult.rows.length > 0) {
+          const rejector = rejectedSigResult.rows[0];
+
+          await query(
+            `UPDATE signatures
+             SET status = 'pending', signed_at = NULL, rejected_at = NULL,
+                 rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
+             WHERE document_id = $1 AND signer_id = $2 AND status = 'rejected'`,
+            [documentId, rejector.signer_id]
+          );
+
+          await query(
+            `UPDATE documents
+             SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [documentId]
+          );
+
+          const notesPayload = {
+            corregida: true,
+            notasCorreccion: notasCorreccion || '',
+            fechaCorreccion: new Date().toISOString()
+          };
+          await query(
+            `UPDATE documents
+             SET metadata = metadata || $2::jsonb, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [documentId, JSON.stringify(notesPayload)]
+          );
+
+          const docResult = await query(`SELECT title FROM documents WHERE id = $1`, [documentId]);
+          const docTitle = docResult.rows[0]?.title || '';
+
+          const notifResult = await query(
+            `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+             VALUES ($1, 'invoice_corrected', $2, NULL, $3)
+             RETURNING id`,
+            [rejector.signer_id, documentId, docTitle]
+          );
+
+          if (notifResult.rows.length > 0) {
+            websocketService.emitNotificationCreated(rejector.signer_id, {
+              id: notifResult.rows[0].id,
+              type: 'invoice_corrected',
+              document_id: documentId,
+              actor_id: null,
+              document_title: docTitle,
+              actor: null
+            });
+          }
+
+          websocketService.emitDocumentUpdated(documentId, 'updated', {
+            documentTitle: docTitle,
+            status: 'in_progress'
+          });
+
+          // Email al rechazante notificando que el creador corrigió
+          notificarFacturaCorregida({
+            email: rejector.email,
+            nombreRechazante: rejector.name,
+            nombreDocumento: docTitle,
+            documentoId: documentId,
+            notasCorreccion: notasCorreccion || ''
+          }).catch(emailErr => {
+            console.error('❌ Error enviando email de corrección al rechazante:', emailErr.message);
+          });
+
+          // Regenerar página de firmantes para quitar la marca de agua "RECHAZADO"
+          try {
+            const docFileResult = await query(
+              `SELECT d.file_path, d.file_name, d.title, d.created_at, d.uploaded_by, d.document_type_id,
+                      u.name as uploader_name,
+                      dt.name as document_type_name
+               FROM documents d
+               LEFT JOIN users u ON u.id = d.uploaded_by
+               LEFT JOIN document_types dt ON dt.id = d.document_type_id
+               WHERE d.id = $1`,
+              [documentId]
+            );
+
+            if (docFileResult.rows.length > 0) {
+              const docFile = docFileResult.rows[0];
+              const pdfPath = path.join(__dirname, '..', docFile.file_path);
+
+              const signersResult = await query(
+                `SELECT
+                  ds.user_id, ds.order_position, ds.role_name, ds.role_names,
+                  ds.is_causacion_group, ds.grupo_codigo,
+                  u.name as user_name, u.email,
+                  cg.nombre as grupo_nombre,
+                  COALESCE(s.status, 'pending') as status,
+                  s.signed_at, s.rejected_at, s.rejection_reason,
+                  signer_user.email as signer_email
+                 FROM document_signers ds
+                 LEFT JOIN users u ON ds.user_id = u.id
+                 LEFT JOIN causacion_grupos cg ON ds.grupo_codigo = cg.codigo
+                 LEFT JOIN signatures s ON (
+                   (ds.is_causacion_group = false AND s.document_id = ds.document_id AND s.signer_id = ds.user_id) OR
+                   (ds.is_causacion_group = true AND s.document_id = ds.document_id AND s.signer_id IN (
+                     SELECT ci.user_id FROM causacion_integrantes ci
+                     JOIN causacion_grupos cg2 ON ci.grupo_id = cg2.id
+                     WHERE cg2.codigo = ds.grupo_codigo
+                   ))
+                 )
+                 LEFT JOIN users signer_user ON s.signer_id = signer_user.id
+                 WHERE ds.document_id = $1
+                 ORDER BY ds.order_position ASC`,
+                [documentId]
+              );
+
+              const signers = signersResult.rows.map(row => ({
+                name: row.is_causacion_group
+                  ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación')
+                  : (row.user_name || 'Sin nombre'),
+                email: row.signer_email || row.email,
+                order_position: row.order_position,
+                role_name: row.role_name,
+                role_names: row.role_names,
+                status: row.status,
+                signed_at: row.signed_at,
+                rejected_at: row.rejected_at,
+                rejection_reason: row.rejection_reason,
+                is_causacion_group: row.is_causacion_group,
+                grupo_codigo: row.grupo_codigo
+              }));
+
+              const documentInfo = {
+                title: docFile.title,
+                fileName: docFile.file_name,
+                createdAt: docFile.created_at,
+                uploadedBy: docFile.uploader_name,
+                documentTypeName: docFile.document_type_name
+              };
+
+              await updateSignersPage(pdfPath, signers, documentInfo);
+              console.log(`✅ Página de firmantes regenerada sin marca RECHAZADO para doc ${documentId}`);
+            }
+          } catch (pdfErr) {
+            console.error('❌ Error regenerando página de firmantes tras corrección:', pdfErr.message);
+          }
+
+          console.log(`✅ Firma rechazada reseteada → pending para ${rejector.name} (${rejector.email})`);
+        }
+      } catch (docuprexErr) {
+        console.error('❌ Error actualizando DocuPrex para corrección:', docuprexErr);
+      }
+    }
+
+    console.log(`✅ Factura ${numeroControl} marcada como corregida`);
+    return res.status(200).json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('❌ Error marcando factura como corregida:', error);
+    return res.status(500).json({ success: false, message: 'Error interno', error: error.message });
+  }
+});
+
+/**
+ * POST /api/facturas/aprobar-correccion/:numeroControl
+ * Vuelve la factura a en_proceso cuando el que rechazó aprueba la corrección
+ */
+router.post('/aprobar-correccion/:numeroControl', async (req, res) => {
+  try {
+    const { numeroControl } = req.params;
+
+    if (!numeroControl || numeroControl.trim() === '') {
+      return res.status(400).json({ success: false, message: 'El consecutivo es requerido' });
+    }
+
+    const result = await queryFacturas(
+      `UPDATE crud_facturas."T_Facturas"
+       SET en_proceso = TRUE, rechazada = FALSE, corregida = FALSE
+       WHERE numero_control = $1
+       RETURNING numero_control, en_proceso, rechazada, corregida`,
+      [numeroControl.trim()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'No se encontró la factura' });
+    }
+
+    console.log(`✅ Factura ${numeroControl} aprobada corrección → en_proceso`);
+    return res.status(200).json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('❌ Error aprobando corrección:', error);
+    return res.status(500).json({ success: false, message: 'Error interno', error: error.message });
+  }
+});
+
+/**
  * POST /api/facturas/marcar-causado/:numeroControl
  * Marca una factura como causada cuando el grupo de causación firma
  */
 router.post('/marcar-causado/:numeroControl', async (req, res) => {
   try {
     const { numeroControl } = req.params;
-    const { numeroCausacion, observaciones } = req.body || {};
+    const { numeroCausacion, observacionesCausacion, causadoPor } = req.body || {};
 
     if (!numeroControl || numeroControl.trim() === '') {
       return res.status(400).json({
@@ -409,13 +670,15 @@ router.post('/marcar-causado/:numeroControl', async (req, res) => {
        SET causado = TRUE,
            fecha_causacion = COALESCE(fecha_causacion, CURRENT_DATE),
            numero_causacion = COALESCE($2, numero_causacion),
-           observaciones = COALESCE($3, observaciones)
+           observaciones_causacion = COALESCE($3, observaciones_causacion),
+           causado_por = COALESCE($4, causado_por)
        WHERE numero_control = $1
-       RETURNING numero_control, causado, fecha_causacion, numero_causacion, observaciones`,
+       RETURNING numero_control, causado, fecha_causacion, numero_causacion, observaciones_causacion, causado_por`,
       [
         numeroControl.trim(),
         numeroCausacion ? String(numeroCausacion).trim() : null,
-        observaciones ? String(observaciones).trim() : null
+        observacionesCausacion ? String(observacionesCausacion).trim() : null,
+        causadoPor ? String(causadoPor).trim() : null
       ]
     );
 

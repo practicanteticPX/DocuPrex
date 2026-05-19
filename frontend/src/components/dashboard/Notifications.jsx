@@ -96,6 +96,8 @@ const getNotificationMessage = (notification) => {
       return `${actorName} ha rechazado tu documento: ${documentTitle}`;
     case 'document_rejected_by_other':
       return `${actorName} rechazó el documento: ${documentTitle}`;
+    case 'invoice_corrected':
+      return `La factura "${documentTitle}" fue corregida y está lista para tu revisión`;
     case 'document_deleted':
       return `${actorName} eliminó el documento: ${documentTitle}`;
     default:
@@ -124,6 +126,8 @@ const getNotificationType = (type) => {
       return 'Documento rechazado';
     case 'document_rejected_by_other':
       return 'Documento rechazado';
+    case 'invoice_corrected':
+      return 'Factura corregida';
     case 'document_deleted':
       return 'Documento eliminado';
     default:

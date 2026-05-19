@@ -164,6 +164,9 @@ function Dashboard({ user, onLogout }) {
   const [templateCompleted, setTemplateCompleted] = useState(false); // Flag para mostrar form de metadatos después de plantilla
   const [editingDocument, setEditingDocument] = useState(null); // Documento en edición
   const [isEditMode, setIsEditMode] = useState(false); // Flag para modo edición
+  const [showCorrectionNotesModal, setShowCorrectionNotesModal] = useState(false);
+  const [correctionNotes, setCorrectionNotes] = useState('');
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
   const [showRejectSuccess, setShowRejectSuccess] = useState(false);
   const [showSignSuccess, setShowSignSuccess] = useState(false);
   const [showOrderError, setShowOrderError] = useState(false);
@@ -2167,6 +2170,7 @@ function Dashboard({ user, onLogout }) {
                 fileSize
                 status
                 consecutivo
+                templateData
                 createdAt
                 documentType {
                   id
@@ -2211,6 +2215,7 @@ function Dashboard({ user, onLogout }) {
                 fileSize
                 status
                 consecutivo
+                templateData
                 createdAt
                 documentType {
                   id
@@ -3661,7 +3666,7 @@ function Dashboard({ user, onLogout }) {
         String(member.userId || member.user?.id || '') === String(user?.id || '') && member.activo !== false
       );
 
-      return isCausacionSignature(sig) && (directSigner || groupMember || sig.isCausacionGroup);
+      return isCausacionSignature(sig) && (directSigner || groupMember);
     });
   };
 
@@ -4479,6 +4484,9 @@ function Dashboard({ user, onLogout }) {
       } else if (notification.type === 'document_rejected' || notification.type === 'document_rejected_by_other') {
         // Documento rechazado -> pestaña de rechazados
         targetTab = 'rejected';
+      } else if (notification.type === 'invoice_corrected') {
+        // Factura corregida → el rechazante debe firmar en pendientes
+        targetTab = 'pending';
       } else if (notification.type === 'payable_invoice') {
         targetTab = 'payable-invoices';
       } else if (notification.type === 'payable_invoice_paid') {
@@ -4763,7 +4771,6 @@ function Dashboard({ user, onLogout }) {
       return false;
     }
 
-    // Verificar que el usuario es el creador
     const isCreator = doc.uploadedBy && (
       doc.uploadedBy.email === user?.email ||
       doc.uploadedBy.id === user?.id
@@ -4773,13 +4780,17 @@ function Dashboard({ user, onLogout }) {
       return false;
     }
 
-    // Verificar que nadie ha rechazado el documento
+    // Creador puede editar planilla de doc rechazado (modo corrección)
+    if (doc.status === 'rejected') {
+      return true;
+    }
+
     const hasRejections = (doc.signatures || []).some(sig => sig.status === 'rejected');
     if (hasRejections) {
       return false;
     }
 
-    if (doc.status === 'completed' || doc.status === 'rejected') {
+    if (doc.status === 'completed') {
       return false;
     }
 
@@ -4788,9 +4799,7 @@ function Dashboard({ user, onLogout }) {
       return true;
     }
 
-    const pendingSignatures = signatures.filter(sig => sig.status === 'pending');
-
-    return pendingSignatures.length > 0;
+    return signatures.some(sig => sig.status === 'pending');
   };
 
   const canEditNoTypeSigners = (doc) => {
@@ -5606,15 +5615,21 @@ function Dashboard({ user, onLogout }) {
         throw new Error(result.message || 'Error al actualizar la plantilla');
       }
 
-      // Después de 3 segundos, cerrar todo sin notificación
+      setUploading(false);
+
+      // Si el documento estaba rechazado, mostrar modal de notas de corrección
+      if (editingDocument?.status === 'rejected') {
+        setShowFacturaTemplate(false);
+        setCorrectionNotes('');
+        setShowCorrectionNotesModal(true);
+        return;
+      }
+
       setTimeout(async () => {
-        setUploading(false);
         setShowFacturaTemplate(false);
         setIsEditMode(false);
         setEditingDocument(null);
         setFacturaTemplateData(null);
-
-        // Recargar documentos
         await loadMyDocuments();
       }, 3000);
 
@@ -5622,6 +5637,42 @@ function Dashboard({ user, onLogout }) {
       console.error('Error al guardar edición:', err);
       showNotif('Error', err.message || 'No se pudo guardar la edición', 'error');
       setUploading(false);
+    }
+  };
+
+  const handleCorrectionNotesConfirm = async () => {
+    if (!editingDocument?.consecutivo) {
+      setShowCorrectionNotesModal(false);
+      setIsEditMode(false);
+      setEditingDocument(null);
+      setFacturaTemplateData(null);
+      await loadRejectedDocuments();
+      await loadMyDocuments();
+      return;
+    }
+
+    setSubmittingCorrection(true);
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(
+        `${BACKEND_HOST}/api/facturas/marcar-corregida/${editingDocument.consecutivo}`,
+        { documentId: editingDocument.id, notasCorreccion: correctionNotes },
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+      );
+
+      setShowCorrectionNotesModal(false);
+      setIsEditMode(false);
+      setEditingDocument(null);
+      setFacturaTemplateData(null);
+      setCorrectionNotes('');
+      showNotif('Corrección enviada', 'Los cambios fueron guardados. El documento vuelve al flujo de firma.', 'success');
+      await loadRejectedDocuments();
+      await loadMyDocuments();
+    } catch (err) {
+      console.error('Error al marcar factura como corregida:', err);
+      showNotif('Error', err.message || 'No se pudo registrar la corrección', 'error');
+    } finally {
+      setSubmittingCorrection(false);
     }
   };
 
@@ -9385,8 +9436,15 @@ function Dashboard({ user, onLogout }) {
                       {filteredDocs.map(doc => {
                         const rejection = doc.signatures?.find(sig => sig.status === 'rejected');
                         const isRejectedByMe = doc.rejectedBy === 'me';
-
                         const signatures = doc.signatures || [];
+
+                        let parsedTemplateDataRejected = null;
+                        try {
+                          parsedTemplateDataRejected = doc.templateData
+                            ? (typeof doc.templateData === 'string' ? JSON.parse(doc.templateData) : doc.templateData)
+                            : null;
+                        } catch (_) {}
+                        const isCorregida = parsedTemplateDataRejected?.corregida === true;
 
                         return (
                           <div key={doc.id} className="my-doc-card-reference">
@@ -9398,6 +9456,15 @@ function Dashboard({ user, onLogout }) {
                                 </h3>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {isCorregida && (
+                                    <div
+                                      className="status-badge-clean"
+                                      style={{ color: '#92400E', backgroundColor: '#FEF3C7' }}
+                                      title="El creador ya realizó las correcciones"
+                                    >
+                                      Corregida
+                                    </div>
+                                  )}
                                   {/* Badge clickeable para ver razón de rechazo */}
                                   <div
                                     className="status-badge-clean"
@@ -9489,6 +9556,19 @@ function Dashboard({ user, onLogout }) {
                                   <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                 </svg>
                               </button>
+                              {canEditFacturaTemplate(doc) && (
+                                <button
+                                  className="btn-action-clean"
+                                  onClick={() => handleEditFacturaTemplate(doc)}
+                                  title="Corregir planilla"
+                                  style={{marginTop: '-1.5vw'}}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -11596,6 +11676,7 @@ function Dashboard({ user, onLogout }) {
           factura={isEditMode ? editingDocument : selectedFactura}
           savedData={facturaTemplateData}
           isEditMode={isEditMode}
+          correctionMode={isEditMode && editingDocument?.status === 'rejected'}
           currentDocument={isEditMode ? editingDocument : selectedFactura}
           user={user}
           onClose={() => {
@@ -11616,6 +11697,50 @@ function Dashboard({ user, onLogout }) {
           }}
           onSave={isEditMode ? handleSaveEditedTemplate : handleFacturaTemplateSave}
         />
+      )}
+
+      {/* Modal de notas de corrección - nivel raíz para que renderice independiente del visor PDF */}
+      {showCorrectionNotesModal && (
+        <div className="sign-confirm-overlay" onClick={() => !submittingCorrection && setShowCorrectionNotesModal(false)}>
+          <div className="sign-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sign-confirm-icon" style={{ color: '#D97706' }}>
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h3 className="sign-confirm-title">Notas de corrección</h3>
+            <p className="sign-confirm-message">
+              Describe brevemente los cambios realizados. Esta información será visible para quien rechazó el documento.
+            </p>
+            <div className="reject-reason-container">
+              <textarea
+                className="reject-reason-input"
+                placeholder="Ej: Se corrigió la cuenta contable y el centro de costos..."
+                value={correctionNotes}
+                onChange={(e) => setCorrectionNotes(e.target.value)}
+                rows="4"
+                maxLength="500"
+              />
+            </div>
+            <div className="sign-confirm-actions">
+              <button
+                className="sign-confirm-btn cancel"
+                onClick={() => setShowCorrectionNotesModal(false)}
+                disabled={submittingCorrection}
+              >
+                Cancelar
+              </button>
+              <button
+                className="sign-confirm-btn confirm"
+                onClick={handleCorrectionNotesConfirm}
+                disabled={submittingCorrection}
+              >
+                {submittingCorrection ? 'Enviando...' : 'Confirmar corrección'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Dropdown de firmantes con position: fixed */}

@@ -89,7 +89,7 @@ const getCompanyLogo = (ciaCode) => {
  * @param {Function} onBack - Callback al volver al paso anterior (buscar factura)
  * @param {Function} onSave - Callback al guardar los datos
  */
-const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user, onClose, onBack, onSave }) => {
+const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, currentDocument, user, onClose, onBack, onSave }) => {
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
   const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
   const { negociadores, loading: loadingNegociadores } = useNegociadores();
@@ -216,6 +216,9 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   });
 
   const isFilaFirmada = (fila) => {
+    // En modo corrección, las cuentas/centros siempre son editables
+    if (correctionMode) return false;
+
     return signedSignatures.some(sig => {
       const roles = Array.isArray(sig.roleNames) && sig.roleNames.length > 0 ? sig.roleNames : [sig.roleName];
       const signerName = sig.signer?.name || sig.realSignerName || '';
@@ -1043,27 +1046,20 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
   const validarFormulario = () => {
     const errores = [];
 
-    const checklistLabels = {
-      fechaEmision: 'Fecha de Emisión',
-      fechaVencimiento: 'Fecha de Vencimiento',
-      cantidades: 'Cantidades',
-      precioUnitario: 'Precio Unitario',
-      fletes: 'Fletes',
-      valoresTotales: 'Vlr Totales = Vlr Orden de Compra',
-      descuentosTotales: 'Descuentos Totales'
-    };
+    // En correctionMode solo se validan cuenta/centro/porcentaje (checklist y negociador están bloqueados)
+    if (!correctionMode) {
+      const hayChecklistSinMarcar = Object.keys(checklistRevision).some(key => !checklistRevision[key]);
+      if (hayChecklistSinMarcar) {
+        errores.push('Debe marcar todos los checklist de Revisión');
+      }
 
-    const hayChecklistSinMarcar = Object.keys(checklistRevision).some(key => !checklistRevision[key]);
-    if (hayChecklistSinMarcar) {
-      errores.push('Debe marcar todos los checklist de Revisión');
-    }
+      if (!nombreNegociador.trim()) {
+        errores.push('Debe seleccionar un negociador');
+      }
 
-    if (!nombreNegociador.trim()) {
-      errores.push('Debe seleccionar un negociador');
-    }
-
-    if (!grupoCausacion) {
-      errores.push('Debe seleccionar un grupo de causación');
+      if (!grupoCausacion) {
+        errores.push('Debe seleccionar un grupo de causación');
+      }
     }
 
     for (let i = 0; i < filasControl.length; i++) {
@@ -1422,7 +1418,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                   <Checkbox
                     id="legaliza-anticipo"
                     checked={legalizaAnticipo}
-                    onCheckedChange={setLegalizaAnticipo}
+                    onCheckedChange={correctionMode ? undefined : setLegalizaAnticipo}
+                    disabled={correctionMode}
                   />
                   <span className="factura-checkbox-simple-text">Legaliza Anticipo</span>
                 </label>
@@ -1437,7 +1434,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
             <div className="factura-checklist-grid">
               <div
                 className="factura-checklist-item"
-                onClick={() => handleChecklistChange('fechaEmision')}
+                onClick={correctionMode ? undefined : () => handleChecklistChange('fechaEmision')}
+                style={correctionMode ? { cursor: 'default', opacity: 0.6 } : {}}
               >
                 <div className="factura-checklist-label">
                   <Checkbox
@@ -1469,7 +1467,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
               <div
                 className="factura-checklist-item"
-                onClick={() => handleChecklistChange('fechaVencimiento')}
+                onClick={correctionMode ? undefined : () => handleChecklistChange('fechaVencimiento')}
+                style={correctionMode ? { cursor: 'default', opacity: 0.6 } : {}}
               >
                 <div className="factura-checklist-label">
                   <Checkbox
@@ -1501,7 +1500,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
               <div
                 className="factura-checklist-item"
-                onClick={() => handleChecklistChange('cantidades')}
+                onClick={correctionMode ? undefined : () => handleChecklistChange('cantidades')}
+                style={correctionMode ? { cursor: 'default', opacity: 0.6 } : {}}
               >
                 <div className="factura-checklist-label">
                   <Checkbox
@@ -1533,7 +1533,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
               <div
                 className="factura-checklist-item"
-                onClick={() => handleChecklistChange('precioUnitario')}
+                onClick={correctionMode ? undefined : () => handleChecklistChange('precioUnitario')}
+                style={correctionMode ? { cursor: 'default', opacity: 0.6 } : {}}
               >
                 <div className="factura-checklist-label">
                   <Checkbox
@@ -1565,7 +1566,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
               <div
                 className="factura-checklist-item"
-                onClick={() => handleChecklistChange('fletes')}
+                onClick={correctionMode ? undefined : () => handleChecklistChange('fletes')}
+                style={correctionMode ? { cursor: 'default', opacity: 0.6 } : {}}
               >
                 <div className="factura-checklist-label">
                   <Checkbox
@@ -1597,7 +1599,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
               <div
                 className="factura-checklist-item factura-checklist-item-wide"
-                onClick={() => handleChecklistChange('valoresTotales')}
+                onClick={correctionMode ? undefined : () => handleChecklistChange('valoresTotales')}
+                style={correctionMode ? { cursor: 'default', opacity: 0.6 } : {}}
               >
                 <div className="factura-checklist-label">
                   <Checkbox
@@ -1629,7 +1632,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
 
               <div
                 className="factura-checklist-item"
-                onClick={() => handleChecklistChange('descuentosTotales')}
+                onClick={correctionMode ? undefined : () => handleChecklistChange('descuentosTotales')}
+                style={correctionMode ? { cursor: 'default', opacity: 0.6 } : {}}
               >
                 <div className="factura-checklist-label">
                   <Checkbox
@@ -1679,7 +1683,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
                     onFocus={handleNegociadorFocus}
                     onKeyDown={handleNegociadorKeyDown}
                     placeholder={loadingNegociadores ? "Cargando..." : "Buscar negociador..."}
-                    disabled={loadingNegociadores || (isEditMode && signedNegociador)}
+                    disabled={loadingNegociadores || (isEditMode && signedNegociador) || correctionMode}
                     title={nombreNegociador}
                   />
                   {dropdownNegociadoresAbierto && !loadingNegociadores && !(isEditMode && signedNegociador) && dropdownNegociadoresPosition.top && getNegociadoresFiltrados(inputNegociadorValue || '').length > 0 && (
@@ -2014,7 +2018,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, currentDocument, user
             <div className="factura-field">
               <textarea
                 value={observaciones}
-                onChange={(e) => setObservaciones(e.target.value)}
+                onChange={correctionMode ? undefined : (e) => setObservaciones(e.target.value)}
+                readOnly={correctionMode}
                 placeholder="Observaciones adicionales (opcional)"
                 rows="3"
                 style={{

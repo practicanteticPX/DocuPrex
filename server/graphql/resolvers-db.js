@@ -4451,6 +4451,16 @@ const resolvers = {
           [parsedTemplateData, documentId]
         );
 
+        // Sincronizar observaciones de planilla a T_Facturas
+        if (doc.consecutivo) {
+          await queryFacturas(
+            `UPDATE crud_facturas."T_Facturas"
+             SET observaciones = $2
+             WHERE numero_control = $1`,
+            [String(doc.consecutivo).trim(), parsedTemplateData.observaciones || null]
+          );
+        }
+
         // Obtener firmas actuales del documento
         const firmasActuales = await obtenerFirmasDocumentoTx(documentId, parsedTemplateData);
 
@@ -5758,7 +5768,10 @@ const resolvers = {
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
           const sentAtResult = await query(
-            `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
+            `SELECT COALESCE(
+              (SELECT MAX(signed_at) FROM signatures WHERE document_id = $1 AND status = 'signed'),
+              (SELECT MIN(created_at) FROM document_signers WHERE document_id = $1)
+            ) as sent_at`,
             [documentId]
           );
 
@@ -5817,13 +5830,13 @@ const resolvers = {
 
             try {
               await axios.post(
-                `${backendHost}/api/facturas/desmarcar-en-proceso/${docData.consecutivo}`,
+                `${backendHost}/api/facturas/marcar-rechazada/${docData.consecutivo}`,
                 {},
                 { headers: { 'Content-Type': 'application/json' } }
               );
-              console.log(`✅ Factura ${docData.consecutivo} desmarcada (documento rechazado)`);
-            } catch (desmarcarError) {
-              console.error(`❌ Error al desmarcar factura:`, desmarcarError.message);
+              console.log(`✅ Factura ${docData.consecutivo} marcada como rechazada`);
+            } catch (rechazarError) {
+              console.error(`❌ Error al marcar factura rechazada:`, rechazarError.message);
             }
           }
         }
@@ -6400,18 +6413,21 @@ const resolvers = {
         const observacionesCausacionValue = String(parsedCausacionData.observaciones).trim();
         const fechaCausacionValue = new Date().toISOString().slice(0, 10);
 
+        const causadoPorValue = effectiveRealSignerName || user.name;
         const causacionUpdate = await queryFacturas(
           `UPDATE crud_facturas."T_Facturas"
            SET causado = TRUE,
                fecha_causacion = CURRENT_DATE,
                numero_causacion = $2,
-               observaciones = $3
+               observaciones_causacion = $3,
+               causado_por = $4
            WHERE numero_control = $1
-          RETURNING numero_control, causado, fecha_causacion, numero_causacion, observaciones`,
+          RETURNING numero_control, causado, fecha_causacion, numero_causacion, observaciones_causacion, causado_por`,
           [
             String(docCausacionInfo.consecutivo).trim(),
             numeroCausacionValue,
-            observacionesCausacionValue
+            observacionesCausacionValue,
+            causadoPorValue
           ]
         );
 
@@ -7247,7 +7263,10 @@ const resolvers = {
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
           const sentAtResult2 = await query(
-            `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
+            `SELECT COALESCE(
+              (SELECT MAX(signed_at) FROM signatures WHERE document_id = $1 AND status = 'signed'),
+              (SELECT MIN(created_at) FROM document_signers WHERE document_id = $1)
+            ) as sent_at`,
             [documentId]
           );
 
@@ -7350,7 +7369,23 @@ const resolvers = {
               }
             }
 
-            // 2. Si el documento está completado, marcar la factura como finalizada
+            // 2. Si la factura fue corregida y el rechazante acaba de firmar, aprobar la corrección
+            try {
+              const correctedResult = await queryFacturas(
+                `UPDATE crud_facturas."T_Facturas"
+                 SET en_proceso = TRUE, rechazada = FALSE, corregida = FALSE
+                 WHERE numero_control = $1 AND corregida = TRUE
+                 RETURNING numero_control`,
+                [docData.consecutivo]
+              );
+              if (correctedResult.rows.length > 0) {
+                console.log(`✅ Corrección aprobada automáticamente para factura ${docData.consecutivo}`);
+              }
+            } catch (corrErr) {
+              console.error(`❌ Error al aprobar corrección de factura:`, corrErr.message);
+            }
+
+            // 3. Si el documento está completado, marcar la factura como finalizada
             if (newStatus === 'completed') {
               try {
                 await axios.post(

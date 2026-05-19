@@ -1,15 +1,35 @@
 # Project Status - DocuPrex
 
 ## Current Objective
-✅ **OBJETIVO COMPLETADO:** Sincronización automática de usuarios desde Active Directory implementada y ejecutada exitosamente.
+🔄 **EN PROGRESO:** Flujo de corrección de FV rechazadas (Fase 2 completa, pendiente despliegue final).
 
-**Resultado Final:**
-- **61 usuarios** de Prexxa sincronizados desde Active Directory
-- **62 usuarios totales** disponibles como firmantes (excluyendo admin)
-- Problema de "solo 2 firmantes disponibles" **RESUELTO**
-- Sistema listo para uso con todos los empleados de la empresa
+**Estado:** Código implementado, builds de Docker iniciadas. DocuPrex frontend requiere reinicio de contenedor tras build final.
 
-Sistema completamente funcional después de migración UUID→Integer y corrección de bugs críticos.
+### Session: 2026-05-19 - Flujo de Corrección de Facturas Rechazadas
+
+#### Objetivo:
+Cuando una FV es rechazada, el creador debe poder corregir campos específicos y el documento vuelve al flujo de firma.
+
+#### Cambios:
+- `server/routes/facturas.js`: endpoint `POST /api/facturas/marcar-corregida/:numeroControl` mejorado para recibir `{ documentId, notasCorreccion }`, resetear firma rechazada a 'pending', actualizar doc a 'in_progress', almacenar notas en metadata y enviar notificación in-app al rechazante.
+- `server/graphql/resolvers-db.js`: en `signDocument`, después de causación, auto-aprueba corrección si `corregida=TRUE` en T_Facturas (SET en_proceso=TRUE, rechazada=FALSE, corregida=FALSE).
+- `frontend/src/components/dashboard/FacturaTemplate.jsx`: prop `correctionMode` desbloquea cuenta/centro en todas las filas; bloquea checklist, negociador, observaciones. `validarFormulario` omite checklist y negociador en correctionMode.
+- `frontend/src/components/dashboard/Dashboard.jsx`: 3 estados nuevos (showCorrectionNotesModal, correctionNotes, submittingCorrection); `handleSaveEditedTemplate` muestra modal de notas si doc rechazado; `handleCorrectionNotesConfirm` llama marcar-corregida; badge "Corregida" en tab rechazados; botón "Corregir planilla" para el creador; `handleNotificationClick` navega a 'pending' para type 'invoice_corrected'.
+- `frontend/src/components/dashboard/Notifications.jsx`: textos para `invoice_corrected`.
+- `facturacion/frontend/src/components/EditarFactura.js`: en modo rechazada, solo permite editar `numeroFactura` y `fechaFactura`; bloquea cia, nit, crédito, acuse.
+
+#### Columnas BD (ya existían):
+- `T_Facturas.rechazada` (boolean)
+- `T_Facturas.corregida` (boolean)
+
+#### Pendiente:
+- Email de notificación al rechazante cuando el creador corrige (actualmente solo notificación in-app)
+- Despliegue: `docker-compose up -d frontend` en DocuPrex tras build final
+
+#### Próximos pasos:
+1. Esperar build de DocuPrex frontend (`bii8knpxg`)
+2. `docker-compose up -d frontend` en DocuPrex
+3. Probar con factura 046518 (numero_control=26450)
 
 ## Recent Changes
 

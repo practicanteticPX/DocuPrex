@@ -137,7 +137,10 @@ async function regenerateSignerReports() {
         const docTypeName = docTypeResult.rows.length > 0 ? docTypeResult.rows[0].name : null;
 
         const sentAtResult = await query(
-          `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
+          `SELECT COALESCE(
+            (SELECT MAX(signed_at) FROM signatures WHERE document_id = $1 AND status = 'signed'),
+            (SELECT MIN(created_at) FROM document_signers WHERE document_id = $1)
+          ) as sent_at`,
           [doc.id]
         );
 
