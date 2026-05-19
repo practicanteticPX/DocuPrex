@@ -439,9 +439,9 @@ router.post('/marcar-corregida/:numeroControl', async (req, res) => {
 
     const result = await queryFacturas(
       `UPDATE crud_facturas."T_Facturas"
-       SET corregida = TRUE, rechazada = FALSE
+       SET corregida = TRUE, rechazada = FALSE, en_proceso = TRUE
        WHERE numero_control = $1
-       RETURNING numero_control, rechazada, corregida`,
+       RETURNING numero_control, rechazada, corregida, en_proceso`,
       [numeroControl.trim()]
     );
 
