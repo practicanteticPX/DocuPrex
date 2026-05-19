@@ -42,7 +42,10 @@ import {
   getWebSocketUrl
 } from '../../config/api';
 
-// Cambia a true para volver a permitir documentos sin tipo específico.
+// Interruptor temporal para ocultar/deshabilitar el flujo de carga.
+const ENABLE_DOCUMENT_UPLOAD = false;
+
+// Controla si se aceptan cargas sin seleccionar tipo de documento.
 const ALLOW_UPLOAD_WITHOUT_DOCUMENT_TYPE = false;
 
 // Log para debug
@@ -97,7 +100,7 @@ const buildSADocumentTitle = (prefix, category, customTitle) => {
 };
 
 function Dashboard({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('upload');
+  const [activeTab, setActiveTab] = useState(ENABLE_DOCUMENT_UPLOAD ? 'upload' : 'my-documents');
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [documentTitle, setDocumentTitle] = useState('');
@@ -634,6 +637,13 @@ function Dashboard({ user, onLogout }) {
     if (activeTab !== 'upload') {
       setDocumentTitle('');
       setDocumentDescription('');
+    }
+  }, [activeTab]);
+
+  // Evita entrar al flujo de carga mientras el interruptor temporal este apagado.
+  useEffect(() => {
+    if (!ENABLE_DOCUMENT_UPLOAD && activeTab === 'upload') {
+      setActiveTab('my-documents');
     }
   }, [activeTab]);
 
@@ -3228,6 +3238,12 @@ function Dashboard({ user, onLogout }) {
    */
   const handleUpload = async (e) => {
     e.preventDefault();
+
+    if (!ENABLE_DOCUMENT_UPLOAD) {
+      setError('La carga de documentos esta deshabilitada temporalmente');
+      showNotif('Carga deshabilitada', 'La opcion de subir documentos esta deshabilitada temporalmente.', 'error');
+      return;
+    }
 
     if (!ALLOW_UPLOAD_WITHOUT_DOCUMENT_TYPE && !selectedDocumentType) {
       setError('Selecciona un tipo de documento para continuar');
@@ -5841,12 +5857,14 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
             <nav className="ds-side-nav">
-              <button className={`ds-nav-item ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
-                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M17 8L12 3M12 3L7 8M12 3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Subir documento
-              </button>
+              {ENABLE_DOCUMENT_UPLOAD && (
+                <button className={`ds-nav-item ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
+                  <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M17 8L12 3M12 3L7 8M12 3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Subir documento
+                </button>
+              )}
               <button className={`ds-nav-item ${activeTab === 'my-documents' ? 'active' : ''}`} onClick={() => setActiveTab('my-documents')}>
                 <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M3 7V17C3 17.5304 3.21071 18.0391 3.58579 18.4142C3.96086 18.7893 4.46957 19 5 19H19C19.5304 19 20.0391 18.7893 20.4142 18.4142C20.7893 18.0391 21 17.5304 21 17V9C21 8.46957 20.7893 7.96086 20.4142 7.58579C20.0391 7.21071 19.5304 7 19 7H13L11 4H5C4.46957 4 3.96086 4.21071 3.58579 4.58579C3.21071 4.96086 3 5.46957 3 6V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -6225,15 +6243,17 @@ function Dashboard({ user, onLogout }) {
         <main className="dashboard-main">
           {/* Navigation Tabs */}
           <div className="tabs-container">
-            <button
-              className={`tab ${activeTab === 'upload' ? 'active' : ''}`}
-              onClick={() => setActiveTab('upload')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M17 8L12 3M12 3L7 8M12 3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Subir Documento
-            </button>
+            {ENABLE_DOCUMENT_UPLOAD && (
+              <button
+                className={`tab ${activeTab === 'upload' ? 'active' : ''}`}
+                onClick={() => setActiveTab('upload')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M17 8L12 3M12 3L7 8M12 3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Subir Documento
+              </button>
+            )}
             <button
               className={`tab ${activeTab === 'my-documents' ? 'active' : ''}`}
               onClick={() => setActiveTab('my-documents')}
@@ -6324,7 +6344,7 @@ function Dashboard({ user, onLogout }) {
           </div>
 
           {/* Upload Section - Rediseñado estilo ZapSign */}
-          {activeTab === 'upload' && (
+          {ENABLE_DOCUMENT_UPLOAD && activeTab === 'upload' && (
             <div key="upload-tab" className="section upload-section-zapsign">
               {/* Stepper Horizontal Personalizado - 3 Pasos */}
               <div className="firmapro-stepper">
