@@ -57,6 +57,33 @@ const CHECKLIST_TOOLTIPS = {
   descuentosTotales: 'Marque si revisó que los descuentos totales en la factura son correctos. Si no son correctos, por favor solicite a su proveedor la modificación de la factura.'
 };
 
+const DEFAULT_CHECKLIST_REVISION = {
+  fechaEmision: false,
+  fechaVencimiento: false,
+  cantidades: false,
+  precioUnitario: false,
+  fletes: false,
+  valoresTotales: false,
+  descuentosTotales: false
+};
+
+const isCausacionTestIdentity = (candidateUser) => {
+  const normalize = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+  const email = normalize(candidateUser?.email);
+  const username = normalize(candidateUser?.username);
+  const name = normalize(candidateUser?.name);
+
+  return email === 'j.bustamante@prexxa.com.co'
+    || email === 'practicantetic@prexxa.com.co'
+    || username === 'j.bustamante'
+    || name === 'jesus bustamante';
+};
+
 /**
  * Map company code to logo
  * @param {string} ciaCode - Company code (PX, PT, PY, CL)
@@ -93,6 +120,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
   const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
   const { negociadores, loading: loadingNegociadores } = useNegociadores();
+  const isCausacionTestMode = isCausacionTestIdentity(user);
 
   // Estados para retenciones por centro de costo
   const [retenciones, setRetenciones] = useState({});
@@ -117,15 +145,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
   const [legalizaAnticipo, setLegalizaAnticipo] = useState(false);
 
   // Estados para el checklist de revisión
-  const [checklistRevision, setChecklistRevision] = useState({
-    fechaEmision: false,
-    fechaVencimiento: false,
-    cantidades: false,
-    precioUnitario: false,
-    fletes: false,
-    valoresTotales: false,
-    descuentosTotales: false
-  });
+  const [checklistRevision, setChecklistRevision] = useState(DEFAULT_CHECKLIST_REVISION);
 
   // Estados para campos manuales
   const [nombreNegociador, setNombreNegociador] = useState('');
@@ -419,12 +439,19 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
 
       // Restaurar campos manuales
       if (savedData.legalizaAnticipo !== undefined) setLegalizaAnticipo(savedData.legalizaAnticipo);
-      if (savedData.checklistRevision) setChecklistRevision(savedData.checklistRevision);
+      if (savedData.checklistRevision) {
+        setChecklistRevision(Object.keys(DEFAULT_CHECKLIST_REVISION).reduce((acc, key) => {
+          acc[key] = Boolean(savedData.checklistRevision[key]);
+          return acc;
+        }, { ...DEFAULT_CHECKLIST_REVISION }));
+      }
       if (savedData.nombreNegociador) setNombreNegociador(savedData.nombreNegociador);
       if (savedData.cargoNegociador) setCargoNegociador(savedData.cargoNegociador);
       if (savedData.grupoCausacion) setGrupoCausacion(savedData.grupoCausacion);
       if (savedData.observaciones) setObservaciones(savedData.observaciones);
-      if (savedData.filasControl) setFilasControl(savedData.filasControl);
+      if (Array.isArray(savedData.filasControl) && savedData.filasControl.length > 0) {
+        setFilasControl(savedData.filasControl);
+      }
 
       console.log('✅ Datos de plantilla restaurados correctamente');
     }
@@ -1048,7 +1075,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
 
     // En correctionMode solo se validan cuenta/centro/porcentaje (checklist y negociador están bloqueados)
     if (!correctionMode) {
-      const hayChecklistSinMarcar = Object.keys(checklistRevision).some(key => !checklistRevision[key]);
+      const hayChecklistSinMarcar = Object.keys(DEFAULT_CHECKLIST_REVISION).some(key => !checklistRevision[key]);
       if (hayChecklistSinMarcar) {
         errores.push('Debe marcar todos los checklist de Revisión');
       }
@@ -1170,7 +1197,8 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
 
       // 2. Agregar NEGOCIACIONES (OBLIGATORIO)
       console.log('📋 Obteniendo usuario NEGOCIACIONES...');
-      const negociacionesResponse = await fetch(`${BACKEND_HOST}/api/facturas/usuario-negociaciones`);
+      const negociacionesUrl = `${BACKEND_HOST}/api/facturas/usuario-negociaciones${isCausacionTestMode ? '?test=true' : ''}`;
+      const negociacionesResponse = await fetch(negociacionesUrl);
       const negociacionesData = await negociacionesResponse.json();
 
       if (!negociacionesResponse.ok || !negociacionesData.success || !negociacionesData.data) {
@@ -1303,7 +1331,11 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
           observaciones,
           filasControl,
           totalPorcentaje,
-          firmantes
+          firmantes,
+          ...(isCausacionTestMode ? {
+            source: 'causacion_test',
+            ingestionSource: 'causacion_test'
+          } : {})
         });
       }
     } catch (error) {

@@ -14,6 +14,30 @@ function formatDateForDisplay(dateValue) {
   return value;
 }
 
+function normalizeChecklistRevision(checklistRevision = {}) {
+  const checklistKeys = [
+    'fechaEmision',
+    'fechaVencimiento',
+    'cantidades',
+    'precioUnitario',
+    'fletes',
+    'valoresTotales',
+    'descuentosTotales'
+  ];
+  const hasCurrentKeys = checklistKeys.some(key => Object.prototype.hasOwnProperty.call(checklistRevision, key));
+  const hasLegacyApprovedChecklist = ['facturaOriginal', 'ordenCompra', 'entradaAlmacen']
+    .some(key => checklistRevision[key] === true);
+
+  if (!hasCurrentKeys && hasLegacyApprovedChecklist) {
+    return checklistKeys.reduce((result, key) => {
+      result[key] = true;
+      return result;
+    }, {});
+  }
+
+  return checklistRevision;
+}
+
 /**
  * Genera un PDF con el template de legalización de factura diligenciado
  * Renderiza HTML que replica EXACTAMENTE el formulario web
@@ -43,7 +67,7 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
       fechaFactura: templateData.fechaFactura || '',
       fechaRecepcion: templateData.fechaRecepcion || '',
       legalizaAnticipo: templateData.legalizaAnticipo || false,
-      checklistRevision: templateData.checklistRevision || {},
+      checklistRevision: normalizeChecklistRevision(templateData.checklistRevision || {}),
       nombreNegociador: templateData.nombreNegociador || '',
       cargoNegociador: templateData.cargoNegociador || '',
       filasControl: templateData.filasControl || [],

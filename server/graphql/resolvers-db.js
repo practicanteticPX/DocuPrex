@@ -953,7 +953,7 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
        ds.role_name
        FROM document_signers ds
        JOIN users u ON u.id = ds.user_id
-       LEFT JOIN signatures s ON ${signatureJoinCondition}
+       LEFT JOIN signatures s ON s.document_id = ds.document_id AND s.signer_id = ds.user_id
        WHERE ds.document_id = $1
          AND ds.is_causacion_group = FALSE
          AND s.status = 'signed'
@@ -991,13 +991,32 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
       return matchCount >= 2;
     };
 
+    const normalizarRol = (value) => String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase();
+
+    const roleMatches = (roles, ...keys) => {
+      const roleText = normalizarRol(roles.filter(Boolean).join(' '));
+      return keys.some(key => roleText.includes(normalizarRol(key)));
+    };
+
+    const assignFirmaToControlRows = (fieldName, nombreFirmante) => {
+      if (!templateData?.filasControl || !Array.isArray(templateData.filasControl)) {
+        return;
+      }
+
+      templateData.filasControl.forEach(fila => {
+        if (fila[fieldName]) {
+          firmas[fila[fieldName]] = nombreFirmante;
+        }
+      });
+    };
+
     // Para cada firmante que ha firmado
     result.rows.forEach(row => {
       // Usar real_signer_name si existe (usuario Negociaciones firmando por otro), si no usar user_name
       const nombreFirmante = row.real_signer_name || row.user_name;
-
-      // Agregar por nombre de usuario directo
-      firmas[row.user_name] = nombreFirmante;
 
       // Verificar roles para Negociaciones y Causación
       let roles = [];
@@ -1020,25 +1039,23 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
 
       // Si tenemos templateData, buscar coincidencias
       if (templateData) {
+        if (roleMatches(roles, 'NEGOCIADOR') && templateData.nombreNegociador) {
+          firmas[templateData.nombreNegociador] = nombreFirmante;
+        }
+
+        if (roleMatches(roles, 'CUENTA CONTABLE', 'RESP_CUENTA', 'RESPONSABLE_CUENTA')) {
+          assignFirmaToControlRows('respCuentaContable', nombreFirmante);
+        }
+
+        if (roleMatches(roles, 'CENTRO COSTO', 'CENTRO COSTOS', 'RESP_CTRO_COST', 'RESPONSABLE_CENTRO')) {
+          assignFirmaToControlRows('respCentroCostos', nombreFirmante);
+        }
+
         // Verificar si es el negociador
         if (templateData.nombreNegociador && nombresCoinciden(row.user_name, templateData.nombreNegociador)) {
           firmas[templateData.nombreNegociador] = nombreFirmante;
         }
 
-        // Verificar en las filas de control
-        if (templateData.filasControl && Array.isArray(templateData.filasControl)) {
-          templateData.filasControl.forEach(fila => {
-            // Responsable de Cuenta Contable
-            if (fila.respCuentaContable && nombresCoinciden(row.user_name, fila.respCuentaContable)) {
-              firmas[fila.respCuentaContable] = nombreFirmante;
-            }
-
-            // Responsable de Centro de Costos
-            if (fila.respCentroCostos && nombresCoinciden(row.user_name, fila.respCentroCostos)) {
-              firmas[fila.respCentroCostos] = nombreFirmante;
-            }
-          });
-        }
       }
     });
 
@@ -1568,10 +1585,13 @@ const resolvers = {
       let grupoMembersMap = {};
       if (grupoCodigos.length > 0) {
         const uniqueCodigos = [...new Set(grupoCodigos)];
+        const hasDocumentSignerIdColumn = await checkSignaturesHasDocumentSignerIdColumn();
 
         const allMembersResult = await query(`
           SELECT
             cg.codigo as grupo_codigo,
+            cg.nombre as grupo_nombre,
+            ds_group.id as document_signer_id,
             ci.user_id,
             u.id,
             u.name,
@@ -1587,7 +1607,12 @@ const resolvers = {
           FROM causacion_integrantes ci
           LEFT JOIN users u ON ci.user_id = u.id
           LEFT JOIN causacion_grupos cg ON ci.grupo_id = cg.id
-          LEFT JOIN signatures s ON s.document_id = $1 AND s.signer_id = ci.user_id
+          JOIN document_signers ds_group ON ds_group.document_id = $1
+            AND ds_group.is_causacion_group = true
+            AND ds_group.grupo_codigo = cg.codigo
+          LEFT JOIN signatures s ON s.document_id = $1
+            AND s.signer_id = ci.user_id
+            ${hasDocumentSignerIdColumn ? 'AND s.document_signer_id = ds_group.id' : ''}
           WHERE cg.codigo = ANY($2) AND ci.activo = true
         `, [documentId, uniqueCodigos]);
 
@@ -1615,6 +1640,9 @@ const resolvers = {
               roleName: row.roleName,
               assignedRoleIds: row.assignedRoleIds || [],
               roleNames: row.roleNames || [],
+              isCausacionGroup: true,
+              grupoCodigo: row.grupoCodigo,
+              grupoNombre: member.grupo_nombre || row.grupoCodigo,
               user: {
                 id: member.id,
                 name: member.name,
@@ -1642,6 +1670,9 @@ const resolvers = {
             roleName: row.roleName,
             assignedRoleIds: row.assignedRoleIds || [],
             roleNames: row.roleNames || [],
+            isCausacionGroup: false,
+            grupoCodigo: null,
+            grupoNombre: null,
             user: {
               id: row.user_id,
               name: row.user_name,
@@ -2201,30 +2232,6 @@ const resolvers = {
         throw new Error('No existe el tipo documental FV');
       }
 
-      const roleResult = await query(
-        `SELECT id, role_name, role_code
-         FROM document_type_roles
-         WHERE document_type_id = $1
-         ORDER BY order_position ASC`,
-        [fvTypeResult.rows[0].id]
-      );
-
-      const findRole = (...keys) => roleResult.rows.find(role => {
-        const text = normalizeForRoleMatch(`${role.role_name || ''} ${role.role_code || ''}`);
-        return keys.some(key => text.includes(normalizeForRoleMatch(key)));
-      });
-
-      const negociadorRole = findRole('NEGOCIADOR') || {};
-      const findRoleByCode = (...codes) => roleResult.rows.find(role => {
-        const code = normalizeForRoleMatch(role.role_code || '');
-        return codes.some(expectedCode => code === normalizeForRoleMatch(expectedCode));
-      });
-
-      const negociacionesRole = findRoleByCode('RESPONSABLE_NEGOCIACIONES') || findRole('NEGOCIACION') || {};
-      const respCuentaRole = findRoleByCode('RESPONSABLE_CUENTA_CONTABLE') || findRole('RESP_CUENTA', 'CUENTA CONTABLE', 'CONTABLE') || {};
-      const respCentroRole = findRoleByCode('RESPONSABLE_CENTRO_COSTOS') || findRole('RESP_CTRO_COST', 'CENTRO COSTO', 'CENTRO DE COSTO') || {};
-      const causacionRole = findRole('CAUSACION', 'CAUSACIÓN') || {};
-
       const nextControlResult = await queryFacturas(
         `SELECT GREATEST(COALESCE(MAX(numero_control), 900000), 900000) + 1 AS next_control
          FROM crud_facturas."T_Facturas"`
@@ -2233,10 +2240,6 @@ const resolvers = {
       const numeroFactura = `PR-${numeroControl}`;
       const today = new Date().toISOString().slice(0, 10);
       const jesusName = user.name || 'Jesus Bustamante';
-      const testCuentaContable = '519595-JB';
-      const testNombreCuenta = 'CUENTA CONTABLE PRUEBA JESUS BUSTAMANTE';
-      const testCentroCosto = 'PX-JB-PRUEBA';
-      const testNombreCentroCosto = 'CENTRO DE COSTOS PRUEBA JESUS BUSTAMANTE';
 
       await queryFacturas(
         `INSERT INTO crud_facturas."T_CentrosCostos" ("Cia_CC", "CentroCosto", "Responsable")
@@ -2246,7 +2249,7 @@ const resolvers = {
            FROM crud_facturas."T_CentrosCostos"
            WHERE "Cia_CC" = $1::varchar
          )`,
-        [testCentroCosto, testNombreCentroCosto, jesusName]
+        ['PX-JB-PRUEBA', 'CENTRO DE COSTOS PRUEBA JESUS BUSTAMANTE', 'Prueba Responsable Centro Costos']
       );
 
       await queryFacturas(
@@ -2256,73 +2259,9 @@ const resolvers = {
            entregada_a, fecha_entrega, en_proceso, finalizado, causado
          )
          VALUES ($1, 'PX', 'PX + 900000000-1', '900000000', 'PROVEEDOR PRUEBA CAUSACION', $2,
-           CURRENT_DATE, CURRENT_DATE, false, false, $3, CURRENT_DATE, true, false, false)`,
+           CURRENT_DATE, CURRENT_DATE, false, false, $3, CURRENT_DATE, false, false, false)`,
         [numeroControl, numeroFactura, jesusName]
       );
-
-      const templateData = {
-        consecutivo: String(numeroControl),
-        cia: 'PX',
-        numeroFactura,
-        proveedor: 'PROVEEDOR PRUEBA CAUSACION',
-        fechaFactura: today,
-        fechaRecepcion: today,
-        legalizaAnticipo: false,
-        checklistRevision: {
-          facturaOriginal: true,
-          ordenCompra: true,
-          entradaAlmacen: true
-        },
-        nombreNegociador: jesusName,
-        cargoNegociador: 'Entorno de pruebas',
-        filasControl: [
-          {
-            noCuentaContable: testCuentaContable,
-            respCuentaContable: jesusName,
-            cargoCuentaContable: 'Responsable cuenta contable prueba',
-            nombreCuentaContable: testNombreCuenta,
-            centroCostos: testCentroCosto,
-            respCentroCostos: jesusName,
-            cargoCentroCostos: 'Responsable centro de costos prueba',
-            concepto: 'Prueba de causacion autonoma',
-            porcentaje: '100'
-          }
-        ],
-        totalPorcentaje: 100,
-        observaciones: 'Factura generada automaticamente para pruebas de causacion.'
-      };
-
-      const fileName = `FV_PRUEBA_CAUSACION_${numeroControl}.pdf`;
-      const relativeDir = 'uploads/causacion_tests';
-      const relativePath = `${relativeDir}/${fileName}`;
-      const absoluteDir = path.join(__dirname, '..', relativeDir);
-      const absolutePath = path.join(absoluteDir, fileName);
-
-      await fs.mkdir(absoluteDir, { recursive: true });
-      const pdfBuffer = await generateFacturaTemplatePDF(templateData, {}, false, []);
-      await fs.writeFile(absolutePath, pdfBuffer);
-
-      const documentResult = await query(
-        `INSERT INTO documents (
-           title, description, file_name, file_path, file_size, mime_type,
-           uploaded_by, document_type_id, status, metadata, consecutivo
-         )
-         VALUES ($1, $2, $3, $4, $5, 'application/pdf', $6, $7, 'pending', $8, $9)
-         RETURNING *`,
-        [
-          `FV - PRUEBA CAUSACION - ${numeroControl}`,
-          'Documento generado automaticamente para pruebas de causacion.',
-          fileName,
-          relativePath,
-          pdfBuffer.length,
-          user.id,
-          fvTypeResult.rows[0].id,
-          templateData,
-          String(numeroControl)
-        ]
-      );
-
-      const documentId = documentResult.rows[0].id;
       const testCausacionGroupResult = await query(
         `INSERT INTO causacion_grupos (codigo, nombre, descripcion, activo)
          VALUES ('causacion_prueba_jesus', 'Causacion prueba Jesus Bustamante', 'Grupo de causacion exclusivo para pruebas autonomas de Jesus Bustamante', true)
@@ -2344,7 +2283,6 @@ const resolvers = {
         [testCausacionGroupResult.rows[0].id, user.id]
       );
 
-      const testSignerUsers = [];
       for (const testUser of [
         { name: 'Prueba Negociador Docuprex', email: 'prueba.negociador@docuprex.test', adUsername: 'prueba.negociador' },
         { name: 'Prueba Negociaciones Docuprex', email: 'prueba.negociaciones@docuprex.test', adUsername: 'prueba.negociaciones' },
@@ -2352,7 +2290,7 @@ const resolvers = {
         { name: 'Prueba Responsable Centro Costos', email: 'prueba.respcc@docuprex.test', adUsername: 'prueba.respcc' },
         { name: 'Prueba Causacion Docuprex', email: 'prueba.causacion@docuprex.test', adUsername: 'prueba.causacion' }
       ]) {
-        const testUserResult = await query(
+        await query(
           `INSERT INTO users (name, email, ad_username, role, is_active, email_notifications)
            VALUES ($1, $2, $3, 'user', true, false)
            ON CONFLICT (email) DO UPDATE
@@ -2363,52 +2301,198 @@ const resolvers = {
            RETURNING id`,
           [testUser.name, testUser.email, testUser.adUsername]
         );
-        testSignerUsers.push(testUserResult.rows[0].id);
       }
 
-      const signerRows = [
-        { order: 1, role: negociadorRole, roleName: negociadorRole.role_name || 'Negociador', userId: testSignerUsers[0], isGroup: false },
-        { order: 2, role: negociacionesRole, roleName: negociacionesRole.role_name || 'Negociaciones', userId: testSignerUsers[1], isGroup: false },
-        { order: 3, role: respCuentaRole, roleName: respCuentaRole.role_name || 'Responsable cuenta contable', userId: testSignerUsers[2], isGroup: false },
-        { order: 4, role: respCentroRole, roleName: respCentroRole.role_name || 'Responsable centro de costos', userId: testSignerUsers[3], isGroup: false },
-        { order: 5, role: causacionRole, roleName: causacionRole.role_name || 'Causación', userId: testSignerUsers[4], isGroup: true, grupoCodigo: testCausacionGroupResult.rows[0].codigo }
-      ];
+      const placeholderMetadata = {
+        source: 'causacion_test',
+        ingestionSource: 'causacion_test',
+        skipTemplateMerge: true,
+        receivedOnly: true,
+        consecutivo: String(numeroControl),
+        numeroControl: String(numeroControl),
+        numeroFactura,
+        cia: 'PX',
+        proveedor: 'PROVEEDOR PRUEBA CAUSACION',
+        fechaFactura: today,
+        fechaRecepcion: today,
+        fechaEntrega: today,
+        checklistRevision: {
+          fechaEmision: false,
+          fechaVencimiento: false,
+          cantidades: false,
+          precioUnitario: false,
+          fletes: false,
+          valoresTotales: false,
+          descuentosTotales: false
+        },
+        nombreNegociador: '',
+        cargoNegociador: '',
+        grupoCausacion: '',
+        filasControl: [{
+          id: 1,
+          noCuentaContable: '',
+          respCuentaContable: '',
+          cargoCuentaContable: '',
+          nombreCuentaContable: '',
+          centroCostos: '',
+          respCentroCostos: '',
+          cargoCentroCostos: '',
+          porcentaje: ''
+        }],
+        firmantes: [],
+        observaciones: ''
+      };
 
-      for (const signer of signerRows) {
-        const documentSignerResult = await query(
-          `INSERT INTO document_signers (
-             document_id, user_id, order_position, is_required,
-             assigned_role_id, role_name, assigned_role_ids, role_names,
-             is_causacion_group, grupo_codigo
-           )
-           VALUES ($1, $2, $3, TRUE, $4, $5, $6::uuid[], $7::text[], $8, $9)
-           RETURNING id`,
-          [
-            documentId,
-            signer.userId,
-            signer.order,
-            signer.role.id || null,
-            signer.roleName,
-            signer.role.id ? [signer.role.id] : [],
-            [signer.roleName],
-            Boolean(signer.isGroup),
-            signer.grupoCodigo || null
-          ]
-        );
+      const title = `FV - PROVEEDOR PRUEBA CAUSACION - ${numeroFactura}`;
+      const fileName = `FV_PRUEBA_RECIBIDA_${numeroControl}_${Date.now()}.pdf`;
+      const relativeDir = 'uploads/causacion_tests';
+      const relativePath = `${relativeDir}/${fileName}`;
+      const absoluteDir = path.join(__dirname, '..', relativeDir);
+      const absolutePath = path.join(absoluteDir, fileName);
 
-        await query(
-          `INSERT INTO signatures (document_id, signer_id, document_signer_id, status, signature_type)
-           VALUES ($1, $2, $3, 'pending', 'digital')`,
-          [documentId, signer.userId, documentSignerResult.rows[0].id]
-        );
-      }
+      await fs.mkdir(absoluteDir, { recursive: true });
+      const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+      const placeholderPdf = await PDFDocument.create();
+      const page = placeholderPdf.addPage([612, 792]);
+      const font = await placeholderPdf.embedFont(StandardFonts.Helvetica);
+      const boldFont = await placeholderPdf.embedFont(StandardFonts.HelveticaBold);
+      page.drawText('Factura de prueba recibida', {
+        x: 72,
+        y: 720,
+        size: 18,
+        font: boldFont,
+        color: rgb(0.12, 0.14, 0.2)
+      });
+      page.drawText(`Consecutivo: ${numeroControl}`, { x: 72, y: 680, size: 12, font });
+      page.drawText(`Factura: ${numeroFactura}`, { x: 72, y: 660, size: 12, font });
+      page.drawText('Estado inicial: Recibida. La planilla se diligencia desde Mis Facturas.', {
+        x: 72,
+        y: 620,
+        size: 11,
+        font,
+        color: rgb(0.35, 0.38, 0.45)
+      });
+      const pdfBuffer = Buffer.from(await placeholderPdf.save());
+      await fs.writeFile(absolutePath, pdfBuffer);
+
+      await query(
+        `INSERT INTO documents (
+           title, description, file_name, file_path, file_size, mime_type,
+           status, uploaded_by, document_type_id, consecutivo, metadata, original_pdf_backup
+         )
+         VALUES ($1, $2, $3, $4, $5, 'application/pdf', 'pending', $6, $7, $8, $9, $10)`,
+        [
+          title,
+          'Factura de prueba de causacion recibida. La planilla se diligencia desde Mis Facturas.',
+          fileName,
+          relativePath,
+          pdfBuffer.length,
+          user.id,
+          fvTypeResult.rows[0].id,
+          String(numeroControl),
+          JSON.stringify(placeholderMetadata),
+          JSON.stringify([])
+        ]
+      );
 
       return {
         success: true,
-        message: 'Factura de prueba creada exitosamente',
-        document: documentResult.rows[0]
+        message: `Factura de prueba ${numeroControl} creada para inscripcion`,
+        factura: {
+          numeroControl: String(numeroControl),
+          numeroFactura,
+          cia: 'PX',
+          proveedor: 'PROVEEDOR PRUEBA CAUSACION',
+          fechaFactura: today,
+          fechaEntrega: today
+        }
       };
     },
+
+    createCausacionTestDocument: async (_, { templateData }, { user }) => {
+      if (!user) throw new Error('No autenticado');
+      if (!isCausacionTestUser(user)) {
+        throw new Error('No autorizado');
+      }
+
+      let parsedTemplateData;
+      try {
+        parsedTemplateData = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
+      } catch (error) {
+        throw new Error('Los datos de la plantilla no son validos');
+      }
+
+      const fvTypeResult = await query(
+        `SELECT id FROM document_types WHERE code = 'FV' LIMIT 1`
+      );
+
+      if (fvTypeResult.rows.length === 0) {
+        throw new Error('No existe el tipo documental FV');
+      }
+
+      const consecutivo = String(parsedTemplateData.consecutivo || '').trim();
+      if (!consecutivo) {
+        throw new Error('La plantilla de prueba no tiene consecutivo');
+      }
+
+      const proveedor = String(parsedTemplateData.proveedor || 'PROVEEDOR PRUEBA CAUSACION').trim().replace(/\s+/g, ' ');
+      const numeroFactura = String(parsedTemplateData.numeroFactura || `PR-${consecutivo}`).trim().replace(/\s+/g, ' ');
+      const title = `FV - ${proveedor} - ${numeroFactura}`;
+
+      const metadata = {
+        ...parsedTemplateData,
+        source: 'causacion_test',
+        ingestionSource: 'causacion_test',
+        skipTemplateMerge: true
+      };
+
+      const fileName = `FV_PRUEBA_CAUSACION_${consecutivo}_${Date.now()}.pdf`;
+      const relativeDir = 'uploads/causacion_tests';
+      const relativePath = `${relativeDir}/${fileName}`;
+      const absoluteDir = path.join(__dirname, '..', relativeDir);
+      const absolutePath = path.join(absoluteDir, fileName);
+
+      await fs.mkdir(absoluteDir, { recursive: true });
+      const pdfBuffer = await generateFacturaTemplatePDF(metadata, {}, false, []);
+      await fs.writeFile(absolutePath, pdfBuffer);
+
+      const result = await query(
+        `INSERT INTO documents (
+           title, description, file_name, file_path, file_size, mime_type,
+           status, uploaded_by, document_type_id, consecutivo, metadata, original_pdf_backup
+         )
+         VALUES ($1, $2, $3, $4, $5, 'application/pdf', 'pending', $6, $7, $8, $9, $10)
+         RETURNING *`,
+        [
+          title,
+          'Documento generado desde la plantilla para simulacro de causacion.',
+          fileName,
+          relativePath,
+          pdfBuffer.length,
+          user.id,
+          fvTypeResult.rows[0].id,
+          consecutivo,
+          JSON.stringify(metadata),
+          JSON.stringify([relativePath])
+        ]
+      );
+
+      await queryFacturas(
+        `UPDATE crud_facturas."T_Facturas"
+         SET en_proceso = true
+         WHERE numero_control = $1`,
+        [consecutivo]
+      );
+
+      pdfLogger.logDocumentCreated(user.name, title);
+
+      return {
+        success: true,
+        message: 'Documento de prueba creado desde la plantilla',
+        document: result.rows[0]
+      };
+    },
+
 
     /**
      * Updates document metadata (title, description, or status)
@@ -2693,9 +2777,9 @@ const resolvers = {
      */
     assignSigners: async (_, { documentId, signerAssignments }, { user }) => {
       // Separar assignments en usuarios normales y grupos de causación
-      const userAssignments = signerAssignments.filter(sa => !sa.isCausacionGroup && sa.userId !== null && sa.userId !== undefined);
+      let userAssignments = signerAssignments.filter(sa => !sa.isCausacionGroup && sa.userId !== null && sa.userId !== undefined);
       const grupoCausacionAssignments = signerAssignments.filter(sa => sa.isCausacionGroup && sa.grupoCodigo);
-      const userIds = userAssignments.map(sa => sa.userId);
+      let userIds = userAssignments.map(sa => sa.userId);
 
       if (!user) throw new Error('No autenticado');
 
@@ -2737,6 +2821,35 @@ const resolvers = {
 
         return { roleIds, roleNames };
       };
+
+      const mergeSignerAssignmentsByUser = (assignments) => {
+        const merged = new Map();
+
+        assignments.forEach((assignment, index) => {
+          const key = String(assignment.userId);
+          const roles = normalizeRoles(assignment);
+
+          if (!merged.has(key)) {
+            merged.set(key, {
+              ...assignment,
+              roleIds: [],
+              roleNames: [],
+              originalIndex: index
+            });
+          }
+
+          const current = merged.get(key);
+          current.roleIds = Array.from(new Set([...current.roleIds, ...roles.roleIds].filter(Boolean)));
+          current.roleNames = Array.from(new Set([...current.roleNames, ...roles.roleNames].filter(Boolean)));
+        });
+
+        return Array.from(merged.values())
+          .sort((a, b) => a.originalIndex - b.originalIndex)
+          .map(({ originalIndex, ...assignment }) => assignment);
+      };
+
+      userAssignments = mergeSignerAssignmentsByUser(userAssignments);
+      userIds = userAssignments.map(sa => sa.userId);
 
       for (const assignment of userAssignments) {
         const { roleIds, roleNames } = normalizeRoles(assignment);
@@ -3261,9 +3374,16 @@ const resolvers = {
       } else if (isFacturaVenta) {
         console.log(`📄 Documento FV detectado - respetando orden basado en roles`);
 
+        const processedFVUserIds = new Set();
+
         // Para documentos FV, respetar el orden del array signerAssignments
         for (let i = 0; i < userAssignments.length; i++) {
           const assignment = userAssignments[i];
+          if (!assignment.userId || processedFVUserIds.has(String(assignment.userId))) {
+            console.warn(`Firmante FV duplicado omitido para documento ${documentId}: ${assignment.userId}`);
+            continue;
+          }
+          processedFVUserIds.add(String(assignment.userId));
           const roles = normalizeRoles(assignment);
           const orderPosition = i + 1; // Usar índice + 1 como posición
 
@@ -3271,6 +3391,12 @@ const resolvers = {
           const insertedSignerResult = await query(
             `INSERT INTO document_signers (document_id, user_id, order_position, is_required, assigned_role_id, role_name, assigned_role_ids, role_names)
              VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[], $8::text[])
+             ON CONFLICT (document_id, user_id) DO UPDATE SET
+               order_position = EXCLUDED.order_position,
+               assigned_role_id = EXCLUDED.assigned_role_id,
+               role_name = EXCLUDED.role_name,
+               assigned_role_ids = EXCLUDED.assigned_role_ids,
+               role_names = EXCLUDED.role_names
              RETURNING id`,
             [
               documentId,
@@ -3295,13 +3421,20 @@ const resolvers = {
             if (hasDocumentSignerIdColumn && documentSignerId) {
               await query(
                 `INSERT INTO signatures (document_id, signer_id, document_signer_id, status, signature_type, signed_at)
-                 VALUES ($1, $2, $3, 'signed', 'digital', CURRENT_TIMESTAMP)`,
+                 VALUES ($1, $2, $3, 'signed', 'digital', CURRENT_TIMESTAMP)
+                 ON CONFLICT (document_id, signer_id) DO UPDATE
+                 SET document_signer_id = EXCLUDED.document_signer_id,
+                     status = 'signed',
+                     signed_at = CURRENT_TIMESTAMP`,
                 [documentId, user.id, documentSignerId]
               );
             } else {
               await query(
                 `INSERT INTO signatures (document_id, signer_id, status, signature_type, signed_at)
-                 VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)`,
+                 VALUES ($1, $2, 'signed', 'digital', CURRENT_TIMESTAMP)
+                 ON CONFLICT (document_id, signer_id) DO UPDATE
+                 SET status = 'signed',
+                     signed_at = CURRENT_TIMESTAMP`,
                 [documentId, user.id]
               );
             }
@@ -3310,13 +3443,15 @@ const resolvers = {
             if (hasDocumentSignerIdColumn && documentSignerId) {
               await query(
                 `INSERT INTO signatures (document_id, signer_id, document_signer_id, status, signature_type)
-                 VALUES ($1, $2, $3, 'pending', 'digital')`,
+                 VALUES ($1, $2, $3, 'pending', 'digital')
+                 ON CONFLICT (document_id, signer_id) DO NOTHING`,
                 [documentId, assignment.userId, documentSignerId]
               );
             } else {
               await query(
                 `INSERT INTO signatures (document_id, signer_id, status, signature_type)
-                 VALUES ($1, $2, 'pending', 'digital')`,
+                 VALUES ($1, $2, 'pending', 'digital')
+                 ON CONFLICT (document_id, signer_id) DO NOTHING`,
                 [documentId, assignment.userId]
               );
             }
@@ -3524,7 +3659,15 @@ const resolvers = {
               assigned_role_id, role_name, assigned_role_ids, role_names,
               is_causacion_group, grupo_codigo
             )
-            VALUES ($1, $2, $3, TRUE, $4, $5, $6::uuid[], $7::text[], TRUE, $8)`,
+            VALUES ($1, $2, $3, TRUE, $4, $5, $6::uuid[], $7::text[], TRUE, $8)
+            ON CONFLICT (document_id, user_id) DO UPDATE SET
+              order_position = EXCLUDED.order_position,
+              assigned_role_id = EXCLUDED.assigned_role_id,
+              role_name = EXCLUDED.role_name,
+              assigned_role_ids = EXCLUDED.assigned_role_ids,
+              role_names = EXCLUDED.role_names,
+              is_causacion_group = TRUE,
+              grupo_codigo = EXCLUDED.grupo_codigo`,
             [
               documentId,
               representativeUserId,
@@ -3936,6 +4079,9 @@ const resolvers = {
               ? JSON.parse(docInfo.metadata)
               : docInfo.metadata;
 
+            if (templateData.skipTemplateMerge) {
+              console.log('Documento FV de prueba ya contiene la plantilla; se omite fusion adicional.');
+            } else {
             // Obtener retenciones activas del documento
             const retentionData = docInfo.retention_data
               ? (typeof docInfo.retention_data === 'string' ? JSON.parse(docInfo.retention_data) : docInfo.retention_data).filter(r => r.activa)
@@ -3963,6 +4109,7 @@ const resolvers = {
             // console.log(`✅ PDF original reemplazado con PDF fusionado`);
 
             pdfPath = originalPdfPath;
+            }
           } catch (templateError) {
             console.error('❌ Error al generar/fusionar PDF de plantilla:', templateError);
           }
@@ -4226,10 +4373,6 @@ const resolvers = {
           throw new Error('Solo el creador del documento puede editar la planilla');
         }
 
-        if (isCausacionTestDocument(doc)) {
-          throw new Error('Las facturas de prueba de causación ya vienen con firmantes asignados y no se editan desde la planilla');
-        }
-
         // Parsear templateData
         const parsedTemplateData = JSON.parse(templateData);
         const currentTemplateData = doc.metadata
@@ -4244,6 +4387,10 @@ const resolvers = {
           parsedTemplateData.ingestionSource = currentTemplateData.ingestionSource;
         }
         console.log('📝 Actualizando template para documento:', documentId);
+
+        if (currentTemplateData.skipTemplateMerge) {
+          parsedTemplateData.skipTemplateMerge = true;
+        }
 
         const obtenerFirmasDocumentoTx = async (docId, currentTemplateData = null) => {
           const firmasMap = {};
@@ -4273,29 +4420,58 @@ const resolvers = {
             return matchCount >= 2;
           };
 
+          const normalizarRol = (value) => String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase();
+
+          const roleMatches = (roles, ...keys) => {
+            const roleText = normalizarRol(roles.filter(Boolean).join(' '));
+            return keys.some(key => roleText.includes(normalizarRol(key)));
+          };
+
+          const assignFirmaToControlRows = (fieldName, nombreFirmante) => {
+            if (!currentTemplateData?.filasControl || !Array.isArray(currentTemplateData.filasControl)) {
+              return;
+            }
+
+            currentTemplateData.filasControl.forEach(fila => {
+              if (fila[fieldName]) {
+                firmasMap[fila[fieldName]] = nombreFirmante;
+              }
+            });
+          };
+
           const signersResult = await client.query(
-            `SELECT s.signer_id, s.status, ${realSignerNameSelect}, u.name
+            `SELECT s.signer_id, s.status, ${realSignerNameSelect}, u.name, ds.role_name, ds.role_names
              FROM signatures s
              JOIN users u ON s.signer_id = u.id
+             LEFT JOIN document_signers ds ON ds.document_id = s.document_id
+               AND ds.user_id = s.signer_id
+               AND ds.is_causacion_group = FALSE
              WHERE s.document_id = $1 AND s.status = 'signed'`,
             [docId]
           );
 
           signersResult.rows.forEach(signer => {
             const nombreFirmante = signer.real_signer_name || signer.name;
+            const roles = Array.isArray(signer.role_names) && signer.role_names.length > 0
+              ? signer.role_names
+              : [signer.role_name].filter(Boolean);
 
-            if (currentTemplateData?.filasControl && Array.isArray(currentTemplateData.filasControl)) {
-              currentTemplateData.filasControl.forEach(fila => {
-                if (fila.respCuentaContable && nombresCoinciden(signer.name, fila.respCuentaContable)) {
-                  firmasMap[fila.respCuentaContable] = nombreFirmante;
-                }
-                if (fila.respCentroCostos && nombresCoinciden(signer.name, fila.respCentroCostos)) {
-                  firmasMap[fila.respCentroCostos] = nombreFirmante;
-                }
-              });
+            if (roleMatches(roles, 'CUENTA CONTABLE', 'RESP_CUENTA', 'RESPONSABLE_CUENTA')) {
+              assignFirmaToControlRows('respCuentaContable', nombreFirmante);
             }
 
-            if (currentTemplateData?.nombreNegociador && nombresCoinciden(signer.name, currentTemplateData.nombreNegociador)) {
+            if (roleMatches(roles, 'CENTRO COSTO', 'CENTRO COSTOS', 'RESP_CTRO_COST', 'RESPONSABLE_CENTRO')) {
+              assignFirmaToControlRows('respCentroCostos', nombreFirmante);
+            }
+
+            if (
+              currentTemplateData?.nombreNegociador
+              && roleMatches(roles, 'NEGOCIADOR')
+              && nombresCoinciden(signer.name, currentTemplateData.nombreNegociador)
+            ) {
               firmasMap[currentTemplateData.nombreNegociador] = nombreFirmante;
             }
           });
@@ -5867,27 +6043,54 @@ const resolvers = {
             const obtenerFirmasDocumento = async (documentId, templateData) => {
               const firmasMap = {};
               const { realSignerNameSelect } = await getSignatureColumnSelects();
+              const normalizarRol = (value) => String(value || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toUpperCase();
+              const roleMatches = (roles, ...keys) => {
+                const roleText = normalizarRol(roles.filter(Boolean).join(' '));
+                return keys.some(key => roleText.includes(normalizarRol(key)));
+              };
+              const assignFirmaToControlRows = (fieldName, nombreFirmante) => {
+                if (!templateData?.filasControl || !Array.isArray(templateData.filasControl)) {
+                  return;
+                }
+                templateData.filasControl.forEach(fila => {
+                  if (fila[fieldName]) {
+                    firmasMap[fila[fieldName]] = nombreFirmante;
+                  }
+                });
+              };
               const signersResult = await query(
-                `SELECT s.signer_id, s.status, ${realSignerNameSelect}, u.name
+                `SELECT s.signer_id, s.status, ${realSignerNameSelect}, u.name, ds.role_name, ds.role_names
                  FROM signatures s
                  JOIN users u ON s.signer_id = u.id
+                 LEFT JOIN document_signers ds ON ds.document_id = s.document_id
+                   AND ds.user_id = s.signer_id
+                   AND ds.is_causacion_group = FALSE
                  WHERE s.document_id = $1 AND s.status = 'signed'`,
                 [documentId]
               );
 
               signersResult.rows.forEach(signer => {
                 const nombreFirmante = signer.real_signer_name || signer.name;
-                if (templateData.filasControl && Array.isArray(templateData.filasControl)) {
-                  templateData.filasControl.forEach(fila => {
-                    if (fila.respCuentaContable && nombresCoinciden(signer.name, fila.respCuentaContable)) {
-                      firmasMap[fila.respCuentaContable] = nombreFirmante;
-                    }
-                    if (fila.respCentroCostos && nombresCoinciden(signer.name, fila.respCentroCostos)) {
-                      firmasMap[fila.respCentroCostos] = nombreFirmante;
-                    }
-                  });
+                const roles = Array.isArray(signer.role_names) && signer.role_names.length > 0
+                  ? signer.role_names
+                  : [signer.role_name].filter(Boolean);
+
+                if (roleMatches(roles, 'CUENTA CONTABLE', 'RESP_CUENTA', 'RESPONSABLE_CUENTA')) {
+                  assignFirmaToControlRows('respCuentaContable', nombreFirmante);
                 }
-                if (templateData.nombreNegociador && nombresCoinciden(signer.name, templateData.nombreNegociador)) {
+
+                if (roleMatches(roles, 'CENTRO COSTO', 'CENTRO COSTOS', 'RESP_CTRO_COST', 'RESPONSABLE_CENTRO')) {
+                  assignFirmaToControlRows('respCentroCostos', nombreFirmante);
+                }
+
+                if (
+                  templateData.nombreNegociador
+                  && roleMatches(roles, 'NEGOCIADOR')
+                  && nombresCoinciden(signer.name, templateData.nombreNegociador)
+                ) {
                   firmasMap[templateData.nombreNegociador] = nombreFirmante;
                 }
               });
@@ -6168,7 +6371,12 @@ const resolvers = {
 
         isCausacionGroupMember = true;
         targetDocumentSignerId = targetDocumentSignerId || groupCheck.rows[0].document_signer_id;
-        orderCheck = { rows: [{ document_signer_id: targetDocumentSignerId, order_position: orderCheck.rows[0].order_position, grupo_codigo: grupoCodigo }] };
+        orderCheck = { rows: [{
+          document_signer_id: targetDocumentSignerId,
+          order_position: groupCheck.rows[0].order_position,
+          is_causacion_group: true,
+          grupo_codigo: grupoCodigo
+        }] };
         }
         console.log(`👥 Usuario ${user.name} firmando como miembro del grupo ${grupoCodigo}`);
       } else {
@@ -6294,8 +6502,16 @@ const resolvers = {
 
       const existingSignature = (hasDocumentSignerIdColumn && targetDocumentSignerId)
         ? await query(
-          `SELECT * FROM signatures WHERE document_signer_id = $1`,
-          [targetDocumentSignerId]
+          `SELECT *
+           FROM signatures
+           WHERE document_signer_id = $1
+              OR (document_id = $2 AND signer_id = $3)
+           ORDER BY
+             CASE WHEN document_signer_id = $1 THEN 0 ELSE 1 END,
+             updated_at DESC NULLS LAST,
+             created_at DESC NULLS LAST
+           LIMIT 1`,
+          [targetDocumentSignerId, documentId, effectiveSignerUserId]
         )
         : await query(
           `SELECT * FROM signatures WHERE document_id = $1 AND signer_id = $2`,
@@ -6307,6 +6523,7 @@ const resolvers = {
 
       let result;
       if (existingSignature.rows.length > 0) {
+        const existingSignatureId = existingSignature.rows[0].id;
         if (hasConsecutivoColumn && hasRealSignerNameColumn) {
           result = await query(
             `UPDATE signatures
@@ -6314,13 +6531,14 @@ const resolvers = {
                 signature_data = $1,
                 consecutivo = $2,
                 real_signer_name = $3,
+                ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $4,' : ''}
                 updated_at = CURRENT_TIMESTAMP,
                 signed_at = CURRENT_TIMESTAMP
-            WHERE ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $4' : 'document_id = $4 AND signer_id = $5'}
+            WHERE id = ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$5' : '$4'}
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
-              ? [signatureData, consecutivo || null, effectiveRealSignerName, targetDocumentSignerId]
-              : [signatureData, consecutivo || null, effectiveRealSignerName, documentId, effectiveSignerUserId]
+              ? [signatureData, consecutivo || null, effectiveRealSignerName, targetDocumentSignerId, existingSignatureId]
+              : [signatureData, consecutivo || null, effectiveRealSignerName, existingSignatureId]
           );
         } else if (hasConsecutivoColumn) {
           result = await query(
@@ -6328,13 +6546,14 @@ const resolvers = {
             SET status = 'signed',
                 signature_data = $1,
                 consecutivo = $2,
+                ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $3,' : ''}
                 updated_at = CURRENT_TIMESTAMP,
                 signed_at = CURRENT_TIMESTAMP
-            WHERE ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $3' : 'document_id = $3 AND signer_id = $4'}
+            WHERE id = ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$4' : '$3'}
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
-              ? [signatureData, consecutivo || null, targetDocumentSignerId]
-              : [signatureData, consecutivo || null, documentId, effectiveSignerUserId]
+              ? [signatureData, consecutivo || null, targetDocumentSignerId, existingSignatureId]
+              : [signatureData, consecutivo || null, existingSignatureId]
           );
         } else if (hasRealSignerNameColumn) {
           result = await query(
@@ -6342,26 +6561,28 @@ const resolvers = {
             SET status = 'signed',
                 signature_data = $1,
                 real_signer_name = $2,
+                ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $3,' : ''}
                 updated_at = CURRENT_TIMESTAMP,
                 signed_at = CURRENT_TIMESTAMP
-            WHERE ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $3' : 'document_id = $3 AND signer_id = $4'}
+            WHERE id = ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$4' : '$3'}
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
-              ? [signatureData, effectiveRealSignerName, targetDocumentSignerId]
-              : [signatureData, effectiveRealSignerName, documentId, effectiveSignerUserId]
+              ? [signatureData, effectiveRealSignerName, targetDocumentSignerId, existingSignatureId]
+              : [signatureData, effectiveRealSignerName, existingSignatureId]
           );
         } else {
           result = await query(
             `UPDATE signatures
             SET status = 'signed',
                 signature_data = $1,
+                ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $2,' : ''}
                 updated_at = CURRENT_TIMESTAMP,
                 signed_at = CURRENT_TIMESTAMP
-            WHERE ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = $2' : 'document_id = $2 AND signer_id = $3'}
+            WHERE id = ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$3' : '$2'}
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
-              ? [signatureData, targetDocumentSignerId]
-              : [signatureData, documentId, effectiveSignerUserId]
+              ? [signatureData, targetDocumentSignerId, existingSignatureId]
+              : [signatureData, existingSignatureId]
           );
         }
       } else {
@@ -6369,6 +6590,15 @@ const resolvers = {
           result = await query(
             `INSERT INTO signatures (document_id, signer_id, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id, ' : ''}status, signature_data, signature_type, signed_at, consecutivo, real_signer_name)
             VALUES ($1, $2, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$3, ' : ''}'signed', ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$4' : '$3'}, 'digital', CURRENT_TIMESTAMP, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$5, $6' : '$4, $5'})
+            ON CONFLICT (document_id, signer_id) DO UPDATE
+            SET ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = EXCLUDED.document_signer_id,' : ''}
+                status = 'signed',
+                signature_data = EXCLUDED.signature_data,
+                signature_type = 'digital',
+                signed_at = CURRENT_TIMESTAMP,
+                consecutivo = EXCLUDED.consecutivo,
+                real_signer_name = EXCLUDED.real_signer_name,
+                updated_at = CURRENT_TIMESTAMP
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
               ? [documentId, effectiveSignerUserId, targetDocumentSignerId, signatureData, consecutivo || null, effectiveRealSignerName]
@@ -6378,6 +6608,14 @@ const resolvers = {
           result = await query(
             `INSERT INTO signatures (document_id, signer_id, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id, ' : ''}status, signature_data, signature_type, signed_at, consecutivo)
             VALUES ($1, $2, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$3, ' : ''}'signed', ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$4' : '$3'}, 'digital', CURRENT_TIMESTAMP, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$5' : '$4'})
+            ON CONFLICT (document_id, signer_id) DO UPDATE
+            SET ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = EXCLUDED.document_signer_id,' : ''}
+                status = 'signed',
+                signature_data = EXCLUDED.signature_data,
+                signature_type = 'digital',
+                signed_at = CURRENT_TIMESTAMP,
+                consecutivo = EXCLUDED.consecutivo,
+                updated_at = CURRENT_TIMESTAMP
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
               ? [documentId, effectiveSignerUserId, targetDocumentSignerId, signatureData, consecutivo || null]
@@ -6387,6 +6625,14 @@ const resolvers = {
           result = await query(
             `INSERT INTO signatures (document_id, signer_id, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id, ' : ''}status, signature_data, signature_type, signed_at, real_signer_name)
             VALUES ($1, $2, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$3, ' : ''}'signed', ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$4' : '$3'}, 'digital', CURRENT_TIMESTAMP, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$5' : '$4'})
+            ON CONFLICT (document_id, signer_id) DO UPDATE
+            SET ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = EXCLUDED.document_signer_id,' : ''}
+                status = 'signed',
+                signature_data = EXCLUDED.signature_data,
+                signature_type = 'digital',
+                signed_at = CURRENT_TIMESTAMP,
+                real_signer_name = EXCLUDED.real_signer_name,
+                updated_at = CURRENT_TIMESTAMP
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
               ? [documentId, effectiveSignerUserId, targetDocumentSignerId, signatureData, effectiveRealSignerName]
@@ -6396,6 +6642,13 @@ const resolvers = {
           result = await query(
             `INSERT INTO signatures (document_id, signer_id, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id, ' : ''}status, signature_data, signature_type, signed_at)
             VALUES ($1, $2, ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$3, ' : ''}'signed', ${hasDocumentSignerIdColumn && targetDocumentSignerId ? '$4' : '$3'}, 'digital', CURRENT_TIMESTAMP)
+            ON CONFLICT (document_id, signer_id) DO UPDATE
+            SET ${hasDocumentSignerIdColumn && targetDocumentSignerId ? 'document_signer_id = EXCLUDED.document_signer_id,' : ''}
+                status = 'signed',
+                signature_data = EXCLUDED.signature_data,
+                signature_type = 'digital',
+                signed_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
             RETURNING *`,
             (hasDocumentSignerIdColumn && targetDocumentSignerId)
               ? [documentId, effectiveSignerUserId, targetDocumentSignerId, signatureData]
@@ -6586,7 +6839,16 @@ const resolvers = {
 
               await query(
                 `INSERT INTO signatures (${insertColumns.join(', ')})
-                 VALUES (${placeholders.join(', ')}, CURRENT_TIMESTAMP)`,
+                 VALUES (${placeholders.join(', ')}, CURRENT_TIMESTAMP)
+                 ON CONFLICT (document_id, signer_id) DO UPDATE
+                 SET ${hasDocumentSignerIdColumn && autoTargetDocumentSignerId ? 'document_signer_id = EXCLUDED.document_signer_id,' : ''}
+                     status = 'signed',
+                     signature_data = EXCLUDED.signature_data,
+                     signature_type = 'digital',
+                     ${hasConsecutivoColumn ? 'consecutivo = EXCLUDED.consecutivo,' : ''}
+                     ${hasRealSignerNameColumn ? 'real_signer_name = EXCLUDED.real_signer_name,' : ''}
+                     signed_at = CURRENT_TIMESTAMP,
+                     updated_at = CURRENT_TIMESTAMP`,
                 insertValues
               );
             }
@@ -8919,7 +9181,7 @@ const resolvers = {
       if (parent.type === 'document_signed' && parent.document_id) {
         const { realSignerNameSelect } = await getSignatureColumnSelects();
         const signatureResult = await query(
-          `SELECT ${realSignerNameSelect} FROM signatures
+          `SELECT ${realSignerNameSelect} FROM signatures s
            WHERE document_id = $1 AND signer_id = $2 AND status = 'signed'
            ORDER BY signed_at DESC LIMIT 1`,
           [parent.document_id, parent.actor_id]

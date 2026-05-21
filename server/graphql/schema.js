@@ -116,6 +116,9 @@ const typeDefs = gql`
     # Nuevos campos para múltiples roles
     assignedRoleIds: [ID!]
     roleNames: [String!]
+    isCausacionGroup: Boolean
+    grupoCodigo: String
+    grupoNombre: String
   }
 
   type DocumentType {
@@ -160,6 +163,21 @@ const typeDefs = gql`
     success: Boolean!
     message: String!
     document: Document
+  }
+
+  type TestFactura {
+    numeroControl: String!
+    numeroFactura: String!
+    cia: String!
+    proveedor: String!
+    fechaFactura: String!
+    fechaEntrega: String!
+  }
+
+  type TestFacturaResponse {
+    success: Boolean!
+    message: String!
+    factura: TestFactura
   }
 
   type UpdateFacturaTemplateResponse {
@@ -285,7 +303,8 @@ const typeDefs = gql`
 
     # Documentos
     uploadDocument(title: String!, description: String, documentTypeId: ID): UploadResponse!
-    createCausacionTestFactura: UploadResponse!
+    createCausacionTestFactura: TestFacturaResponse!
+    createCausacionTestDocument(templateData: String!): UploadResponse!
     updateDocument(id: ID!, title: String, description: String, status: String, documentTypeId: ID): Document!
     deleteDocument(id: ID!): Boolean!
     assignSigners(documentId: ID!, signerAssignments: [SignerAssignmentInput!]!): Boolean!

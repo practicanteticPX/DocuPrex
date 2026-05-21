@@ -30,7 +30,17 @@ router.get('/cuentas-contables', async (req, res) => {
       []
     );
 
-    if (result.rows.length === 0) {
+    const rows = [...result.rows];
+    if (!rows.some(row => row.cuenta === '519595-JB')) {
+      rows.push({
+        cuenta: '519595-JB',
+        nombre_cuenta: 'CUENTA CONTABLE PRUEBA JESUS BUSTAMANTE',
+        nombre_responsable: 'Prueba Cuenta Contable Docuprex',
+        cargo: 'Responsable cuenta contable prueba'
+      });
+    }
+
+    if (rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'No se encontraron cuentas contables'
@@ -39,7 +49,7 @@ router.get('/cuentas-contables', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: result.rows
+      data: rows
     });
   } catch (error) {
     console.error('❌ Error obteniendo cuentas contables:', error);
@@ -69,7 +79,16 @@ router.get('/centros-costos', async (req, res) => {
       []
     );
 
-    if (result.rows.length === 0) {
+    const rows = [...result.rows];
+    if (!rows.some(row => row.codigo === 'PX-JB-PRUEBA')) {
+      rows.push({
+        codigo: 'PX-JB-PRUEBA',
+        nombre: 'CENTRO DE COSTOS PRUEBA JESUS BUSTAMANTE',
+        responsable: 'Prueba Responsable Centro Costos'
+      });
+    }
+
+    if (rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'No se encontraron centros de costos'
@@ -78,7 +97,7 @@ router.get('/centros-costos', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: result.rows
+      data: rows
     });
   } catch (error) {
     console.error('❌ Error obteniendo centros de costos:', error);
@@ -105,7 +124,15 @@ router.get('/negociadores', async (req, res) => {
       []
     );
 
-    if (result.rows.length === 0) {
+    const rows = [...result.rows];
+    if (!rows.some(row => row.negociador === 'Prueba Negociador Docuprex')) {
+      rows.push({
+        negociador: 'Prueba Negociador Docuprex',
+        cargo: 'Negociador prueba'
+      });
+    }
+
+    if (rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'No se encontraron negociadores'
@@ -114,7 +141,7 @@ router.get('/negociadores', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: result.rows
+      data: rows
     });
   } catch (error) {
     console.error('❌ Error obteniendo negociadores:', error);
@@ -133,6 +160,7 @@ router.get('/negociadores', async (req, res) => {
 router.get('/validar-responsable/:nombre', async (req, res) => {
   try {
     const { nombre } = req.params;
+    const normalizedNombre = String(nombre || '').trim().toUpperCase();
 
     if (!nombre || nombre.trim() === '') {
       return res.status(400).json({
@@ -152,6 +180,16 @@ router.get('/validar-responsable/:nombre', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      if (normalizedNombre === 'PRUEBA RESPONSABLE CENTRO COSTOS') {
+        return res.status(200).json({
+          success: true,
+          data: {
+            nombre: 'Prueba Responsable Centro Costos',
+            cargo: 'Responsable centro de costos prueba'
+          }
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: 'No se encontró información del responsable en T_Personas'
@@ -714,13 +752,15 @@ router.get('/usuario-negociaciones', async (req, res) => {
   try {
     // Buscar en la tabla users de PostgreSQL (DocuPrex)
     const { query } = require('../database/db');
+    const useTestUser = String(req.query.test || '').toLowerCase() === 'true';
+    const targetName = useTestUser ? 'PRUEBA NEGOCIACIONES DOCUPREX' : 'NEGOCIACIONES';
 
     const result = await query(
       `SELECT name, email, role
        FROM users
-       WHERE UPPER(TRIM(name)) = 'NEGOCIACIONES'
+       WHERE UPPER(TRIM(name)) = $1
        LIMIT 1`,
-      []
+      [targetName]
     );
 
     if (result.rows.length === 0) {

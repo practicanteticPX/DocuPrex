@@ -79,14 +79,28 @@ class PuppeteerPool {
       });
     }
 
-    // Crear un nuevo browser
+    // Crear un nuevo browser. En Docker/Alpine usamos el Chromium del sistema y
+    // pipe para no depender del mensaje "DevTools listening..." en stdout.
     const browser = await puppeteer.launch({
       headless: 'new',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+      timeout: 90000,
+      pipe: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-extensions',
+        '--disable-sync',
+        '--disable-translate',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--no-first-run',
+        '--no-zygote',
         '--disable-web-security', // Acelera carga de recursos locales
         '--disable-features=IsolateOrigins,site-per-process' // Reduce overhead
       ]

@@ -48,6 +48,23 @@ const ENABLE_DOCUMENT_UPLOAD = false;
 // Controla si se aceptan cargas sin seleccionar tipo de documento.
 const ALLOW_UPLOAD_WITHOUT_DOCUMENT_TYPE = false;
 
+const isCausacionTestIdentity = (candidateUser) => {
+  const normalize = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+  const email = normalize(candidateUser?.email);
+  const username = normalize(candidateUser?.username);
+  const name = normalize(candidateUser?.name);
+
+  return email === 'j.bustamante@prexxa.com.co'
+    || email === 'practicantetic@prexxa.com.co'
+    || username === 'j.bustamante'
+    || name === 'jesus bustamante';
+};
+
 // Log para debug
 console.log('🔗 Dashboard - Backend URL:', API_URL);
 
@@ -100,7 +117,8 @@ const buildSADocumentTitle = (prefix, category, customTitle) => {
 };
 
 function Dashboard({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState(ENABLE_DOCUMENT_UPLOAD ? 'upload' : 'my-documents');
+  const canUseDocumentUpload = ENABLE_DOCUMENT_UPLOAD;
+  const [activeTab, setActiveTab] = useState(canUseDocumentUpload ? 'upload' : 'my-documents');
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [documentTitle, setDocumentTitle] = useState('');
@@ -642,10 +660,10 @@ function Dashboard({ user, onLogout }) {
 
   // Evita entrar al flujo de carga mientras el interruptor temporal este apagado.
   useEffect(() => {
-    if (!ENABLE_DOCUMENT_UPLOAD && activeTab === 'upload') {
+    if (!canUseDocumentUpload && activeTab === 'upload') {
       setActiveTab('my-documents');
     }
-  }, [activeTab]);
+  }, [activeTab, canUseDocumentUpload]);
 
   // WebSocket: Conexión y escucha de eventos en tiempo real
   useEffect(() => {
@@ -2583,8 +2601,29 @@ function Dashboard({ user, onLogout }) {
    * Buscar usuario por coincidencia de nombre y apellido (flexible)
    * Permite match parcial ignorando mayúsculas/minúsculas
    */
-  const findUserByNameMatch = (fullName, usersList) => {
+  const findUserByNameMatch = (fullName, usersList, email = null) => {
     if (!fullName || !usersList || usersList.length === 0) return null;
+
+    const normalize = (value) => String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (normalizedEmail) {
+      const emailMatched = usersList.find(user => String(user.email || '').trim().toLowerCase() === normalizedEmail);
+      if (emailMatched) return emailMatched;
+    }
+
+    const normalizedFullName = normalize(fullName);
+    const exactMatched = usersList.find(user => normalize(user.name) === normalizedFullName);
+    if (exactMatched) return exactMatched;
+
+    if (normalizedFullName.startsWith('PRUEBA ') || normalizedFullName.endsWith(' DOCUPREX')) {
+      return null;
+    }
 
     // Normalizar el nombre completo: uppercase y separar por palabras
     const searchWords = fullName.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
@@ -2595,7 +2634,10 @@ function Dashboard({ user, onLogout }) {
     const matched = usersList.find(user => {
       if (!user.name) return false;
 
-      const userWords = user.name.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+      const userWords = normalize(user.name).split(/\s+/).filter(w => w.length > 0);
+      if (userWords.includes('PRUEBA') || userWords.includes('DOCUPREX')) {
+        return false;
+      }
 
       if (userWords.length === 0) return false;
 
@@ -2627,7 +2669,79 @@ function Dashboard({ user, onLogout }) {
    * Manejar el guardado de la plantilla de factura
    * Extrae firmantes y los añade automáticamente a la lista
    */
-  const handleFacturaTemplateSave = (templateData) => {
+  const createCausacionTestDocumentFromTemplate = async (templateData, signersToAdd) => {
+    const token = localStorage.getItem('token');
+
+    const createResponse = await axios.post(
+      API_URL,
+      {
+        query: `
+          mutation CreateCausacionTestDocument($templateData: String!) {
+            createCausacionTestDocument(templateData: $templateData) {
+              success
+              message
+              document {
+                id
+                title
+              }
+            }
+          }
+        `,
+        variables: {
+          templateData: JSON.stringify(templateData)
+        }
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (createResponse.data.errors) {
+      throw new Error(createResponse.data.errors[0].message);
+    }
+
+    const createdDocument = createResponse.data.data.createCausacionTestDocument.document;
+    if (!createdDocument?.id) {
+      throw new Error('No se pudo crear el documento de prueba desde la plantilla');
+    }
+
+    const signerAssignments = signersToAdd.map(s => {
+      const assignment = { userId: s.userId };
+
+      if (s.roleNames && s.roleNames.length > 0) {
+        assignment.roleNames = s.roleNames;
+      }
+
+      if (s.esGrupoCausacion) {
+        assignment.isCausacionGroup = true;
+        assignment.grupoCodigo = s.grupoCodigo;
+      }
+
+      return assignment;
+    });
+
+    const assignResponse = await axios.post(
+      API_URL,
+      {
+        query: `
+          mutation assignSigners($documentId: ID!, $signerAssignments: [SignerAssignmentInput!]!) {
+            assignSigners(documentId: $documentId, signerAssignments: $signerAssignments)
+          }
+        `,
+        variables: {
+          documentId: createdDocument.id,
+          signerAssignments
+        }
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (assignResponse.data.errors) {
+      throw new Error(assignResponse.data.errors[0].message);
+    }
+
+    return createdDocument;
+  };
+
+  const handleFacturaTemplateSave = async (templateData) => {
     console.log('📋 Datos de plantilla guardados:', templateData);
 
     // Guardar los datos de la plantilla
@@ -2657,7 +2771,7 @@ function Dashboard({ user, onLogout }) {
       }
 
       // Buscar el usuario usando matching flexible de nombre
-      const matchedUser = findUserByNameMatch(signerData.name, availableSigners);
+      const matchedUser = findUserByNameMatch(signerData.name, availableSigners, signerData.email);
 
       if (matchedUser) {
         signersToAdd.push({
@@ -2670,6 +2784,37 @@ function Dashboard({ user, onLogout }) {
         console.warn(`⚠️ Firmante no encontrado en availableSigners: ${signerData.name}`);
       }
     });
+
+    if (isCausacionTestUser() && String(templateData?.source || templateData?.ingestionSource || '').includes('causacion_test')) {
+      try {
+        setUploading(true);
+        setError('');
+        await createCausacionTestDocumentFromTemplate(templateData, signersToAdd);
+
+        setShowFacturaTemplate(false);
+        setSelectedFactura(null);
+        setFacturaTemplateData(null);
+        setTemplateCompleted(false);
+        setSelectedSigners([]);
+        setSelectedFile(null);
+        setSelectedFiles([]);
+        setDocumentTitle('');
+        setDocumentDescription('');
+        setActiveStep(0);
+        setActiveTab('my-invoices');
+
+        await loadMyDocuments();
+        await loadPendingDocuments();
+        showNotif('Factura de prueba creada', 'La plantilla quedo en Mis facturas y ya sigue el flujo normal de firmas.', 'success');
+      } catch (error) {
+        console.error('Error creando documento de prueba desde plantilla:', error);
+        setError(error.message || 'No se pudo crear la factura de prueba desde la plantilla');
+        showNotif('Error', error.message || 'No se pudo crear la factura de prueba desde la plantilla', 'error');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
 
     // Reemplazar firmantes de plantilla: borrar los anteriores y añadir los nuevos
     setSelectedSigners(prev => {
@@ -3239,7 +3384,7 @@ function Dashboard({ user, onLogout }) {
   const handleUpload = async (e) => {
     e.preventDefault();
 
-    if (!ENABLE_DOCUMENT_UPLOAD) {
+    if (!canUseDocumentUpload) {
       setError('La carga de documentos esta deshabilitada temporalmente');
       showNotif('Carga deshabilitada', 'La opcion de subir documentos esta deshabilitada temporalmente.', 'error');
       return;
@@ -3564,9 +3709,13 @@ function Dashboard({ user, onLogout }) {
               createCausacionTestFactura {
                 success
                 message
-                document {
-                  id
-                  title
+                factura {
+                  numeroControl
+                  numeroFactura
+                  cia
+                  proveedor
+                  fechaFactura
+                  fechaEntrega
                 }
               }
             }
@@ -3579,10 +3728,16 @@ function Dashboard({ user, onLogout }) {
         throw new Error(response.data.errors[0].message);
       }
 
-      showNotif('Factura de prueba creada', 'Ya puedes firmar cada rol desde Pendientes de Firma.', 'success');
-      await loadPendingDocuments();
+      const factura = response.data.data.createCausacionTestFactura.factura;
+      setActiveTab('my-invoices');
+      setActiveStep(0);
+      setTemplateCompleted(false);
+      setFacturaTemplateData(null);
+      setSelectedSigners([]);
+      setSelectedFactura(null);
+      setShowFacturaTemplate(false);
       await loadMyDocuments();
-      setActiveTab('pending');
+      showNotif('Factura de prueba recibida', `Consecutivo ${factura.numeroControl}. Quedo en Mis Facturas como Recibida.`, 'success');
     } catch (err) {
       showNotif('Error', err.message || 'No se pudo crear la factura de prueba', 'error');
     } finally {
@@ -3644,10 +3799,12 @@ function Dashboard({ user, onLogout }) {
     return false;
   };
 
-  const isCausacionSignature = (sig) => {
+  const hasCausacionMarker = (sig) => {
       const roleText = [
         sig.roleName,
         sig.roleCode,
+        sig.grupoCodigo,
+        sig.grupoNombre,
         ...(Array.isArray(sig.roleNames) ? sig.roleNames : []),
         ...(Array.isArray(sig.roleCodes) ? sig.roleCodes : [])
       ]
@@ -3657,6 +3814,8 @@ function Dashboard({ user, onLogout }) {
 
     return roleText.includes('causaci') || sig.isCausacionGroup;
   };
+
+  const isCausacionSignature = (sig) => hasCausacionMarker(sig);
 
   const getSignatureStatus = (sig) => sig?.status || sig?.signature?.status || 'pending';
 
@@ -3687,14 +3846,7 @@ function Dashboard({ user, onLogout }) {
   };
 
   const isCausacionTestUser = () => {
-    const email = String(user?.email || '').trim().toLowerCase();
-    const username = String(user?.username || '').trim().toLowerCase();
-    const name = normalizeTextForComparison(user?.name);
-
-    return email === 'j.bustamante@prexxa.com.co'
-      || email === 'practicantetic@prexxa.com.co'
-      || username === 'j.bustamante'
-      || name === 'jesus bustamante';
+    return isCausacionTestIdentity(user);
   };
 
   const isCausacionTestDocument = (doc) => {
@@ -3716,6 +3868,59 @@ function Dashboard({ user, onLogout }) {
       .sort((a, b) => Number(a.orderPosition || 0) - Number(b.orderPosition || 0))
       .find(s => !s.signature?.status || s.signature?.status === 'pending')
   );
+
+  const handlePendingSignButtonClick = async (doc) => {
+    if (!doc?.id) return;
+
+    try {
+      if (isCausacionTestUser() && isCausacionTestDocument(doc)) {
+        const token = localStorage.getItem('token');
+        const response = await axios.post(
+          API_URL,
+          {
+            query: `
+              query GetDocumentSignersForSign($documentId: ID!) {
+                documentSigners(documentId: $documentId) {
+                  userId
+                  orderPosition
+                  roleName
+                  roleNames
+                  isCausacionGroup
+                  grupoCodigo
+                  grupoNombre
+                  signature {
+                    status
+                  }
+                }
+              }
+            `,
+            variables: { documentId: doc.id }
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (response.data.errors) {
+          throw new Error(response.data.errors[0].message);
+        }
+
+        const signers = response.data?.data?.documentSigners || [];
+        const pendingSigner = getPendingTestSigner(signers);
+
+        if (pendingSigner && hasCausacionMarker(pendingSigner)) {
+          setPendingCausacionSignDocId(doc.id);
+          setCausacionForm({ numeroCausacion: '', observaciones: '' });
+          setCausacionError('');
+          setShowCausacionConfirm(true);
+          return;
+        }
+      }
+
+      initiateSignDocument(doc.id);
+    } catch (error) {
+      console.error('Error verificando turno de causacion:', error);
+      initiateSignDocument(doc.id);
+    }
+  };
 
   /**
    * Maneja el inicio del proceso de firma
@@ -4783,10 +4988,6 @@ function Dashboard({ user, onLogout }) {
       return false;
     }
 
-    if (isCausacionTestUser() && isCausacionTestDocument(doc)) {
-      return false;
-    }
-
     const isCreator = doc.uploadedBy && (
       doc.uploadedBy.email === user?.email ||
       doc.uploadedBy.id === user?.id
@@ -4896,6 +5097,10 @@ function Dashboard({ user, onLogout }) {
   const isFacturacionInvoiceDocument = (doc) => {
     if (!doc || doc.documentType?.code !== 'FV') {
       return false;
+    }
+
+    if (isCausacionTestUser() && isCausacionTestDocument(doc)) {
+      return true;
     }
 
     const metadataSource = normalizeTextForComparison(doc.metadata?.source || doc.metadata?.ingestionSource);
@@ -5631,6 +5836,19 @@ function Dashboard({ user, onLogout }) {
         throw new Error(result.message || 'Error al actualizar la plantilla');
       }
 
+      const isCausacionTestEdit = isCausacionTestUser() && isCausacionTestDocument(editingDocument);
+      if (isCausacionTestEdit && editingDocument?.consecutivo) {
+        try {
+          await axios.post(
+            `${BACKEND_HOST}/api/facturas/marcar-en-proceso/${editingDocument.consecutivo}`,
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+        } catch (marcarError) {
+          console.error('Error al marcar factura de prueba como en_proceso:', marcarError);
+        }
+      }
+
       setUploading(false);
 
       // Si el documento estaba rechazado, mostrar modal de notas de corrección
@@ -5641,13 +5859,17 @@ function Dashboard({ user, onLogout }) {
         return;
       }
 
-      setTimeout(async () => {
-        setShowFacturaTemplate(false);
-        setIsEditMode(false);
-        setEditingDocument(null);
-        setFacturaTemplateData(null);
-        await loadMyDocuments();
-      }, 3000);
+      setShowFacturaTemplate(false);
+      setIsEditMode(false);
+      setEditingDocument(null);
+      setFacturaTemplateData(null);
+      await loadMyDocuments();
+      await loadPendingDocuments();
+      showNotif(
+        isCausacionTestEdit ? 'Factura en curso' : 'Planilla actualizada',
+        isCausacionTestEdit ? 'La planilla fue guardada y la factura paso al flujo normal de firmas.' : 'La planilla fue actualizada correctamente.',
+        'success'
+      );
 
     } catch (err) {
       console.error('Error al guardar edición:', err);
@@ -5857,7 +6079,7 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
             <nav className="ds-side-nav">
-              {ENABLE_DOCUMENT_UPLOAD && (
+              {canUseDocumentUpload && (
                 <button className={`ds-nav-item ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
                   <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15M17 8L12 3M12 3L7 8M12 3V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -6243,7 +6465,7 @@ function Dashboard({ user, onLogout }) {
         <main className="dashboard-main">
           {/* Navigation Tabs */}
           <div className="tabs-container">
-            {ENABLE_DOCUMENT_UPLOAD && (
+            {canUseDocumentUpload && (
               <button
                 className={`tab ${activeTab === 'upload' ? 'active' : ''}`}
                 onClick={() => setActiveTab('upload')}
@@ -6344,7 +6566,7 @@ function Dashboard({ user, onLogout }) {
           </div>
 
           {/* Upload Section - Rediseñado estilo ZapSign */}
-          {ENABLE_DOCUMENT_UPLOAD && activeTab === 'upload' && (
+          {canUseDocumentUpload && activeTab === 'upload' && (
             <div key="upload-tab" className="section upload-section-zapsign">
               {/* Stepper Horizontal Personalizado - 3 Pasos */}
               <div className="firmapro-stepper">
@@ -6387,21 +6609,6 @@ function Dashboard({ user, onLogout }) {
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        {isCausacionTestUser() && (
-                          <button
-                            type="button"
-                            className="help-button"
-                            onClick={handleCreateCausacionTestFactura}
-                            disabled={creatingCausacionTest}
-                            style={{ color: '#4F46E5', borderColor: '#c7d2fe', background: '#eef2ff' }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M9 8H15M9 12H15M9 16H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            <span>{creatingCausacionTest ? 'Creando...' : 'Factura prueba causacion'}</span>
-                          </button>
-                        )}
                         <button type="button" className="help-button" onClick={() => setShowHelpModal(true)}>
                           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -7824,6 +8031,29 @@ function Dashboard({ user, onLogout }) {
                       console.log(`🎯 isMyTurn: ${isMyTurn} (previousSigners: ${previousSigners.length}, allSigned: ${allPreviousSigned})`);
                     }
 
+                    const activePendingSignature = signatures
+                      .slice()
+                      .sort((a, b) => Number(a.orderPosition || 0) - Number(b.orderPosition || 0))
+                      .find(sig => getSignatureStatus(sig) === 'pending');
+                    const shouldOpenCausacionFromCard = Boolean(
+                      isCausacionTestUser()
+                      && isCausacionTestDocument(doc)
+                      && activePendingSignature
+                      && isCausacionSignature(activePendingSignature)
+                    );
+
+                    const handleCardSignClick = () => {
+                      if (shouldOpenCausacionFromCard) {
+                        setPendingCausacionSignDocId(doc.id);
+                        setCausacionForm({ numeroCausacion: '', observaciones: '' });
+                        setCausacionError('');
+                        setShowCausacionConfirm(true);
+                        return;
+                      }
+
+                      handlePendingSignButtonClick(doc);
+                    };
+
                     return (
                       <div key={doc.id} className={`my-doc-card-reference ${isMyTurn ? 'my-turn-to-sign' : ''}`}>
                         <div className="doc-content-wrapper">
@@ -7915,7 +8145,7 @@ function Dashboard({ user, onLogout }) {
                         </div>
 
                         <div className="doc-actions-clean">
-                          {canEditFacturaTemplate(doc) && (
+                          {canEditFacturaTemplate(doc) && signatures.length === 0 && (
                             <button
                               className="btn-action-clean"
                               onClick={() => handleEditFacturaTemplate(doc)}
@@ -7925,6 +8155,18 @@ function Dashboard({ user, onLogout }) {
                               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                 <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          )}
+                          {isMyTurn && (
+                            <button
+                              className="btn-action-clean"
+                              onClick={handleCardSignClick}
+                              title={shouldOpenCausacionFromCard ? 'Registrar causación' : 'Firmar documento'}
+                              style={{marginTop: '-1.5vw'}}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                             </button>
                           )}
@@ -8786,6 +9028,21 @@ function Dashboard({ user, onLogout }) {
                     })()}
                   </p>
                 </div>
+                {isCausacionTestUser() && (
+                  <button
+                    type="button"
+                    className="help-button"
+                    onClick={handleCreateCausacionTestFactura}
+                    disabled={creatingCausacionTest}
+                    style={{ color: '#4F46E5', borderColor: '#c7d2fe', background: '#eef2ff' }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M9 8H15M9 12H15M9 16H12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span>{creatingCausacionTest ? 'Creando...' : 'Factura prueba causacion'}</span>
+                  </button>
+                )}
               </div>
 
               {myInvoiceDocuments.length > 0 && (
