@@ -37,6 +37,9 @@ tmp/
 temp/
 *.tmp
 
+# User uploaded documents
+server/uploads/
+
 # Coverage
 coverage/
 .nyc_output/
