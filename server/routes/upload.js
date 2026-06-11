@@ -12,6 +12,23 @@ const { moveToSinCausar } = require('../services/facturaFileService');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-secreto-super-seguro-cambiar-en-produccion';
 
+async function syncFacturaOrdenCompra(consecutivo, metadata) {
+  const numeroControl = String(consecutivo || metadata?.consecutivo || '').trim();
+  if (!numeroControl) return;
+
+  await queryFacturas(
+    `UPDATE crud_facturas."T_Facturas"
+     SET orden_compra = $2,
+         nota_credito = COALESCE($3, nota_credito)
+     WHERE numero_control = $1`,
+    [
+      numeroControl,
+      metadata?.ordenCompra ? String(metadata.ordenCompra).trim() : null,
+      typeof metadata?.notaCredito === 'boolean' ? metadata.notaCredito : null
+    ]
+  );
+}
+
 /**
  * Middleware para verificar autenticación y cargar datos del usuario
  */
@@ -148,6 +165,14 @@ router.post('/upload', authenticate, (req, res) => {
       );
 
       const document = result.rows[0];
+
+      if (documentTypeId && consecutivo?.trim()) {
+        try {
+          await syncFacturaOrdenCompra(consecutivo, parsedMetadata);
+        } catch (syncError) {
+          console.error('⚠️ No se pudo sincronizar orden de compra en T_Facturas:', syncError.message);
+        }
+      }
 
       // Registrar en logs
       pdfLogger.logDocumentCreated(req.user.name, document.title);
@@ -443,6 +468,14 @@ router.post('/upload-unified', authenticate, (req, res) => {
       );
 
       const document = result.rows[0];
+
+      if (documentTypeId && consecutivo?.trim()) {
+        try {
+          await syncFacturaOrdenCompra(consecutivo, parsedMetadata);
+        } catch (syncError) {
+          console.error('⚠️ No se pudo sincronizar orden de compra en T_Facturas:', syncError.message);
+        }
+      }
 
       // Eliminar archivos temporales originales
       console.log('🗑️  Limpiando archivos temporales...');

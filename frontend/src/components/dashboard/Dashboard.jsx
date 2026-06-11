@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -78,6 +78,18 @@ const isAuthError = (error) => {
   return message.includes('autenticado') || message.includes('authenticated') || message.includes('No autenticado');
 };
 
+const isGatewayTimeoutError = (error) => {
+  const status = error?.response?.status;
+  const message = String(error?.message || '');
+  return status === 504 || message.includes('status code 504');
+};
+
+const createEmptyAssetRecord = () => ({
+  assetType: '',
+  codigo: '',
+  nombreActivo: ''
+});
+
 const SA_OTHER_OPTION = '__SA_OTRO__';
 const SA_COMMON_TITLE_OPTIONS = [
   'Gasto de viaje',
@@ -118,7 +130,7 @@ const buildSADocumentTitle = (prefix, category, customTitle) => {
 
 function Dashboard({ user, onLogout }) {
   const canUseDocumentUpload = ENABLE_DOCUMENT_UPLOAD;
-  const [activeTab, setActiveTab] = useState(canUseDocumentUpload ? 'upload' : 'my-documents');
+  const [activeTab, setActiveTab] = useState(canUseDocumentUpload ? 'upload' : 'my-invoices');
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [documentTitle, setDocumentTitle] = useState('');
@@ -170,6 +182,13 @@ function Dashboard({ user, onLogout }) {
   const [pendingCausacionSignDocId, setPendingCausacionSignDocId] = useState(null);
   const [causacionForm, setCausacionForm] = useState({ numeroCausacion: '', observaciones: '' });
   const [causacionError, setCausacionError] = useState('');
+  const [showAssetConfirm, setShowAssetConfirm] = useState(false);
+  const [pendingAssetSignDocId, setPendingAssetSignDocId] = useState(null);
+  const [assetForm, setAssetForm] = useState({
+    belongsToAsset: null,
+    records: [createEmptyAssetRecord()]
+  });
+  const [assetError, setAssetError] = useState('');
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState('');
@@ -1313,6 +1332,75 @@ function Dashboard({ user, onLogout }) {
       retention => String(retention.userId) === String(user.id) && retention.activa
     );
     setHasUserRetention(hasRetention);
+
+    if (isMonicaBustamanteUser() && doc?.documentType?.code === 'FV') {
+      refreshPayableDocumentContext(doc.id);
+    }
+  };
+
+  const refreshPayableDocumentContext = async (documentId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        API_URL,
+        {
+          query: `
+            query {
+              payableInvoices {
+                id
+                payableStatus
+                paidAt
+                retentionData {
+                  userId
+                  userName
+                  centroCostoIndex
+                  motivo
+                  porcentajeRetenido
+                  fechaRetencion
+                  activa
+                }
+              }
+            }
+          `
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(response.data.errors[0].message);
+      }
+
+      const payableDoc = response.data.data.payableInvoices?.find(item => String(item.id) === String(documentId));
+      if (!payableDoc) return;
+
+      setViewingDocument(prev => (
+        prev && String(prev.id) === String(documentId)
+          ? {
+              ...prev,
+              payableStatus: payableDoc.payableStatus,
+              paidAt: payableDoc.paidAt,
+              retentionData: payableDoc.retentionData || []
+            }
+          : prev
+      ));
+
+      setPayableInvoices(prev => prev.map(item => (
+        String(item.id) === String(documentId)
+          ? {
+              ...item,
+              payableStatus: payableDoc.payableStatus,
+              paidAt: payableDoc.paidAt,
+              retentionData: payableDoc.retentionData || []
+            }
+          : item
+      )));
+    } catch (error) {
+      console.error('Error refrescando contexto de pago de factura:', error);
+    }
   };
 
   /**
@@ -1510,6 +1598,7 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     const hasModalOpen = viewingDocument ||
                         showSignConfirm ||
+                        showAssetConfirm ||
                         showRejectConfirm ||
                         showRejectSuccess ||
                         showSignSuccess ||
@@ -1535,7 +1624,7 @@ function Dashboard({ user, onLogout }) {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [viewingDocument, showSignConfirm, showCausacionConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showReleaseSuccess, showOrderError, showQuickSignConfirm, confirmDeleteOpen, rejectionReasonPopup, showReleasingLoader, showNoTypeSignersEditor, showSAEditor]);
+  }, [viewingDocument, showSignConfirm, showAssetConfirm, showCausacionConfirm, showRejectConfirm, showRejectSuccess, showSignSuccess, showReleaseSuccess, showOrderError, showQuickSignConfirm, confirmDeleteOpen, rejectionReasonPopup, showReleasingLoader, showNoTypeSignersEditor, showSAEditor]);
 
   // Cargar documentos pendientes al montar o cambiar de tab
   useEffect(() => {
@@ -1803,6 +1892,7 @@ function Dashboard({ user, onLogout }) {
                 signatures {
                   id
                   status
+                  createdAt
                   signedAt
                   rejectionReason
                   rejectedAt
@@ -1902,6 +1992,7 @@ function Dashboard({ user, onLogout }) {
                 signatures {
                   id
                   status
+                  createdAt
                   signedAt
                   rejectionReason
                   rejectedAt
@@ -2625,38 +2716,57 @@ function Dashboard({ user, onLogout }) {
       return null;
     }
 
-    // Normalizar el nombre completo: uppercase y separar por palabras
-    const searchWords = fullName.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+    // Normalizar el nombre completo: uppercase y separar por palabras únicas.
+    // Evita falsos positivos como "Gonzalez Gonzalez Lina Marcela" -> "Mariana Gonzalez".
+    const searchWords = Array.from(new Set(normalizedFullName.split(/\s+/).filter(w => w.length > 0)));
 
     if (searchWords.length === 0) return null;
 
-    // Buscar usuario que tenga coincidencia de al menos 2 palabras (nombre + apellido)
-    const matched = usersList.find(user => {
+    const scoredMatches = usersList.map(user => {
       if (!user.name) return false;
 
       const userWords = normalize(user.name).split(/\s+/).filter(w => w.length > 0);
       if (userWords.includes('PRUEBA') || userWords.includes('DOCUPREX')) {
-        return false;
+        return null;
       }
 
-      if (userWords.length === 0) return false;
+      if (userWords.length === 0) return null;
 
-      // Contar cuántas palabras del nombre de búsqueda están en el nombre del usuario
-      let matchCount = 0;
-      searchWords.forEach(searchWord => {
-        if (userWords.some(userWord =>
+      const matchedSearchWords = searchWords.filter(searchWord =>
+        userWords.some(userWord =>
           userWord === searchWord ||
           userWord.startsWith(searchWord) ||
           searchWord.startsWith(userWord)
-        )) {
-          matchCount++;
-        }
-      });
+        )
+      );
+      const matchedUserWords = userWords.filter(userWord =>
+        searchWords.some(searchWord =>
+          userWord === searchWord ||
+          userWord.startsWith(searchWord) ||
+          searchWord.startsWith(userWord)
+        )
+      );
 
-      // Requerir al menos 2 coincidencias (nombre + apellido)
-      // O si el usuario tiene solo 1 palabra, que esa palabra coincida
-      return matchCount >= 2 || (userWords.length === 1 && matchCount >= 1);
-    });
+      const matchCount = matchedSearchWords.length;
+      const requiredMatches = Math.min(2, userWords.length);
+      if (matchCount < requiredMatches) return null;
+
+      return {
+        user,
+        matchCount,
+        userMatchCount: matchedUserWords.length,
+        coverage: matchCount / searchWords.length,
+        userCoverage: matchedUserWords.length / userWords.length
+      };
+    }).filter(Boolean);
+
+    const matched = scoredMatches
+      .sort((a, b) =>
+        b.userMatchCount - a.userMatchCount ||
+        b.matchCount - a.matchCount ||
+        b.userCoverage - a.userCoverage ||
+        b.coverage - a.coverage
+      )[0]?.user || null;
 
     if (matched) {
       console.log(`🔍 Match encontrado: "${fullName}" → "${matched.name}"`);
@@ -3799,6 +3909,34 @@ function Dashboard({ user, onLogout }) {
     return false;
   };
 
+  const hasControlAdministrativoRole = (doc) => {
+    if (!doc || doc.documentType?.code !== 'FV' || !Array.isArray(doc.signatures)) {
+      return false;
+    }
+
+    const normalize = (value) => String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase();
+
+    return doc.signatures.some(sig => {
+      const isCurrentUser = String(sig.signer?.id || sig.signerId || '') === String(user?.id || '');
+      if (!isCurrentUser || getSignatureStatus(sig) !== 'pending') return false;
+
+      const roleText = [
+        sig.roleName,
+        sig.roleCode,
+        ...(Array.isArray(sig.roleNames) ? sig.roleNames : []),
+        ...(Array.isArray(sig.roleCodes) ? sig.roleCodes : [])
+      ].map(normalize).join(' ');
+
+      return roleText.includes('CONTROL ADMINISTRATIVO')
+        || roleText.includes('CONTROL ADMINISTRADOR')
+        || roleText.includes('CONTROL_ADMINISTRADOR');
+    });
+  };
+
   const hasCausacionMarker = (sig) => {
       const roleText = [
         sig.roleName,
@@ -3943,6 +4081,18 @@ function Dashboard({ user, onLogout }) {
 
       // Verificar si debe mostrar modal de retención
       const isFV = doc && doc.documentType && doc.documentType.code === 'FV';
+      const isControlAdministrativo = isFV && hasControlAdministrativoRole(doc);
+      if (isControlAdministrativo && !options.assetData) {
+        setPendingAssetSignDocId(docId);
+        setAssetForm({
+          belongsToAsset: null,
+          records: [createEmptyAssetRecord()]
+        });
+        setAssetError('');
+        setShowAssetConfirm(true);
+        return;
+      }
+
       const causacionSignature = getCurrentCausacionSignature(doc);
       if (isFV && causacionSignature && !options.causacionData) {
         setPendingCausacionSignDocId(docId);
@@ -4011,7 +4161,7 @@ function Dashboard({ user, onLogout }) {
         setShowRetentionModal(true);
       } else {
         // Firmar directamente sin retención
-        handleSignDocument(docId, null, null, options.causacionData || null);
+        handleSignDocument(docId, null, null, options.causacionData || null, options.assetData || null);
       }
     }
   };
@@ -4019,7 +4169,7 @@ function Dashboard({ user, onLogout }) {
   /**
    * Firma el documento (función interna, llamada después del modal si es necesario)
    */
-  const handleSignDocument = async (docId, realSigner = null, retention = null, causacionData = null) => {
+  const handleSignDocument = async (docId, realSigner = null, retention = null, causacionData = null, assetData = null) => {
     // Prevenir múltiples clicks
     if (signing) {
       console.warn('Ya se está procesando una firma');
@@ -4051,7 +4201,8 @@ function Dashboard({ user, onLogout }) {
               $consecutivo: String,
               $realSignerName: String,
               $retentions: String,
-              $causacionData: String
+              $causacionData: String,
+              $assetData: String
             ) {
               signDocument(
                 documentId: $documentId,
@@ -4059,7 +4210,8 @@ function Dashboard({ user, onLogout }) {
                 consecutivo: $consecutivo,
                 realSignerName: $realSignerName,
                 retentions: $retentions,
-                causacionData: $causacionData
+                causacionData: $causacionData,
+                assetData: $assetData
               ) {
                 id
                 status
@@ -4075,7 +4227,8 @@ function Dashboard({ user, onLogout }) {
             consecutivo: consecutivo || null,
             realSignerName: realSigner || null,
             retentions: retention ? JSON.stringify(retention) : null,
-            causacionData: causacionData ? JSON.stringify(causacionData) : null
+            causacionData: causacionData ? JSON.stringify(causacionData) : null,
+            assetData: assetData ? JSON.stringify(assetData) : null
           }
         },
         {
@@ -4167,12 +4320,19 @@ function Dashboard({ user, onLogout }) {
           ? { ...prev, pdfVersion: Date.now() }
           : prev
       ));
+      return true;
     } catch (err) {
       console.error('Error al firmar:', err);
       setShowSigningLoader(false);
+      if (assetData) {
+        setAssetError(err.message || 'Error al firmar el documento');
+        setShowAssetConfirm(true);
+        return false;
+      }
       // Mostrar modal de error
       setOrderErrorMessage(err.message || 'Error al firmar el documento');
       setShowOrderError(true);
+      return false;
     } finally {
       setSigning(false);
     }
@@ -4462,7 +4622,7 @@ function Dashboard({ user, onLogout }) {
               }
             `,
             variables: {
-              documentId: parseInt(documentId),
+              documentId: String(documentId),
               centroCostoIndex: parseInt(centroCostoIndex)
             }
           },
@@ -4764,10 +4924,13 @@ function Dashboard({ user, onLogout }) {
     // Verificar si es documento FV con rol Resp Centro Costos
     const isFV = viewingDocument && viewingDocument.documentType && viewingDocument.documentType.code === 'FV';
     const isRespCtroCost = viewingDocument && hasRespCtroCostRole(viewingDocument);
+    const isControlAdministrativo = viewingDocument && hasControlAdministrativoRole(viewingDocument);
 
     console.log('🔍 [SIGN] handleOpenSignConfirm - isFV:', isFV, 'isRespCtroCost:', isRespCtroCost);
 
-    if (isFV && isRespCtroCost) {
+    if (isFV && isControlAdministrativo) {
+      initiateSignDocument(viewingDocument.id);
+    } else if (isFV && isRespCtroCost) {
       // Para Resp Centro Costos en FV: ir directo al modal de retención
       console.log('✅ [SIGN] Abriendo modal de retención directamente (Resp Centro Costos)');
       initiateSignDocument(viewingDocument.id);
@@ -4798,17 +4961,107 @@ function Dashboard({ user, onLogout }) {
     setCausacionError('');
   };
 
+  const handleCancelAssetSign = () => {
+    setShowAssetConfirm(false);
+    setPendingAssetSignDocId(null);
+    setAssetForm({
+      belongsToAsset: null,
+      records: [createEmptyAssetRecord()]
+    });
+    setAssetError('');
+  };
+
+  const handleAssetBelongsChange = (belongsToAsset) => {
+    setAssetForm(prev => ({
+      ...prev,
+      belongsToAsset,
+      records: belongsToAsset ? prev.records : [createEmptyAssetRecord()]
+    }));
+    setAssetError('');
+  };
+
+  const handleAssetRecordChange = (index, field, value) => {
+    setAssetForm(prev => ({
+      ...prev,
+      records: prev.records.map((record, recordIndex) => (
+        recordIndex === index ? { ...record, [field]: value } : record
+      ))
+    }));
+    setAssetError('');
+  };
+
+  const handleAddAssetRecord = () => {
+    setAssetForm(prev => ({
+      ...prev,
+      records: [...prev.records, createEmptyAssetRecord()]
+    }));
+  };
+
+  const handleRemoveAssetRecord = (index) => {
+    setAssetForm(prev => ({
+      ...prev,
+      records: prev.records.length > 1
+        ? prev.records.filter((_, recordIndex) => recordIndex !== index)
+        : prev.records
+    }));
+  };
+
+  const handleConfirmAssetSign = async () => {
+    if (assetForm.belongsToAsset === null) {
+      setAssetError('Selecciona si la factura contiene un activo fijo.');
+      return;
+    }
+
+    const assetData = {
+      belongsToAsset: Boolean(assetForm.belongsToAsset),
+      records: []
+    };
+
+    if (assetForm.belongsToAsset) {
+      const records = assetForm.records
+        .map(record => ({
+          assetType: String(record.assetType || '').trim(),
+          codigo: record.codigo.trim(),
+          nombreActivo: record.nombreActivo.trim()
+        }))
+        .filter(record => record.assetType || record.codigo || record.nombreActivo);
+
+      if (records.length === 0) {
+        setAssetError('Agrega al menos un activo.');
+        return;
+      }
+
+      if (records.some(record => !record.assetType || !record.codigo || !record.nombreActivo)) {
+        setAssetError('Cada registro debe tener Tipo, Codigo y Nombre de activo.');
+        return;
+      }
+
+      const duplicatedCodigo = records
+        .map(record => record.codigo.trim().toUpperCase())
+        .find((codigo, index, codigos) => codigos.indexOf(codigo) !== index);
+      if (duplicatedCodigo) {
+        setAssetError(`El codigo de activo "${duplicatedCodigo}" esta repetido.`);
+        return;
+      }
+
+      assetData.records = records;
+    }
+
+    const docId = pendingAssetSignDocId;
+    setAssetError('');
+    const signed = await handleSignDocument(docId, null, null, null, assetData);
+    if (signed) {
+      setShowAssetConfirm(false);
+      setPendingAssetSignDocId(null);
+    }
+  };
+
   const handleConfirmCausacionSign = () => {
     const numeroCausacion = causacionForm.numeroCausacion.trim();
     const observaciones = causacionForm.observaciones.trim();
 
     if (!numeroCausacion) {
       setCausacionError('Ingresa el No. de Causacion.');
-      return;
-    }
-
-    if (!observaciones) {
-      setCausacionError('Ingresa las observaciones de causacion.');
       return;
     }
 
@@ -5141,7 +5394,23 @@ function Dashboard({ user, onLogout }) {
       || normalizedName === 'jesus bustamante';
   };
 
-  const getPayableStatus = (doc) => (doc?.payableStatus === 'paid' ? 'paid' : 'pending');
+  const getPayableStatus = (doc) => {
+    if (doc?.payableStatus === 'paid') return 'paid';
+    if (doc?.payableStatus === 'partial_paid') return 'partial_paid';
+    return 'pending';
+  };
+
+  const getActiveRetentionPercentage = (doc) => {
+    const retentions = Array.isArray(doc?.retentionData) ? doc.retentionData : [];
+    return retentions
+      .filter(retention => retention?.activa !== false && retention?.activa !== 'false' && retention?.activa !== 0)
+      .reduce((sum, retention) => {
+        const percentage = Number(retention?.porcentajeRetenido || 0);
+        return sum + (Number.isNaN(percentage) ? 0 : percentage);
+      }, 0);
+  };
+
+  const hasActivePayableRetention = (doc) => getActiveRetentionPercentage(doc) > 0;
   const getTreasuryAdvanceStatus = (doc) => (doc?.advancePaymentStatus === 'paid' ? 'paid' : 'pending');
 
   const matchesDocumentTypeFilter = (doc, typeFilters) => {
@@ -5170,13 +5439,17 @@ function Dashboard({ user, onLogout }) {
 
   const renderAdvancePaymentIndicator = (doc) => {
     const isPaidAdvance = doc?.documentType?.code === 'SA' && getTreasuryAdvanceStatus(doc) === 'paid';
-    const isPaidInvoice = doc?.documentType?.code === 'FV' && getPayableStatus(doc) === 'paid';
+    const payableStatus = getPayableStatus(doc);
+    const isPaidInvoice = doc?.documentType?.code === 'FV' && payableStatus === 'paid';
+    const isPartiallyPaidInvoice = doc?.documentType?.code === 'FV' && payableStatus === 'partial_paid';
 
-    if (!isPaidAdvance && !isPaidInvoice) {
+    if (!isPaidAdvance && !isPaidInvoice && !isPartiallyPaidInvoice) {
       return null;
     }
 
-    const label = isPaidInvoice ? 'Factura pagada' : 'Anticipo pagado';
+    const label = isPaidInvoice
+      ? 'Factura pagada'
+      : (isPartiallyPaidInvoice ? 'Factura pagada parcialmente' : 'Anticipo pagado');
 
     return (
       <span className="advance-payment-indicator" title={label} aria-label={label}>
@@ -5190,9 +5463,27 @@ function Dashboard({ user, onLogout }) {
 
   const getPayableStatusMeta = (doc) => {
     const status = getPayableStatus(doc);
-    return status === 'paid'
-      ? { label: 'Pagado', className: 'paid' }
-      : { label: 'Pendiente', className: 'pending' };
+    if (status === 'paid') {
+      return { label: 'Pagado', className: 'paid' };
+    }
+    if (status === 'partial_paid') {
+      const paidPercentage = Math.max(0, Math.min(100, 100 - getActiveRetentionPercentage(doc)));
+      const label = hasActivePayableRetention(doc)
+        ? `Pago parcial ${paidPercentage}%`
+        : 'Pago parcial';
+      return { label, className: 'partial' };
+    }
+    return { label: 'Pendiente', className: 'pending' };
+  };
+
+  const getPayablePaymentAction = (doc) => (
+    hasActivePayableRetention(doc) ? 'partial_paid' : 'paid'
+  );
+
+  const getPayablePaymentActionLabel = (doc) => {
+    if (hasActivePayableRetention(doc)) return 'Pagada parcialmente';
+    if (getPayableStatus(doc) === 'partial_paid') return 'Completar pago';
+    return 'Pagado';
   };
 
   const getTreasuryAdvanceStatusMeta = (doc) => {
@@ -5873,6 +6164,22 @@ function Dashboard({ user, onLogout }) {
 
     } catch (err) {
       console.error('Error al guardar edición:', err);
+
+      if (isGatewayTimeoutError(err)) {
+        setShowFacturaTemplate(false);
+        setIsEditMode(false);
+        setEditingDocument(null);
+        setFacturaTemplateData(null);
+        await loadMyDocuments();
+        await loadPendingDocuments();
+        showNotif(
+          'Actualizacion en proceso',
+          'La solicitud tardo mas de lo esperado, pero el documento pudo haberse actualizado. Ya refresque la bandeja para verificarlo.',
+          'success'
+        );
+        setUploading(false);
+        return;
+      }
       showNotif('Error', err.message || 'No se pudo guardar la edición', 'error');
       setUploading(false);
     }
@@ -6021,6 +6328,72 @@ function Dashboard({ user, onLogout }) {
     }).format(date);
   };
 
+  const formatDateOnlyValue = (dateInput) => {
+    if (!dateInput) return '-';
+
+    const rawValue = String(dateInput).trim();
+    const dateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    if (dateOnlyMatch) {
+      const [, year, month, day] = dateOnlyMatch;
+      return new Intl.DateTimeFormat('es-CO', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'America/Bogota'
+      }).format(new Date(Number(year), Number(month) - 1, Number(day)));
+    }
+
+    return formatDateTime(dateInput);
+  };
+
+  const getInvoiceReceivedAt = (doc) => {
+    return doc?.receivedAt
+      || doc?.received_at
+      || doc?.createdAt
+      || doc?.created_at;
+  };
+
+  const getInvoiceReceivedText = (doc) => {
+    return `Recibida el ${formatDateTime(getInvoiceReceivedAt(doc))}`;
+  };
+
+  const getTurnReceivedAt = (doc, mySignature) => {
+    if (!mySignature) return doc?.createdAt;
+
+    const myOrderPosition = Number(mySignature.orderPosition || 0);
+    const previousSignedDates = (doc?.signatures || [])
+      .filter(sig => Number(sig.orderPosition || 0) < myOrderPosition && sig.status === 'signed')
+      .map(sig => toDateSafe(sig.signedAt || sig.signed_at))
+      .filter(Boolean);
+
+    if (previousSignedDates.length === 0) {
+      return mySignature.createdAt || mySignature.created_at || doc?.createdAt;
+    }
+
+    return previousSignedDates.reduce((latest, current) => (
+      current > latest ? current : latest
+    ), previousSignedDates[0]);
+  };
+
+  const getTurnReceivedText = (doc, mySignature) => {
+    const receivedAt = getTurnReceivedAt(doc, mySignature);
+    return `Recibido el ${formatDateTime(receivedAt)}`;
+  };
+
+  const getCurrentUserSignature = (signatures = []) => {
+    return signatures.find(sig => {
+      if (sig.signer?.id === user?.id) {
+        return true;
+      }
+
+      return Boolean(
+        sig.isCausacionGroup
+        && sig.members?.some(member => member.userId === user?.id && member.activo)
+      );
+    });
+  };
+
   const formatFileSize = (bytes) => {
     return (bytes / 1024 / 1024).toFixed(2) + ' MB';
   };
@@ -6079,6 +6452,16 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
             <nav className="ds-side-nav">
+              <button className={`ds-nav-item ${activeTab === 'my-invoices' ? 'active' : ''}`} onClick={() => setActiveTab('my-invoices')}>
+                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 8H16M8 12H16M8 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Mis facturas
+                {!loadingMy && unassignedMyInvoiceDocuments.length > 0 && (
+                  <span className="nav-count-badge">{unassignedMyInvoiceDocuments.length}</span>
+                )}
+              </button>
               {canUseDocumentUpload && (
                 <button className={`ds-nav-item ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
                   <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -6087,12 +6470,6 @@ function Dashboard({ user, onLogout }) {
                   Subir documento
                 </button>
               )}
-              <button className={`ds-nav-item ${activeTab === 'my-documents' ? 'active' : ''}`} onClick={() => setActiveTab('my-documents')}>
-                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 7V17C3 17.5304 3.21071 18.0391 3.58579 18.4142C3.96086 18.7893 4.46957 19 5 19H19C19.5304 19 20.0391 18.7893 20.4142 18.4142C20.7893 18.0391 21 17.5304 21 17V9C21 8.46957 20.7893 7.96086 20.4142 7.58579C20.0391 7.21071 19.5304 7 19 7H13L11 4H5C4.46957 4 3.96086 4.21071 3.58579 4.58579C3.21071 4.96086 3 5.46957 3 6V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Mis documentos
-              </button>
               <button className={`ds-nav-item ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
                 <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 6V12L16 14M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -6114,16 +6491,6 @@ function Dashboard({ user, onLogout }) {
                 </svg>
                 Rechazados
 
-              </button>
-              <button className={`ds-nav-item ${activeTab === 'my-invoices' ? 'active' : ''}`} onClick={() => setActiveTab('my-invoices')}>
-                <svg className="ds-nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M7 3H17C18.1046 3 19 3.89543 19 5V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M8 8H16M8 12H16M8 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Mis facturas
-                {!loadingMy && unassignedMyInvoiceDocuments.length > 0 && (
-                  <span className="nav-count-badge">{unassignedMyInvoiceDocuments.length}</span>
-                )}
               </button>
               {isMonicaBustamanteUser() && (
                 <button className={`ds-nav-item ${activeTab === 'payable-invoices' ? 'active' : ''}`} onClick={() => setActiveTab('payable-invoices')}>
@@ -6700,6 +7067,8 @@ function Dashboard({ user, onLogout }) {
                                   numero_control: facturaTemplateData.consecutivo,
                                   proveedor: facturaTemplateData.proveedor,
                                   numero_factura: facturaTemplateData.numeroFactura,
+                                  orden_compra: facturaTemplateData.ordenCompra,
+                                  nota_credito: facturaTemplateData.notaCredito,
                                   fecha_factura: facturaTemplateData.fechaFactura,
                                   fecha_entrega: facturaTemplateData.fechaRecepcion
                                 });
@@ -6872,13 +7241,13 @@ function Dashboard({ user, onLogout }) {
                         </>
                       ) : null}
 
-                      {/* Sección: ¿Qué documento se firmará? - Solo mostrar si NO es FV sin plantilla */}
+                      {/* Sección: Qué documento se firmará? - Solo mostrar si NO es FV sin plantilla */}
                       {!(selectedDocumentType?.code === 'FV' && !templateCompleted) && (
                         <div className="zapsign-section">
                         <h3 className="section-question">
                           {selectedDocumentType?.code === 'FV'
-                            ? '¿Qué documentos se cargarán?'
-                            : '¿Qué documento se firmará?'}
+                            ? 'Qué documentos se cargarán?'
+                            : 'Qué documento se firmará?'}
                         </h3>
 
                         <div
@@ -7845,9 +8214,9 @@ function Dashboard({ user, onLogout }) {
                   {/* Botón de filtro por tipo de documento */}
                   <div style={{ position: 'relative' }}>
                     <button
-                      className={`filter-type-btn ${pendingDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                      onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'pending' ? null : 'pending')}
-                      title="Filtrar por tipo de documento"
+                      className="filter-type-btn filter-type-btn-disabled"
+                      disabled
+                      title="Filtro por tipo de documento no disponible"
                     >
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -7855,7 +8224,7 @@ function Dashboard({ user, onLogout }) {
                     </button>
 
                     {/* Dropdown de filtros */}
-                    {showTypeFilterDropdown === 'pending' && (
+                    {false && showTypeFilterDropdown === 'pending' && (
                       <div className="type-filter-dropdown">
                         <div className="type-filter-header">
                           <span>Tipo de documento</span>
@@ -8101,7 +8470,7 @@ function Dashboard({ user, onLogout }) {
 
                           <div className="doc-meta-row">
                             <span className="doc-created-text">
-                              Creado el {formatDateTime(doc.createdAt)} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
+                              {getTurnReceivedText(doc, mySignature)}
                             </span>
                           </div>
 
@@ -8349,8 +8718,8 @@ function Dashboard({ user, onLogout }) {
                     {/* Botón de filtro por tipo de documento */}
                     <div style={{ position: 'relative' }}>
                       <button
-                        className={`filter-type-btn ${signedDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'signed' ? null : 'signed')}
+                        className={`filter-type-btn ${effectiveMyDocsTypeFilter.length > 0 ? 'active' : ''}`}
+                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'my' ? null : 'my')}
                         title="Filtrar por tipo de documento"
                       >
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -8359,7 +8728,7 @@ function Dashboard({ user, onLogout }) {
                       </button>
 
                       {/* Dropdown de filtros */}
-                      {showTypeFilterDropdown === 'signed' && (
+                      {false && showTypeFilterDropdown === 'signed' && (
                       <div className="type-filter-dropdown">
                         <div className="type-filter-header">
                           <span>Tipo de documento</span>
@@ -8488,6 +8857,7 @@ function Dashboard({ user, onLogout }) {
 
                     const statusConfig = getStatusConfig(doc.status);
                     const signatures = doc.signatures || [];
+                    const mySignature = getCurrentUserSignature(signatures);
 
                     return (
                       <div key={doc.id} className="my-doc-card-reference">
@@ -8536,7 +8906,7 @@ function Dashboard({ user, onLogout }) {
 
                           <div className="doc-meta-row">
                             <span className="doc-created-text">
-                              Creado el {formatDateTime(doc.createdAt)} por {doc.uploadedBy?.name || doc.uploadedBy?.email || 'Desconocido'}
+                              {getTurnReceivedText(doc, mySignature)}
                             </span>
                           </div>
 
@@ -8710,9 +9080,9 @@ function Dashboard({ user, onLogout }) {
                     {/* Botón de filtro por tipo de documento */}
                     <div style={{ position: 'relative' }}>
                       <button
-                        className={`filter-type-btn ${effectiveMyDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'my' ? null : 'my')}
-                        title="Filtrar por tipo de documento"
+                        className="filter-type-btn filter-type-btn-disabled"
+                        disabled
+                        title="Filtro por tipo de documento no disponible"
                       >
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -9082,6 +9452,15 @@ function Dashboard({ user, onLogout }) {
                       Todas
                     </button>
                     <button
+                      className={`filter-status-btn filter-status-btn-received ${myInvoicesStatusFilter === 'received' ? 'active' : ''}`}
+                      onClick={() => setMyInvoicesStatusFilter('received')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12H15M9 16H13M7 3H13L19 9V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Recibidas
+                    </button>
+                    <button
                       className={`filter-status-btn filter-status-btn-completed ${myInvoicesStatusFilter === 'completed' ? 'active' : ''}`}
                       onClick={() => setMyInvoicesStatusFilter('completed')}
                     >
@@ -9098,15 +9477,6 @@ function Dashboard({ user, onLogout }) {
                         <path d="M12 8V12L15 15M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                       En curso
-                    </button>
-                    <button
-                      className={`filter-status-btn filter-status-btn-received ${myInvoicesStatusFilter === 'received' ? 'active' : ''}`}
-                      onClick={() => setMyInvoicesStatusFilter('received')}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M9 12H15M9 16H13M7 3H13L19 9V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      Recibidas
                     </button>
                     <button
                       className={`filter-status-btn filter-status-btn-rejected ${myInvoicesStatusFilter === 'rejected' ? 'active' : ''}`}
@@ -9219,7 +9589,7 @@ function Dashboard({ user, onLogout }) {
                                 </div>
 
                                 <div className="doc-meta-row">
-                                  <span className="doc-created-text">Creado el {formatDateTime(doc.createdAt)}</span>
+                                  <span className="doc-created-text">{getInvoiceReceivedText(doc)}</span>
                                 </div>
 
                                 <div className="doc-signers-row">
@@ -9375,6 +9745,16 @@ function Dashboard({ user, onLogout }) {
                         <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                       Pagadas
+                    </button>
+                    <button
+                      type="button"
+                      className={`filter-status-btn ${payableInvoicesStatusFilter === 'partial_paid' ? 'active' : ''}`}
+                      onClick={() => setPayableInvoicesStatusFilter('partial_paid')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 12H20M12 4V20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Parciales
                     </button>
                     <button
                       type="button"
@@ -9585,9 +9965,9 @@ function Dashboard({ user, onLogout }) {
                     {/* Botón de filtro por tipo de documento */}
                     <div style={{ position: 'relative' }}>
                       <button
-                        className={`filter-type-btn ${rejectedDocsTypeFilter.length > 0 ? 'active' : ''}`}
-                        onClick={() => setShowTypeFilterDropdown(showTypeFilterDropdown === 'rejected' ? null : 'rejected')}
-                        title="Filtrar por tipo de documento"
+                        className="filter-type-btn filter-type-btn-disabled"
+                        disabled
+                        title="Filtro por tipo de documento no disponible"
                       >
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M6 12H18M3 6H21M9 18H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -9595,7 +9975,7 @@ function Dashboard({ user, onLogout }) {
                       </button>
 
                       {/* Dropdown de filtros */}
-                      {showTypeFilterDropdown === 'rejected' && (
+                      {false && showTypeFilterDropdown === 'rejected' && (
                       <div className="type-filter-dropdown">
                         <div className="type-filter-header">
                           <span>Tipo de documento</span>
@@ -10180,9 +10560,9 @@ function Dashboard({ user, onLogout }) {
                     </button>
                     <button
                       type="button"
-                      className={`payable-status-option ${getPayableStatus(viewingDocument) === 'paid' ? 'selected' : ''}`}
+                      className={`payable-status-option ${getPayableStatus(viewingDocument) === getPayablePaymentAction(viewingDocument) ? 'selected' : ''}`}
                       onClick={() => {
-                        handleUpdatePayableStatus('paid');
+                        handleUpdatePayableStatus(getPayablePaymentAction(viewingDocument));
                       }}
                       disabled={updatingPayableStatus}
                     >
@@ -10190,9 +10570,9 @@ function Dashboard({ user, onLogout }) {
                         <svg className="option-icon paid" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
-                        Pagado
+                        {getPayablePaymentActionLabel(viewingDocument)}
                       </span>
-                      {getPayableStatus(viewingDocument) === 'paid' && (
+                      {getPayableStatus(viewingDocument) === getPayablePaymentAction(viewingDocument) && (
                         <svg className="option-check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
@@ -10431,7 +10811,7 @@ function Dashboard({ user, onLogout }) {
                 </div>
                 <h3 className="sign-confirm-title">Confirmar firma</h3>
                 <p className="sign-confirm-message">
-                  ¿Estás seguro de que deseas firmar este documento? Esta acción no se puede deshacer.
+                  Estás seguro de que deseas firmar este documento? Esta acción no se puede deshacer.
                 </p>
                 <div className="sign-confirm-actions">
                   <button
@@ -10447,6 +10827,120 @@ function Dashboard({ user, onLogout }) {
                     disabled={signing}
                   >
                     {signing ? 'Firmando...' : 'Firmar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showAssetConfirm && (
+            <div className="sign-confirm-overlay">
+              <div className="sign-confirm-modal asset-confirm-modal">
+                <div className="sign-confirm-icon">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 7C4 5.89543 4.89543 5 6 5H9L11 7H18C19.1046 7 20 7.89543 20 9V17C20 18.1046 19.1046 19 18 19H6C4.89543 19 4 18.1046 4 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9 13H15M9 16H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <h3 className="sign-confirm-title">Control de activos fijos</h3>
+                <p className="sign-confirm-message">¿Esta factura contiene un activo fijo?</p>
+
+                <div className="asset-confirm-switch" role="group" aria-label="Esta factura contiene un activo fijo">
+                  <button
+                    type="button"
+                    className={`asset-switch-option ${assetForm.belongsToAsset === true ? 'active' : ''}`}
+                    onClick={() => handleAssetBelongsChange(true)}
+                    disabled={signing}
+                  >
+                    Sí
+                  </button>
+                  <button
+                    type="button"
+                    className={`asset-switch-option ${assetForm.belongsToAsset === false ? 'active' : ''}`}
+                    onClick={() => handleAssetBelongsChange(false)}
+                    disabled={signing}
+                  >
+                    No
+                  </button>
+                </div>
+
+                {assetForm.belongsToAsset === true && (
+                  <div className="asset-confirm-fields">
+                    <div className="asset-records">
+                      {assetForm.records.map((record, index) => (
+                        <div className="asset-record-row" key={`asset-record-${index}`}>
+                          <label className="causacion-confirm-field">
+                            Tipo
+                            <select
+                              value={record.assetType}
+                              onChange={(e) => handleAssetRecordChange(index, 'assetType', e.target.value)}
+                              className="causacion-confirm-input asset-record-select"
+                              disabled={signing}
+                            >
+                              <option value="">Seleccione</option>
+                              <option value="administrativo">Administrativo</option>
+                              <option value="contable">Contable</option>
+                            </select>
+                          </label>
+                          <label className="causacion-confirm-field">
+                            Codigo
+                            <input
+                              value={record.codigo}
+                              onChange={(e) => handleAssetRecordChange(index, 'codigo', e.target.value)}
+                              className="causacion-confirm-input"
+                              autoComplete="off"
+                            />
+                          </label>
+                          <label className="causacion-confirm-field">
+                            Nombre de activo
+                            <input
+                              value={record.nombreActivo}
+                              onChange={(e) => handleAssetRecordChange(index, 'nombreActivo', e.target.value)}
+                              className="causacion-confirm-input"
+                              autoComplete="off"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="asset-remove-row"
+                            onClick={() => handleRemoveAssetRecord(index)}
+                            disabled={assetForm.records.length <= 1 || signing}
+                            title="Eliminar registro"
+                          >
+                            X
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="asset-add-row"
+                        onClick={handleAddAssetRecord}
+                        disabled={signing}
+                      >
+                        Crear otra fila
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {assetError && (
+                  <div className="causacion-confirm-error">{assetError}</div>
+                )}
+
+                <div className="sign-confirm-actions">
+                  <button
+                    className="sign-confirm-btn cancel"
+                    onClick={handleCancelAssetSign}
+                    disabled={signing}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="sign-confirm-btn confirm"
+                    onClick={handleConfirmAssetSign}
+                    disabled={signing}
+                  >
+                    Continuar
                   </button>
                 </div>
               </div>
@@ -11034,7 +11528,7 @@ function Dashboard({ user, onLogout }) {
             {/* Título y descripción */}
             <h2 className="delete-modal-title">Eliminar Documento</h2>
             <p className="delete-modal-description">
-              ¿Estás seguro que deseas eliminar este documento? Esta acción no se puede deshacer.
+              Estás seguro que deseas eliminar este documento? Esta acción no se puede deshacer.
             </p>
 
             {/* Botones */}
@@ -11113,7 +11607,7 @@ function Dashboard({ user, onLogout }) {
             </div>
             <h3 className="sign-confirm-title">Confirmar firma</h3>
             <p className="sign-confirm-message">
-              ¿Estás seguro de que deseas firmar el documento "<strong>{documentToSign.title}</strong>"?
+              Estás seguro de que deseas firmar el documento "<strong>{documentToSign.title}</strong>"?
             </p>
             <p className="sign-confirm-message" style={{fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.8}}>
               Esta acción no se puede deshacer.
@@ -12114,6 +12608,3 @@ function Dashboard({ user, onLogout }) {
 }
 
 export default Dashboard;
-
-
-

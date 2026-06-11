@@ -5024,6 +5024,12 @@
   border-color: #A7F3D0;
 }
 
+.payable-status-badge.partial {
+  color: #7C2D12;
+  background: #FFEDD5;
+  border-color: #FED7AA;
+}
+
 .payable-status-badge {
   min-width: 82px;
   height: 28px;
@@ -5040,6 +5046,10 @@
 
 .payable-status-trigger.paid {
   color: #047857;
+}
+
+.payable-status-trigger.partial {
+  color: #7C2D12;
 }
 
 .payable-status-trigger {
@@ -7965,7 +7975,7 @@ html:has(.pdf-viewer-minimal-overlay) {
 
 .filter-type-btn {
   position: relative;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 9px 16px;
@@ -7985,6 +7995,21 @@ html:has(.pdf-viewer-minimal-overlay) {
 
 .filter-type-btn:hover {
   border-color: #6366F1;
+  background: #F9FAFB;
+}
+
+.filter-type-btn:disabled,
+.filter-type-btn-disabled {
+  display: none;
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #F9FAFB;
+  color: #9CA3AF;
+}
+
+.filter-type-btn:disabled:hover,
+.filter-type-btn-disabled:hover {
+  border-color: #E5E7EB;
   background: #F9FAFB;
 }
 

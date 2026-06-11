@@ -872,6 +872,184 @@ html:has(.pdf-viewer-minimal-overlay) {
   font-weight: 600 !important;
 }
 
+.asset-confirm-modal {
+  width: min(860px, calc(100vw - 32px)) !important;
+  max-width: 860px !important;
+  max-height: calc(100vh - 48px) !important;
+  box-sizing: border-box !important;
+  overflow-y: hidden !important;
+  overflow-x: hidden !important;
+  padding: 34px 42px 30px !important;
+}
+
+.asset-confirm-switch {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  margin: 8px 0 16px !important;
+  padding: 4px !important;
+  border-radius: 8px !important;
+  background: #F3F4F6 !important;
+}
+
+.asset-switch-option {
+  height: 40px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: #4B5563 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+}
+
+.asset-switch-option.active {
+  background: #FFFFFF !important;
+  color: #111827 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12) !important;
+}
+
+.asset-confirm-fields {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: 4px !important;
+  min-height: 0 !important;
+}
+
+.asset-type-options {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-bottom: 8px !important;
+}
+
+.asset-type-option {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 46px !important;
+  padding: 10px 14px !important;
+  border: 1px solid #D1D5DB !important;
+  border-radius: 8px !important;
+  color: #374151 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+}
+
+.asset-type-option.selected {
+  border-color: #2563EB !important;
+  background: #EFF6FF !important;
+  color: #1D4ED8 !important;
+}
+
+.asset-type-option input {
+  width: 18px !important;
+  height: 18px !important;
+  margin: 0 !important;
+}
+
+.asset-records {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  max-height: clamp(150px, calc(100vh - 520px), 280px) !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 4px !important;
+}
+
+.asset-record-row {
+  display: grid !important;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(0, 0.8fr) minmax(0, 1.4fr) 44px !important;
+  gap: 12px !important;
+  align-items: end !important;
+  padding: 14px !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 10px !important;
+  background: #F9FAFB !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.asset-record-row .causacion-confirm-field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  color: #111827 !important;
+  text-align: left !important;
+  align-items: stretch !important;
+}
+
+.asset-record-row .causacion-confirm-input {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 44px !important;
+  box-sizing: border-box !important;
+  background: #FFFFFF !important;
+}
+
+.asset-record-row .asset-record-select {
+  color: #111827 !important;
+  border: 1px solid #D1D5DB !important;
+  border-radius: 8px !important;
+  padding: 0 12px !important;
+  font-family: 'Google Sans', sans-serif !important;
+  color-scheme: light !important;
+}
+
+.asset-remove-row {
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  border: 1px solid #D1D5DB !important;
+  border-radius: 6px !important;
+  background: #FFFFFF !important;
+  color: #6B7280 !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+.asset-remove-row:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+.asset-add-row {
+  align-self: flex-start !important;
+  min-height: 40px !important;
+  padding: 0 16px !important;
+  border: 1px solid #2563EB !important;
+  border-radius: 6px !important;
+  background: #FFFFFF !important;
+  color: #2563EB !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+.asset-add-row:hover:not(:disabled) {
+  background: #EFF6FF !important;
+}
+
+.asset-confirm-modal .sign-confirm-actions {
+  margin-top: 20px !important;
+}
+
 @media (max-height: 640px), (max-width: 520px) {
   .causacion-confirm-modal {
     width: calc(100vw - 24px) !important;
@@ -911,6 +1089,129 @@ html:has(.pdf-viewer-minimal-overlay) {
 
   .causacion-confirm-modal .sign-confirm-actions {
     gap: 8px !important;
+  }
+
+  .asset-confirm-modal {
+    max-height: calc(100vh - 24px) !important;
+    padding: 24px 18px !important;
+  }
+
+  .asset-type-options {
+    grid-template-columns: 1fr !important;
+  }
+
+  .asset-record-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .asset-remove-row {
+    width: 100% !important;
+    align-self: stretch !important;
+  }
+}
+
+@media (max-height: 820px) {
+  .asset-confirm-modal {
+    width: min(680px, calc(100vw - 18px)) !important;
+    max-height: calc(100vh - 12px) !important;
+    padding: 12px 22px 14px !important;
+    border-radius: 12px !important;
+  }
+
+  .asset-confirm-modal .sign-confirm-icon {
+    width: 34px !important;
+    height: 34px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .asset-confirm-modal .sign-confirm-title {
+    font-size: 18px !important;
+    margin-bottom: 3px !important;
+  }
+
+  .asset-confirm-modal .sign-confirm-message {
+    font-size: 12px !important;
+    line-height: 1.3 !important;
+    margin-bottom: 6px !important;
+  }
+
+  .asset-confirm-switch {
+    margin: 2px 0 8px !important;
+    padding: 3px !important;
+    gap: 6px !important;
+  }
+
+  .asset-switch-option {
+    height: 28px !important;
+    font-size: 12px !important;
+  }
+
+  .asset-confirm-fields {
+    gap: 8px !important;
+  }
+
+  .asset-type-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .asset-type-option {
+    min-height: 32px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    border-radius: 7px !important;
+  }
+
+  .asset-type-option input {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .asset-records {
+    max-height: clamp(98px, calc(100vh - 330px), 180px) !important;
+    gap: 6px !important;
+  }
+
+  .asset-record-row {
+    grid-template-columns: minmax(110px, 0.7fr) minmax(0, 0.8fr) minmax(0, 1.4fr) 32px !important;
+    gap: 8px !important;
+    padding: 8px !important;
+    border-radius: 7px !important;
+  }
+
+  .asset-record-row .causacion-confirm-field {
+    gap: 4px !important;
+    font-size: 12px !important;
+  }
+
+  .asset-record-row .causacion-confirm-input {
+    height: 30px !important;
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+  }
+
+  .asset-remove-row {
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 30px !important;
+    font-size: 12px !important;
+  }
+
+  .asset-add-row {
+    min-height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+  }
+
+  .asset-confirm-modal .sign-confirm-actions {
+    gap: 8px !important;
+    margin-top: 6px !important;
+  }
+
+  .asset-confirm-modal .sign-confirm-btn {
+    min-height: 32px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
   }
 }
 

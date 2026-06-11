@@ -57,6 +57,27 @@ const CHECKLIST_TOOLTIPS = {
   descuentosTotales: 'Marque si revisó que los descuentos totales en la factura son correctos. Si no son correctos, por favor solicite a su proveedor la modificación de la factura.'
 };
 
+const FIELD_TOOLTIPS = {
+  nombreNegociador: 'Seleccione el nombre de la persona que actuó como negociador.',
+  cargoNegociador: 'Corresponde al cargo de la persona que actuó como negociador.',
+  noCuentaContable: 'Indique la cuenta contable a la cual debe ser registrada la factura anexa a esta planilla.',
+  respCuentaContable: 'Responsable de la cuenta contable a la que será registrada la factura.',
+  cargoCuentaContable: 'Indica el cargo de la persona que firma como responsable de la cuenta contable.',
+  nombreCuentaContable: 'Indica el nombre de la cuenta contable.',
+  centroCostos: 'Diligencie esta casilla, si usted es el encargado del centro de costos al cual será registrada la factura anexa. En ese caso indique el código del centro de costos correspondiente.',
+  respCentroCostos: 'Encargado del centro de costos indicado en la columna anterior.',
+  cargoCentroCostos: 'Indica el cargo de la persona que firma como encargada de la cuenta contable.',
+  porcentajeCentroCostos: 'Indique en esta celda el % de la factura que será asumido por su centro de costos. El total en esta columna debe totalizar 100%.',
+  totalPorcentaje: 'Antes de compartir la plantilla valide que en esta celda el total sea 100%.',
+  legalizaAnticipo: 'Especifica si la factura legalizará un anticipo anteriormente entregado por tesoreria.',
+  ordenCompra: 'Indique el número de la orden de compra que acompaña y respalda la factura recibida.',
+  observaciones: 'Detalle en este espacio cualquier observación adicional que deba ser tenida en cuenta por el area contable o financiera para procesar esta factura hasta el proceso final de autorización de pago.',
+  facturaAfectada: 'Seleccione Sí si la factura cuenta con algún descuento no especificado o nota crédito que disminuya el valor a cancelar. Seleccione No si está libre de restricciones para su pago.',
+  tipoAfectacion: 'Indique si la factura se encuentra afectada por algún descuento no especificado o por una nota crédito que disminuirá su valor.',
+  porcentajeAfectacion: 'Si la factura será afectada por un descuento o una nota crédito indique en esta celda el porcentaje de afectación.',
+  numeroNotaCredito: 'Si la factura será afectada por una nota crédito indique el numero de nota crédito que la afecta, si aun no se conoce, escriba N/I (no identificada).'
+};
+
 const DEFAULT_CHECKLIST_REVISION = {
   fechaEmision: false,
   fechaVencimiento: false,
@@ -64,7 +85,34 @@ const DEFAULT_CHECKLIST_REVISION = {
   precioUnitario: false,
   fletes: false,
   valoresTotales: false,
-  descuentosTotales: false
+  descuentosTotales: false,
+  facturaAfectada: '',
+  tipoAfectacion: '',
+  porcentajeAfectacion: '',
+  numeroNotaCredito: ''
+};
+
+const REQUIRED_CHECKLIST_FIELDS = [
+  'fechaEmision',
+  'fechaVencimiento',
+  'cantidades',
+  'precioUnitario',
+  'fletes',
+  'valoresTotales',
+  'descuentosTotales'
+];
+
+const parseBooleanOption = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (value === null || value === undefined || value === '') return false;
+
+  const normalized = String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+  return ['si', 's', 'true', '1', 'yes', 'y'].includes(normalized);
 };
 
 const isCausacionTestIdentity = (candidateUser) => {
@@ -118,7 +166,6 @@ const getCompanyLogo = (ciaCode) => {
  */
 const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, currentDocument, user, onClose, onBack, onSave }) => {
   const { cuentas, loading: loadingCuentas } = useCuentasContables();
-  const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos();
   const { negociadores, loading: loadingNegociadores } = useNegociadores();
   const isCausacionTestMode = isCausacionTestIdentity(user);
 
@@ -140,9 +187,13 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
   const [cia, setCia] = useState('');
   const [proveedor, setProveedor] = useState('');
   const [numeroFactura, setNumeroFactura] = useState('');
+  const [ordenCompraAplica, setOrdenCompraAplica] = useState('');
+  const [ordenCompra, setOrdenCompra] = useState('');
+  const [notaCredito, setNotaCredito] = useState(false);
   const [fechaFactura, setFechaFactura] = useState('');
   const [fechaRecepcion, setFechaRecepcion] = useState('');
   const [legalizaAnticipo, setLegalizaAnticipo] = useState(false);
+  const { centros, loading: loadingCentros, validarResponsable } = useCentrosCostos(cia);
 
   // Estados para el checklist de revisión
   const [checklistRevision, setChecklistRevision] = useState(DEFAULT_CHECKLIST_REVISION);
@@ -410,6 +461,9 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
       setCia(factura.cia || '');
       setProveedor(factura.proveedor || '');
       setNumeroFactura(factura.numero_factura || '');
+      setOrdenCompra(factura.orden_compra || '');
+      setOrdenCompraAplica(factura.orden_compra ? 'Si' : '');
+      setNotaCredito(parseBooleanOption(factura.nota_credito));
 
       const fechaFacturaFormateada = formatDate(factura.fecha_factura);
       const fechaRecepcionFormateada = formatDate(factura.fecha_entrega);
@@ -434,16 +488,33 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
       if (savedData.cia) setCia(savedData.cia);
       if (savedData.proveedor) setProveedor(savedData.proveedor);
       if (savedData.numeroFactura) setNumeroFactura(savedData.numeroFactura);
+      if (savedData.ordenCompra !== undefined) setOrdenCompra(savedData.ordenCompra || '');
+      if (savedData.ordenCompraAplica !== undefined) {
+        setOrdenCompraAplica(['Si', 'No'].includes(savedData.ordenCompraAplica) ? savedData.ordenCompraAplica : '');
+      } else if (savedData.ordenCompra) {
+        setOrdenCompraAplica('Si');
+      }
+      if (savedData.notaCredito !== undefined) setNotaCredito(parseBooleanOption(savedData.notaCredito));
       if (savedData.fechaFactura) setFechaFactura(savedData.fechaFactura);
       if (savedData.fechaRecepcion) setFechaRecepcion(savedData.fechaRecepcion);
 
       // Restaurar campos manuales
       if (savedData.legalizaAnticipo !== undefined) setLegalizaAnticipo(savedData.legalizaAnticipo);
       if (savedData.checklistRevision) {
-        setChecklistRevision(Object.keys(DEFAULT_CHECKLIST_REVISION).reduce((acc, key) => {
+        const normalizedChecklist = REQUIRED_CHECKLIST_FIELDS.reduce((acc, key) => {
           acc[key] = Boolean(savedData.checklistRevision[key]);
           return acc;
-        }, { ...DEFAULT_CHECKLIST_REVISION }));
+        }, { ...DEFAULT_CHECKLIST_REVISION });
+
+        setChecklistRevision({
+          ...normalizedChecklist,
+          facturaAfectada: ['Si', 'No'].includes(savedData.checklistRevision.facturaAfectada)
+            ? savedData.checklistRevision.facturaAfectada
+            : '',
+          tipoAfectacion: savedData.checklistRevision.tipoAfectacion || '',
+          porcentajeAfectacion: savedData.checklistRevision.porcentajeAfectacion || '',
+          numeroNotaCredito: savedData.checklistRevision.numeroNotaCredito || ''
+        });
       }
       if (savedData.nombreNegociador) setNombreNegociador(savedData.nombreNegociador);
       if (savedData.cargoNegociador) setCargoNegociador(savedData.cargoNegociador);
@@ -518,9 +589,81 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
     }));
   };
 
+  const handleFacturaAfectadaChange = (value) => {
+    setChecklistRevision(prev => ({
+      ...prev,
+      facturaAfectada: value,
+      tipoAfectacion: value === 'Si' ? prev.tipoAfectacion : '',
+      porcentajeAfectacion: value === 'Si' ? prev.porcentajeAfectacion : '',
+      numeroNotaCredito: value === 'Si' && prev.tipoAfectacion === 'nota_credito' ? prev.numeroNotaCredito : ''
+    }));
+  };
+
+  const handleTipoAfectacionChange = (value) => {
+    setChecklistRevision(prev => ({
+      ...prev,
+      tipoAfectacion: value,
+      numeroNotaCredito: value === 'nota_credito' ? prev.numeroNotaCredito : ''
+    }));
+  };
+
+  const handleAfectacionFieldChange = (field, value) => {
+    setChecklistRevision(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
   const handleTooltipToggle = (tooltipId) => {
     setTooltipAbierto(prev => prev === tooltipId ? null : tooltipId);
   };
+
+  const handleOrdenCompraAplicaChange = (value) => {
+    setOrdenCompraAplica(value);
+    if (value === 'No') {
+      setOrdenCompra('');
+    }
+  };
+
+  const handleNumberWheel = (event) => {
+    event.currentTarget.blur();
+  };
+
+  const renderInfoTooltip = (tooltipId, tooltipText, options = {}) => (
+    <span className={`factura-info-btn-wrapper ${options.align === 'left' ? 'factura-info-tooltip-left' : ''}`}>
+      <button
+        type="button"
+        className="factura-info-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleTooltipToggle(tooltipId);
+        }}
+        title="Ver información"
+      >
+        <Info size={14} />
+      </button>
+      {tooltipAbierto === tooltipId && (
+        <span className="factura-tooltip">
+          {tooltipText}
+          <span className="factura-tooltip-arrow"></span>
+        </span>
+      )}
+    </span>
+  );
+
+  const renderInfoLabel = (label, tooltipId, className = 'factura-label', options = {}) => (
+    <label className={`${className} factura-label-with-info`}>
+      <span>{label}</span>
+      {renderInfoTooltip(tooltipId, FIELD_TOOLTIPS[tooltipId], options)}
+    </label>
+  );
+
+  const renderInfoHeader = (label, tooltipId, options = {}) => (
+    <div className="factura-th-with-info">
+      <span>{label}</span>
+      {renderInfoTooltip(tooltipId, FIELD_TOOLTIPS[tooltipId], options)}
+    </div>
+  );
 
   const handleFilaChange = (id, field, value) => {
     const fila = filasControl.find(item => item.id === id);
@@ -1075,9 +1218,33 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
 
     // En correctionMode solo se validan cuenta/centro/porcentaje (checklist y negociador están bloqueados)
     if (!correctionMode) {
-      const hayChecklistSinMarcar = Object.keys(DEFAULT_CHECKLIST_REVISION).some(key => !checklistRevision[key]);
+      const hayChecklistSinMarcar = REQUIRED_CHECKLIST_FIELDS.some(key => !checklistRevision[key]);
       if (hayChecklistSinMarcar) {
         errores.push('Debe marcar todos los checklist de Revisión');
+      }
+
+      if (!['Si', 'No'].includes(ordenCompraAplica)) {
+        errores.push('Debe seleccionar si la factura tiene orden de compra');
+      }
+
+      if (ordenCompraAplica === 'Si' && !String(ordenCompra || '').trim()) {
+        errores.push('Debe ingresar el # Orden de Compra');
+      }
+
+      if (!['Si', 'No'].includes(checklistRevision.facturaAfectada)) {
+        errores.push('Debe seleccionar si la factura será afectada');
+      }
+
+      if (checklistRevision.facturaAfectada === 'Si') {
+        if (!checklistRevision.tipoAfectacion) {
+          errores.push('Debe seleccionar si la afectación es Descuento o Nota Crédito');
+        }
+
+        const porcentajeAfectacion = parseFloat(checklistRevision.porcentajeAfectacion);
+        if (!checklistRevision.porcentajeAfectacion || isNaN(porcentajeAfectacion) || porcentajeAfectacion < 0 || porcentajeAfectacion > 100) {
+          errores.push('Debe ingresar un % Afectación entre 0 y 100');
+        }
+
       }
 
       if (!nombreNegociador.trim()) {
@@ -1321,6 +1488,9 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
           cia,
           proveedor,
           numeroFactura,
+          ordenCompraAplica,
+          ordenCompra,
+          notaCredito,
           fechaFactura,
           fechaRecepcion,
           legalizaAnticipo,
@@ -1415,6 +1585,42 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
               </div>
 
               <div className="factura-field">
+                {renderInfoLabel('Orden de Compra', 'ordenCompra', 'factura-label', { align: 'left' })}
+                <div className="factura-segmented-control">
+                  <button
+                    type="button"
+                    className={`factura-segmented-option ${ordenCompraAplica === 'Si' ? 'active' : ''}`}
+                    onClick={correctionMode ? undefined : () => handleOrdenCompraAplicaChange('Si')}
+                    disabled={correctionMode}
+                  >
+                    Sí
+                  </button>
+                  <button
+                    type="button"
+                    className={`factura-segmented-option ${ordenCompraAplica === 'No' ? 'active' : ''}`}
+                    onClick={correctionMode ? undefined : () => handleOrdenCompraAplicaChange('No')}
+                    disabled={correctionMode}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+
+              {ordenCompraAplica === 'Si' && (
+                <div className="factura-field">
+                  <label className="factura-label"># Orden de Compra</label>
+                  <Input
+                    type="text"
+                    value={ordenCompra}
+                    onChange={(e) => setOrdenCompra(e.target.value)}
+                    disabled={correctionMode}
+                    className={correctionMode ? 'factura-input-disabled' : ''}
+                    title={ordenCompra}
+                  />
+                </div>
+              )}
+
+              <div className="factura-field">
                 <label className="factura-label"># Factura</label>
                 <Input
                   type="text"
@@ -1454,6 +1660,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
                     disabled={correctionMode}
                   />
                   <span className="factura-checkbox-simple-text">Legaliza Anticipo</span>
+                  {renderInfoTooltip('legalizaAnticipo', FIELD_TOOLTIPS.legalizaAnticipo)}
                 </label>
               </div>
             </div>
@@ -1695,15 +1902,88 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
                 </div>
               </div>
             </div>
-          </div>
 
+            <div className="factura-afectacion-panel">
+              <div className="factura-afectacion-row">
+                <div className="factura-field factura-afectacion-question">
+                  {renderInfoLabel('Factura afectada por Nc o Dcto', 'facturaAfectada')}
+                  <div className="factura-segmented-control">
+                    <button
+                      type="button"
+                      className={`factura-segmented-option ${checklistRevision.facturaAfectada === 'Si' ? 'active' : ''}`}
+                      onClick={correctionMode ? undefined : () => handleFacturaAfectadaChange('Si')}
+                      disabled={correctionMode}
+                    >
+                      Sí
+                    </button>
+                    <button
+                      type="button"
+                      className={`factura-segmented-option ${checklistRevision.facturaAfectada === 'No' ? 'active' : ''}`}
+                      onClick={correctionMode ? undefined : () => handleFacturaAfectadaChange('No')}
+                      disabled={correctionMode}
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+
+                {checklistRevision.facturaAfectada === 'Si' && (
+                  <>
+                    <div className="factura-field">
+                      {renderInfoLabel('Tipo de Afectación', 'tipoAfectacion')}
+                      <select
+                        value={checklistRevision.tipoAfectacion || ''}
+                        onChange={(e) => handleTipoAfectacionChange(e.target.value)}
+                        disabled={correctionMode}
+                        className={`factura-input factura-select ${correctionMode ? 'factura-input-disabled' : ''}`}
+                      >
+                        <option value="">Seleccione</option>
+                        <option value="descuento">Descuento</option>
+                        <option value="nota_credito">Nota Crédito</option>
+                      </select>
+                    </div>
+
+                    {checklistRevision.tipoAfectacion && (
+                      <div className="factura-field">
+                        {renderInfoLabel('% Afectación', 'porcentajeAfectacion')}
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={checklistRevision.porcentajeAfectacion || ''}
+                          onChange={(e) => handleAfectacionFieldChange('porcentajeAfectacion', e.target.value)}
+                          onWheel={handleNumberWheel}
+                          disabled={correctionMode}
+                          className={correctionMode ? 'factura-input-disabled' : ''}
+                        />
+                      </div>
+                    )}
+
+                    {checklistRevision.tipoAfectacion === 'nota_credito' && (
+                      <div className="factura-field">
+                        {renderInfoLabel('# NC', 'numeroNotaCredito')}
+                        <Input
+                          type="text"
+                          value={checklistRevision.numeroNotaCredito || ''}
+                          onChange={(e) => handleAfectacionFieldChange('numeroNotaCredito', e.target.value)}
+                          disabled={correctionMode}
+                          className={correctionMode ? 'factura-input-disabled' : ''}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
           {/* Sección: Negociador */}
           <div className="factura-section">
             <h2 className="factura-section-title">Información del Negociador</h2>
 
             <div className="factura-grid">
               <div className="factura-field">
-                <label className="factura-label">Nombre Negociador</label>
+                {renderInfoLabel('Nombre Negociador', 'nombreNegociador')}
                 <div
                   className="factura-autocomplete-wrapper"
                   ref={dropdownNegociadoresRef}
@@ -1753,6 +2033,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
                 />
               </div>
             </div>
+
           </div>
 
           {/* Sección: Control de Firmas */}
@@ -1774,14 +2055,14 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
               <table className="factura-table">
                 <thead>
                   <tr>
-                    <th>No. Cta Contable</th>
+                    <th>{renderInfoHeader('No. Cta Contable', 'noCuentaContable')}</th>
                     <th>Resp. Cta Contable</th>
                     <th>Cargo Resp Cta Contable</th>
                     <th>Cta Contable</th>
-                    <th>C.Co</th>
+                    <th>{renderInfoHeader('C.Co', 'centroCostos')}</th>
                     <th>Resp. C.Co</th>
                     <th>Cargo Resp. C.Co</th>
-                    <th>% C.Co</th>
+                    <th>{renderInfoHeader('% C.Co', 'porcentajeCentroCostos', { align: 'left' })}</th>
                     {Object.keys(retenciones).length > 0 && (
                       <>
                         <th>%Ret</th>
@@ -1933,6 +2214,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
                             disabled={filaFirmada}
                             data-porcentaje-id={fila.id}
                             onKeyDown={(e) => handlePorcentajeKeyDown(e, fila.id)}
+                            onWheel={handleNumberWheel}
                           />
                         </td>
                         {Object.keys(retenciones).length > 0 && (
@@ -1979,7 +2261,10 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
                 <tfoot>
                   <tr>
                     <td colSpan="7" style={{ textAlign: 'right', fontWeight: '600', color: '#374151' }}>
-                      Total Porcentaje:
+                      <span className="factura-total-label-with-info">
+                        <span>Total Porcentaje:</span>
+                        {renderInfoTooltip('totalPorcentaje', FIELD_TOOLTIPS.totalPorcentaje)}
+                      </span>
                     </td>
                     <td>
                       <div className={`factura-total-porcentaje ${!esPorcentajeValido(calcularTotalPorcentaje()) ? 'factura-total-error' : 'factura-total-ok'}`}>
@@ -1997,6 +2282,7 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
                 </tfoot>
               </table>
             </div>
+
           </div>
 
           {/* Sección: Grupo de Causación */}
@@ -2042,11 +2328,15 @@ const FacturaTemplate = ({ factura, savedData, isEditMode, correctionMode, curre
                 ))
               )}
             </div>
+
           </div>
 
           {/* Sección: Observaciones (separada) */}
           <div className="factura-section">
-            <h2 className="factura-section-title">Observaciones</h2>
+            <h2 className="factura-section-title factura-section-title-with-info">
+              <span>Observaciones</span>
+              {renderInfoTooltip('observaciones', FIELD_TOOLTIPS.observaciones)}
+            </h2>
             <div className="factura-field">
               <textarea
                 value={observaciones}

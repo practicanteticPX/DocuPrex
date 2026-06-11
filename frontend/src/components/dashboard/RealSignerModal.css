@@ -319,51 +319,53 @@
   border-color: #CBD5E1;
 }
 
-/* Input de cédula */
-.real-signer-cedula-input {
+.real-signer-password-input {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  margin: 20px 0;
+  gap: 10px;
+  margin: 14px 0 4px;
+  width: min(100%, 480px);
 }
 
-.cedula-digits-container {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-}
-
-.cedula-digit-input {
-  width: 56px;
-  height: 72px;
-  font-size: 36px;
+.real-signer-password-label {
+  font-size: 13px;
   font-weight: 600;
-  font-family: 'Google Sans', monospace;
-  text-align: center;
-  border: 3px solid #E5E7EB;
-  border-radius: 12px;
-  background-color: #FAFBFC;
-  color: #1F2937;
-  transition: all 0.2s ease;
-  outline: none;
+  color: #374151;
 }
 
-.cedula-digit-input:focus {
-  border-color: #3B82F6;
+.real-signer-autofill-decoy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.real-signer-password-field {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
   background-color: #FFFFFF;
+  color: #1F2937;
+  font-family: 'Google Sans', sans-serif;
+  font-size: 15px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.real-signer-password-field:focus {
+  border-color: #3B82F6;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
 }
 
-.cedula-digit-input::placeholder {
-  color: #D1D5DB;
-}
-
-.cedula-hint {
-  font-size: 13px;
-  color: #9CA3AF;
+.real-signer-password-hint {
   margin: 0;
-  font-family: 'Google Sans', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6B7280;
 }
 
 /* Responsive */

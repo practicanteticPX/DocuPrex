@@ -34,12 +34,28 @@ const CAUSACION_TEST_USER_EMAILS = new Set([
   'j.bustamante@prexxa.com.co',
   'practicantetic@prexxa.com.co'
 ]);
+const FV_CONTROL_ADMIN_ROLE_NAME = 'Control Administrativo';
+const FV_CONTROL_ADMIN_ROLE_CODE = 'CONTROL_ADMINISTRADOR';
+const FV_CONTROL_ADMIN_EMAIL = 'l.gonzalez@prexxa.com.co';
 
 const normalizeTestText = (value) => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
   .trim()
   .toLowerCase();
+
+const normalizedWords = (value) => normalizeTestText(value)
+  .split(/\s+/)
+  .filter(Boolean);
+
+const namesMatchLoose = (nameA, nameB) => {
+  const wordsA = normalizedWords(nameA);
+  const wordsB = normalizedWords(nameB);
+  if (wordsA.length === 0 || wordsB.length === 0) return false;
+
+  const matched = wordsA.filter(word => wordsB.includes(word)).length;
+  return matched >= Math.min(wordsA.length, wordsB.length, 2);
+};
 
 const isCausacionTestUser = (user) => {
   if (!user) return false;
@@ -65,6 +81,356 @@ const isCausacionTestDocument = (doc) => {
 
   return testText.includes('prueba') || testText.includes('test');
 };
+
+function parseDocumentMetadata(metadata) {
+  if (!metadata) return null;
+  if (typeof metadata === 'object') return metadata;
+
+  try {
+    return JSON.parse(metadata);
+  } catch (error) {
+    return null;
+  }
+}
+
+function getFacturaReceivedAt(metadata) {
+  const parsedMetadata = parseDocumentMetadata(metadata);
+  return parsedMetadata?.fechaRecepcion
+    || parsedMetadata?.fecha_entrega
+    || parsedMetadata?.fechaEntrega
+    || null;
+}
+
+function parseRetentionData(retentionData) {
+  if (!retentionData) return [];
+  if (Array.isArray(retentionData)) return retentionData;
+
+  try {
+    const parsed = JSON.parse(retentionData);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function getRetentionTime(retention) {
+  const value = retention?.fechaLiberacion || retention?.releasedAt || retention?.fechaRetencion || retention?.retainedAt;
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function annotateSignersWithRetentionState(signers, retentionData) {
+  const retentions = parseRetentionData(retentionData);
+  if (retentions.length === 0) return signers;
+
+  return signers.map((signer) => {
+    const signerUserId = signer.user_id || signer.signer_id;
+
+    const signerRetentions = retentions
+      .filter(retention => (
+        (signerUserId && String(retention.userId) === String(signerUserId))
+        || (!signerUserId && retention.userName && namesMatchLoose(retention.userName, signer.name))
+      ))
+      .sort((a, b) => getRetentionTime(b) - getRetentionTime(a));
+
+    if (signerRetentions.length === 0) return signer;
+
+    const activeRetentions = signerRetentions.filter(retention => retention.activa === true);
+    const selectedRetention = activeRetentions[0] || signerRetentions[0];
+    const activePercentage = activeRetentions.reduce((sum, retention) => {
+      const percentage = Number(retention.porcentajeRetenido || 0);
+      return sum + (Number.isNaN(percentage) ? 0 : percentage);
+    }, 0);
+
+    return {
+      ...signer,
+      retention_status: activeRetentions.length > 0 ? 'retained' : 'released',
+      retention_percentage: activeRetentions.length > 0
+        ? activePercentage || selectedRetention.porcentajeRetenido
+        : selectedRetention.porcentajeRetenido,
+      retention_reason: selectedRetention.motivo,
+      retained_at: selectedRetention.fechaRetencion,
+      released_at: selectedRetention.fechaLiberacion || selectedRetention.releasedAt
+    };
+  });
+}
+
+function getActiveRetentionPercentage(retentionData) {
+  const activeRetentions = parseRetentionData(retentionData).filter(retention => retention.activa === true);
+  const retainedPercentage = activeRetentions.reduce((sum, retention) => {
+    const percentage = Number(retention.porcentajeRetenido || 0);
+    return sum + (Number.isNaN(percentage) ? 0 : percentage);
+  }, 0);
+
+  return Math.max(0, Math.min(100, retainedPercentage));
+}
+
+const normalizeRoleText = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toUpperCase();
+
+const getAssignmentRoleNames = (assignment) => {
+  if (!assignment) return [];
+  if (Array.isArray(assignment.roleNames) && assignment.roleNames.length > 0) {
+    return assignment.roleNames.filter(Boolean);
+  }
+  if (assignment.roleName) return [assignment.roleName];
+  return [];
+};
+
+const getFirmanteRoleNames = (firmante) => {
+  if (!firmante) return [];
+  if (Array.isArray(firmante.role)) return firmante.role.filter(Boolean);
+  if (firmante.role) return [firmante.role];
+  if (firmante.cargo) return [firmante.cargo];
+  return [];
+};
+
+const hasFVControlAdminRole = (roles = []) => {
+  const normalizedRoles = roles.map(normalizeRoleText);
+  return normalizedRoles.some(role =>
+    role === FV_CONTROL_ADMIN_ROLE_CODE
+    || role.includes('CONTROL ADMINISTRADOR')
+    || role.includes('CONTROL ADMINISTRATIVO')
+  );
+};
+
+const hasFVNegociadorRole = (roles = []) => (
+  roles.map(normalizeRoleText).some(role => role.includes('NEGOCIADOR'))
+);
+
+const getSignerRowRoleNames = (row) => {
+  if (!row) return [];
+  if (Array.isArray(row.role_names) && row.role_names.length > 0) return row.role_names.filter(Boolean);
+  if (row.role_name) return [row.role_name];
+  return [];
+};
+
+function parseFVAssetData(assetData) {
+  if (assetData === null || assetData === undefined || String(assetData).trim() === '') {
+    return null;
+  }
+
+  let parsed;
+  try {
+    parsed = typeof assetData === 'string' ? JSON.parse(assetData) : assetData;
+  } catch (error) {
+    throw new Error('Los datos de activos no tienen un formato valido');
+  }
+
+  const belongsToAsset = Boolean(parsed?.belongsToAsset);
+  if (!belongsToAsset) {
+    return { belongsToAsset: false, assetType: null, records: [] };
+  }
+
+  const fallbackAssetType = String(parsed?.assetType || '').trim().toLowerCase();
+
+  const records = Array.isArray(parsed?.records) ? parsed.records : [];
+  const normalizedRecords = records
+    .map(record => {
+      const assetType = String(record?.assetType || fallbackAssetType || '').trim().toLowerCase();
+      return {
+        assetType,
+        codigo: String(record?.codigo || '').trim(),
+        nombreActivo: String(record?.nombreActivo || '').trim()
+      };
+    })
+    .filter(record => record.assetType || record.codigo || record.nombreActivo);
+
+  if (normalizedRecords.length === 0) {
+    throw new Error('Debes agregar al menos un activo');
+  }
+
+  const invalidTypeRecord = normalizedRecords.find(record => !['administrativo', 'contable'].includes(record.assetType));
+  if (invalidTypeRecord) {
+    throw new Error('Cada activo debe tener Tipo Administrativo o Contable');
+  }
+
+  const incompleteRecord = normalizedRecords.find(record => !record.codigo || !record.nombreActivo);
+  if (incompleteRecord) {
+    throw new Error('Cada activo debe tener Codigo y Nombre de activo');
+  }
+
+  const assetCodes = normalizedRecords.map(record => record.codigo.trim().toUpperCase());
+  const duplicatedCode = assetCodes.find((codigo, index) => assetCodes.indexOf(codigo) !== index);
+  if (duplicatedCode) {
+    throw new Error(`El codigo de activo "${duplicatedCode}" esta repetido`);
+  }
+
+  return { belongsToAsset: true, assetType: null, records: normalizedRecords };
+}
+
+async function validateFVAssetCodesAvailable(documentId, records) {
+  if (!Array.isArray(records) || records.length === 0) {
+    return;
+  }
+
+  const normalizedCodes = Array.from(new Set(
+    records
+      .map(record => String(record?.codigo || '').trim().toUpperCase())
+      .filter(Boolean)
+  ));
+
+  if (normalizedCodes.length === 0) {
+    return;
+  }
+
+  const existingResult = await query(
+    `SELECT DISTINCT UPPER(TRIM(codigo)) AS codigo
+     FROM invoice_asset_records
+     WHERE UPPER(TRIM(codigo)) = ANY($1::text[])
+       AND document_id <> $2`,
+    [normalizedCodes, documentId]
+  );
+
+  if (existingResult.rows.length > 0) {
+    const existingCodes = existingResult.rows.map(row => row.codigo).join(', ');
+    throw new Error(`El codigo de activo ${existingCodes} ya existe en la base de datos`);
+  }
+}
+
+async function obtenerAssetDataDocumento(documentId, db = query) {
+  const runQuery = typeof db === 'function'
+    ? db
+    : (sql, params) => db.query(sql, params);
+
+  const result = await runQuery(
+    `SELECT
+       EXISTS (
+         SELECT 1
+         FROM invoice_asset_records iar
+         WHERE iar.document_id = $1
+       ) AS has_asset_records,
+       EXISTS (
+         SELECT 1
+         FROM signatures s
+         JOIN users u ON u.id = s.signer_id
+         WHERE s.document_id = $1
+           AND s.status = 'signed'
+           AND LOWER(TRIM(u.email)) = $2
+       ) AS control_admin_signed`,
+    [documentId, FV_CONTROL_ADMIN_EMAIL]
+  );
+
+  const row = result.rows[0] || {};
+  if (row.has_asset_records) {
+    return { belongsToAsset: true };
+  }
+
+  if (row.control_admin_signed) {
+    return { belongsToAsset: false };
+  }
+
+  return { belongsToAsset: null };
+}
+
+async function getFVControlAdminUser(db = query) {
+  const result = await db(
+    `SELECT id, name, email
+     FROM users
+     WHERE LOWER(TRIM(email)) = $1
+        OR LOWER(TRIM(ad_username)) = 'l.gonzalez'
+        OR LOWER(TRIM(name)) = 'lina gonzalez'
+     ORDER BY
+       CASE WHEN LOWER(TRIM(email)) = $1 THEN 0 ELSE 1 END
+     LIMIT 1`,
+    [FV_CONTROL_ADMIN_EMAIL]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error('No se encontro el usuario obligatorio Lina Gonzalez para el rol Control Administrativo');
+  }
+
+  return result.rows[0];
+}
+
+function ensureFVControlAdminFirmante(firmantes, controlAdminUser) {
+  if (!Array.isArray(firmantes)) return [];
+
+  const controlFirmante = {
+    name: controlAdminUser.name || 'Lina Gonzalez',
+    role: FV_CONTROL_ADMIN_ROLE_NAME,
+    cargo: FV_CONTROL_ADMIN_ROLE_NAME,
+    email: controlAdminUser.email || FV_CONTROL_ADMIN_EMAIL,
+    signingStageKey: FV_CONTROL_ADMIN_ROLE_CODE
+  };
+
+  const withoutControl = firmantes.filter(firmante =>
+    !hasFVControlAdminRole(getFirmanteRoleNames(firmante))
+    && firmante?.signingStageKey !== FV_CONTROL_ADMIN_ROLE_CODE
+  );
+
+  const insertAfterIndex = withoutControl.findIndex(firmante =>
+    firmante?.signingStageKey === 'NEGOCIADOR'
+    || hasFVNegociadorRole(getFirmanteRoleNames(firmante))
+  );
+
+  const insertAt = insertAfterIndex === -1 ? 0 : insertAfterIndex + 1;
+  const result = [...withoutControl];
+  result.splice(insertAt, 0, controlFirmante);
+  return result;
+}
+
+function ensureFVControlAdminSignerAssignment(assignments, controlAdminUser) {
+  if (!Array.isArray(assignments)) return [];
+
+  const controlUserId = String(controlAdminUser.id);
+  const assignmentsWithoutControl = [];
+  let controlAssignment = null;
+
+  for (const assignment of assignments) {
+    const roleNames = getAssignmentRoleNames(assignment);
+
+    if (hasFVControlAdminRole(roleNames)) {
+      if (String(assignment.userId) !== controlUserId) {
+        throw new Error('El rol Control Administrativo solo puede ser asignado a Lina Gonzalez');
+      }
+
+      controlAssignment = {
+        ...assignment,
+        userId: controlAdminUser.id,
+        roleNames: Array.from(new Set([...roleNames, FV_CONTROL_ADMIN_ROLE_NAME].filter(Boolean)))
+      };
+      continue;
+    }
+
+    assignmentsWithoutControl.push(assignment);
+  }
+
+  const existingLinaIndex = assignmentsWithoutControl.findIndex(assignment =>
+    String(assignment.userId) === controlUserId
+  );
+
+  if (!controlAssignment && existingLinaIndex !== -1) {
+    const existingLinaAssignment = assignmentsWithoutControl.splice(existingLinaIndex, 1)[0];
+    controlAssignment = {
+      ...existingLinaAssignment,
+      userId: controlAdminUser.id,
+      roleNames: Array.from(new Set([
+        ...getAssignmentRoleNames(existingLinaAssignment),
+        FV_CONTROL_ADMIN_ROLE_NAME
+      ].filter(Boolean)))
+    };
+  }
+
+  if (!controlAssignment) {
+    controlAssignment = {
+      userId: controlAdminUser.id,
+      roleNames: [FV_CONTROL_ADMIN_ROLE_NAME]
+    };
+  }
+
+  const insertAfterIndex = assignmentsWithoutControl.findIndex(assignment =>
+    hasFVNegociadorRole(getAssignmentRoleNames(assignment))
+  );
+  const insertAt = insertAfterIndex === -1 ? 0 : insertAfterIndex + 1;
+
+  const result = [...assignmentsWithoutControl];
+  result.splice(insertAt, 0, controlAssignment);
+  return result;
+}
 
 async function checkSignaturesHasConsecutivoColumn() {
   if (signaturesHasConsecutivoColumn !== null) {
@@ -412,6 +778,82 @@ async function getMonicaBustamanteUser() {
   return result.rows[0] || null;
 }
 
+async function notifyTreasuryInvoiceReleased({ documentId, actorUserId, releasedRetention }) {
+  const docResult = await query(
+    `SELECT
+       d.id,
+       d.title,
+       d.file_name,
+       actor.name as actor_name
+     FROM documents d
+     LEFT JOIN users actor ON actor.id = $2::uuid
+     WHERE d.id = $1`,
+    [documentId, actorUserId]
+  );
+
+  const doc = docResult.rows[0];
+  if (!doc?.id) {
+    return false;
+  }
+
+  const treasuryUsers = await getPayableInvoiceUsers();
+  if (treasuryUsers.length === 0) {
+    console.warn(`No se encontraron usuarios de Tesoreria para notificar liberacion del documento ${documentId}`);
+    return false;
+  }
+
+  const documentoUrl = `${serverConfig.frontendUrl}/documento/${documentId}`;
+  const releasedBy = doc.actor_name || releasedRetention?.liberadoPor || 'un usuario';
+  const retentionReason = releasedRetention?.motivo
+    ? `<br><br>Motivo de retencion: <span style="font-weight:500;color:#374151;">${releasedRetention.motivo}</span>`
+    : '';
+  let notified = false;
+
+  for (const treasuryUser of treasuryUsers) {
+    const notificationResult = await query(
+      `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+       VALUES ($1::uuid, 'invoice_released', $2::uuid, $3::uuid, $4::varchar)
+       RETURNING id`,
+      [treasuryUser.id, documentId, actorUserId, doc.title]
+    );
+
+    if (notificationResult.rows.length > 0) {
+      websocketService.emitNotificationCreated(treasuryUser.id, {
+        id: notificationResult.rows[0].id,
+        type: 'invoice_released',
+        document_id: documentId,
+        actor_id: actorUserId,
+        document_title: doc.title
+      });
+      notified = true;
+    }
+
+    if (!treasuryUser.email) {
+      console.warn(`Usuario de Tesoreria sin correo para notificar liberacion del documento ${documentId}: ${treasuryUser.name}`);
+      continue;
+    }
+
+    try {
+      await sendEmail({
+        to: treasuryUser.email,
+        subject: 'Factura liberada',
+        html: buildDocuPrexEmailTemplate({
+          title: 'Factura liberada',
+          message: `La factura "<span style="font-weight:500;color:#374151;">${doc.title}</span>" fue liberada por ${releasedBy}.${retentionReason}`,
+          buttonUrl: documentoUrl,
+          buttonText: 'Ver Documento'
+        }),
+        text: `Hola ${treasuryUser.name || ''},\n\nLa factura "${doc.title}" fue liberada por ${releasedBy}.${releasedRetention?.motivo ? `\n\nMotivo de retencion: ${releasedRetention.motivo}` : ''}\n\nVer documento: ${documentoUrl}\n\nEste es un correo automatico, por favor no responder.`
+      });
+      notified = true;
+    } catch (emailError) {
+      console.error(`Error enviando correo de factura liberada a ${treasuryUser.email}:`, emailError);
+    }
+  }
+
+  return notified;
+}
+
 async function getPayableInvoiceUsers() {
   const result = await query(
     `SELECT id, name, email
@@ -582,6 +1024,84 @@ async function notifyPayableInvoicePaidCreator({ documentId, actorUserId }) {
       buttonText: 'Ver Documento'
     }),
     text: `Hola ${doc.creator_name || ''},\n\nLa factura "${doc.title}" fue marcada como Pagada por ${doc.actor_name || 'Tesorer?a'}.\n\nVer documento: ${documentoUrl}\n\nEste es un correo autom?tico, por favor no responder.`
+  });
+
+  return true;
+}
+
+async function notifyPayableInvoicePartiallyPaidCreator({ documentId, actorUserId, paidPercentage, retainedPercentage }) {
+  const docResult = await query(
+    `SELECT
+       d.id,
+       d.title,
+       d.uploaded_by,
+       creator.name as creator_name,
+       creator.email as creator_email,
+       creator.email_notifications,
+       actor.name as actor_name
+     FROM documents d
+     JOIN users creator ON creator.id = d.uploaded_by
+     LEFT JOIN users actor ON actor.id = $2::uuid
+     WHERE d.id = $1`,
+    [documentId, actorUserId]
+  );
+
+  const doc = docResult.rows[0];
+  if (!doc?.uploaded_by) {
+    return false;
+  }
+
+  if (String(doc.uploaded_by) === String(actorUserId) && !isCausacionTestUser({
+    id: actorUserId,
+    name: doc.creator_name,
+    email: doc.creator_email
+  })) {
+    return false;
+  }
+
+  const notificationResult = await query(
+    `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
+     SELECT $1::uuid, 'payable_invoice_partially_paid', $2::uuid, $3::uuid, $4::varchar
+     WHERE NOT EXISTS (
+       SELECT 1 FROM notifications
+       WHERE user_id = $1::uuid
+         AND type = 'payable_invoice_partially_paid'
+         AND document_id = $2::uuid
+     )
+     RETURNING id`,
+    [doc.uploaded_by, documentId, actorUserId, doc.title]
+  );
+
+  if (notificationResult.rows.length === 0) {
+    return false;
+  }
+
+  websocketService.emitNotificationCreated(doc.uploaded_by, {
+    id: notificationResult.rows[0].id,
+    type: 'payable_invoice_partially_paid',
+    document_id: documentId,
+    actor_id: actorUserId,
+    document_title: doc.title
+  });
+
+  if (!doc.email_notifications) {
+    return true;
+  }
+
+  const paidLabel = `${paidPercentage}%`;
+  const retainedLabel = `${retainedPercentage}%`;
+  const documentoUrl = `${serverConfig.frontendUrl}/documento/${documentId}`;
+
+  await sendEmail({
+    to: doc.creator_email,
+    subject: 'Factura pagada parcialmente',
+    html: buildDocuPrexEmailTemplate({
+      title: 'Factura pagada parcialmente',
+      message: `La factura "<span style="font-weight:500;color:#374151;">${doc.title}</span>" fue pagada parcialmente por ${doc.actor_name || 'Tesorería'}. Se pagó el <span style="font-weight:600;color:#374151;">${paidLabel}</span> y queda retenido el <span style="font-weight:600;color:#374151;">${retainedLabel}</span>.`,
+      buttonUrl: documentoUrl,
+      buttonText: 'Ver Documento'
+    }),
+    text: `Hola ${doc.creator_name || ''},\n\nLa factura "${doc.title}" fue pagada parcialmente por ${doc.actor_name || 'Tesorería'}. Se pagó el ${paidLabel} y queda retenido el ${retainedLabel}.\n\nVer documento: ${documentoUrl}\n\nEste es un correo automático, por favor no responder.`
   });
 
   return true;
@@ -962,6 +1482,7 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
     );
 
     const firmas = {};
+    let firmaControlAdministrador = null;
     let firmaNegociaciones = null;
     let firmaCausacion = null;
 
@@ -1024,6 +1545,12 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
         roles = Array.isArray(row.role_names) ? row.role_names : [row.role_names];
       } else if (row.role_name) {
         roles = [row.role_name];
+      }
+
+      if (roleMatches(roles, FV_CONTROL_ADMIN_ROLE_NAME, FV_CONTROL_ADMIN_ROLE_CODE)) {
+        if (!firmaControlAdministrador) {
+          firmaControlAdministrador = nombreFirmante;
+        }
       }
 
       // Verificar si tiene rol de Negociaciones
@@ -1090,6 +1617,9 @@ async function obtenerFirmasDocumento(documentId, templateData = null) {
     }
 
     // Agregar firmas especiales al objeto de firmas
+    if (firmaControlAdministrador) {
+      firmas['_CONTROL_ADMINISTRADOR'] = firmaControlAdministrador;
+    }
     if (firmaNegociaciones) {
       firmas['_NEGOCIACIONES'] = firmaNegociaciones;
     }
@@ -1195,6 +1725,7 @@ const resolvers = {
       const grupoCodigos = userGroups.rows.map(g => g.codigo);
       const csConstraint = await getCausacionSignerIdConstraint();
       const csPrevConstraint = await getCausacionSignerIdConstraint('s_prev', 'ds_prev');
+      const csActiveConstraint = await getCausacionSignerIdConstraint('s_active', 'ds_active');
 
       try {
       const result = await query(`
@@ -1266,6 +1797,30 @@ const resolvers = {
           )
         )
           AND d.status NOT IN ('completed', 'archived', 'rejected')
+          -- El documento solo debe aparecerle al firmante del turno activo actual.
+          AND ds.order_position = (
+            SELECT MIN(ds_active.order_position)
+            FROM document_signers ds_active
+            WHERE ds_active.document_id = d.id
+              AND NOT EXISTS (
+                SELECT 1
+                FROM signatures s_active
+                WHERE s_active.document_id = ds_active.document_id
+                  AND s_active.status IN ('signed', 'rejected')
+                  AND (
+                    (ds_active.is_causacion_group = false AND (
+                      s_active.signer_id = ds_active.user_id
+                      OR s_active.document_signer_id = ds_active.id
+                    ))
+                    OR
+                    (ds_active.is_causacion_group = true AND s_active.signer_id IN (
+                      SELECT ci.user_id FROM causacion_integrantes ci
+                      JOIN causacion_grupos cg ON ci.grupo_id = cg.id
+                      WHERE cg.codigo = ds_active.grupo_codigo AND ci.activo = true
+                    )${csActiveConstraint})
+                  )
+              )
+          )
           -- Solo mostrar si ya es su turno real de firma
           AND NOT EXISTS (
             SELECT 1
@@ -1754,55 +2309,113 @@ const resolvers = {
       return result.rows;
     },
 
-    verifyNegotiationSignerCedula: async (_, { name, lastFourDigits }, { user }) => {
+    verifyNegotiationSignerPassword: async (_, { name, password }, { user }) => {
       if (!user) throw new Error('No autenticado');
 
-      console.log('🔍 Verificando cédula para:', name);
-      console.log('🔢 Últimos 4 dígitos recibidos:', lastFourDigits, 'Tipo:', typeof lastFourDigits);
-      console.log('👤 Usuario:', user.name);
+      const signerName = String(name || '').trim();
+      const signerPassword = String(password || '');
+
+      if (!signerName) {
+        return {
+          valid: false,
+          message: 'Selecciona el integrante de Negociaciones'
+        };
+      }
+
+      if (!signerPassword) {
+        return {
+          valid: false,
+          message: 'Ingresa la contraseña del integrante seleccionado'
+        };
+      }
 
       const hasNegotiationSignersTable = await checkNegotiationSignersTableExists();
       if (!hasNegotiationSignersTable) {
         return {
           valid: false,
-          message: 'La validacion de Negociaciones no esta configurada en esta base de datos. Falta crear la tabla negotiation_signers y cargar las cedulas autorizadas.'
+          message: 'La validacion de Negociaciones no esta configurada en esta base de datos.'
         };
       }
 
-      // Buscar el firmante en la base de datos
-      const result = await query(`
-        SELECT cedula
+      const signerResult = await query(`
+        SELECT name
         FROM negotiation_signers
         WHERE name = $1 AND active = true
-      `, [name]);
+        LIMIT 1
+      `, [signerName]);
 
-      if (result.rows.length === 0) {
-        console.log('❌ Firmante no encontrado:', name);
+      if (signerResult.rows.length === 0) {
         return {
           valid: false,
-          message: 'Firmante no encontrado en la base de datos'
+          message: 'Firmante no encontrado o inactivo'
         };
       }
 
-      const fullCedula = result.rows[0].cedula;
-      const lastFour = fullCedula.slice(-4);
+      let candidateUser = null;
 
-      console.log('💳 Cédula completa en BD:', fullCedula);
-      console.log('🔢 Últimos 4 en BD:', lastFour);
-      console.log('🔢 Últimos 4 recibidos:', lastFourDigits);
-      console.log('✅ ¿Coinciden?', lastFour === lastFourDigits);
+      const usersResult = await query(`
+        SELECT id, name, email, ad_username
+        FROM users
+        WHERE is_active = true
+          AND (
+            LOWER(TRIM(name)) = LOWER(TRIM($1))
+            OR LOWER(TRIM(email)) = LOWER(TRIM($1))
+            OR LOWER(TRIM(ad_username)) = LOWER(TRIM($1))
+          )
+      `, [signerName]);
 
-      if (lastFour === lastFourDigits) {
-        console.log('✅ Verificación exitosa');
-        return {
-          valid: true,
-          message: 'Cédula verificada correctamente'
-        };
-      } else {
-        console.log('❌ No coinciden');
+      candidateUser = usersResult.rows.find(row => namesMatchLoose(row.name, signerName))
+        || usersResult.rows[0]
+        || null;
+
+      if (!candidateUser) {
+        const activeUsers = await query(`
+          SELECT id, name, email, ad_username
+          FROM users
+          WHERE is_active = true
+        `);
+
+        candidateUser = activeUsers.rows.find(row => namesMatchLoose(row.name, signerName)) || null;
+      }
+
+      let adUsername = candidateUser?.ad_username
+        || (candidateUser?.email ? String(candidateUser.email).split('@')[0] : null);
+
+      if (!adUsername) {
+        try {
+          const adUsers = await getAllUsers();
+          const adMatch = adUsers.find(adUser => namesMatchLoose(adUser.name, signerName));
+          adUsername = adMatch?.username || null;
+        } catch (adSearchError) {
+          console.error('Error buscando integrante de Negociaciones en AD:', adSearchError.message);
+        }
+      }
+
+      if (!adUsername) {
         return {
           valid: false,
-          message: 'Los últimos 4 dígitos no coinciden'
+          message: 'No se encontro el usuario de Directorio Activo para el integrante seleccionado'
+        };
+      }
+
+      try {
+        const ldapUser = await authenticateUser(adUsername, signerPassword);
+        if (!namesMatchLoose(ldapUser.name, signerName)) {
+          return {
+            valid: false,
+            message: 'La contraseña no corresponde al integrante seleccionado'
+          };
+        }
+
+        return {
+          valid: true,
+          message: 'Identidad verificada correctamente'
+        };
+      } catch (authError) {
+        console.error('Error autenticando integrante de Negociaciones:', authError.message);
+        return {
+          valid: false,
+          message: 'Contraseña incorrecta para el integrante seleccionado'
         };
       }
     },
@@ -2545,15 +3158,34 @@ const resolvers = {
       }
 
       const normalizedStatus = String(paymentStatus || '').trim().toLowerCase();
-      if (!['pending', 'paid'].includes(normalizedStatus)) {
+      if (!['pending', 'partial_paid', 'paid'].includes(normalizedStatus)) {
         throw new Error('Estado de pago inválido');
       }
 
+
+      const docRetentionResult = await query(
+        'SELECT retention_data FROM documents WHERE id = $1',
+        [documentId]
+      );
+      const retainedPercentage = getActiveRetentionPercentage(docRetentionResult.rows[0]?.retention_data);
+      const hasActiveRetentions = retainedPercentage > 0;
+
+      if (normalizedStatus === 'paid' && hasActiveRetentions) {
+        throw new Error('La factura tiene una retenci�n activa. Debe marcarse como pagada parcialmente.');
+      }
+
+      if (normalizedStatus === 'partial_paid' && !hasActiveRetentions) {
+        throw new Error('La factura no tiene retenciones activas para pago parcial.');
+      }
       const result = await query(
         `UPDATE payable_invoices
          SET payment_status = $1::varchar,
-             paid_at = CASE WHEN $1::varchar = 'paid' THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE NULL END,
-             paid_by = CASE WHEN $1::varchar = 'paid' THEN $4::uuid ELSE NULL END,
+             paid_at = CASE
+               WHEN $1::varchar = 'paid' THEN CURRENT_TIMESTAMP
+               WHEN $1::varchar = 'partial_paid' THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
+               ELSE NULL
+             END,
+             paid_by = CASE WHEN $1::varchar IN ('paid', 'partial_paid') THEN $4::uuid ELSE NULL END,
              updated_at = CURRENT_TIMESTAMP
          WHERE document_id = $2
            AND EXISTS (
@@ -2580,6 +3212,42 @@ const resolvers = {
           [documentId]
         )
         : { rows: [] };
+
+      const partialPaidNotificationResult = normalizedStatus === 'partial_paid'
+        ? await query(
+          `SELECT id
+           FROM notifications
+           WHERE document_id = $1
+             AND type = 'payable_invoice_partially_paid'
+           LIMIT 1`,
+          [documentId]
+        )
+        : { rows: [] };
+
+      if (normalizedStatus === 'partial_paid' && partialPaidNotificationResult.rows.length === 0) {
+        const paidPercentage = Math.max(0, Math.min(100, 100 - retainedPercentage));
+        let notificationCreated = false;
+        try {
+          notificationCreated = await notifyPayableInvoicePartiallyPaidCreator({
+            documentId,
+            actorUserId: user.id,
+            paidPercentage,
+            retainedPercentage
+          });
+        } catch (notifyError) {
+          console.error('Error notificando factura pagada parcialmente al creador:', notifyError);
+        }
+
+        if (notificationCreated) {
+          await query(
+            `UPDATE payable_invoices
+             SET creator_notified_at = COALESCE(creator_notified_at, CURRENT_TIMESTAMP)
+             WHERE document_id = $1
+               AND user_id = $2::uuid`,
+            [documentId, user.id]
+          );
+        }
+      }
 
       if (normalizedStatus === 'paid' && paidNotificationResult.rows.length === 0) {
         let notificationCreated = false;
@@ -2849,6 +3517,10 @@ const resolvers = {
       };
 
       userAssignments = mergeSignerAssignmentsByUser(userAssignments);
+      if (doc.document_type_code === 'FV') {
+        const controlAdminUser = await getFVControlAdminUser();
+        userAssignments = ensureFVControlAdminSignerAssignment(userAssignments, controlAdminUser);
+      }
       userIds = userAssignments.map(sa => sa.userId);
 
       for (const assignment of userAssignments) {
@@ -4031,7 +4703,7 @@ const resolvers = {
             s.rejected_at,
             s.rejection_reason,
             NULL as consecutivo,
-            signer_user.name as real_signer_name,
+            COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
             signer_user.email as signer_email,
             NULL as retention_percentage,
             NULL as retention_reason,
@@ -4087,7 +4759,8 @@ const resolvers = {
               ? (typeof docInfo.retention_data === 'string' ? JSON.parse(docInfo.retention_data) : docInfo.retention_data).filter(r => r.activa)
               : [];
 
-            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, {}, false, retentionData);
+            const assetData = await obtenerAssetDataDocumento(documentId);
+            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, {}, false, retentionData, assetData);
 
             const templatePdfPath = pdfPath.replace('.pdf', '_template.pdf');
             await fs.writeFile(templatePdfPath, templatePdfBuffer);
@@ -4116,18 +4789,8 @@ const resolvers = {
         }
 
         // Preparar información del documento para la portada
-        let cia = null;
-
-        if (docInfo.metadata && typeof docInfo.metadata === 'object') {
-          cia = docInfo.metadata.cia || null;
-        } else if (docInfo.metadata && typeof docInfo.metadata === 'string') {
-          try {
-            const parsedMetadata = JSON.parse(docInfo.metadata);
-            cia = parsedMetadata.cia || null;
-          } catch (e) {
-            console.warn('⚠️ No se pudo parsear metadata como JSON');
-          }
-        }
+        const parsedCoverMetadata = parseDocumentMetadata(docInfo.metadata);
+        const cia = parsedCoverMetadata?.cia || null;
 
         const sentAtResult3 = await query(
           `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
@@ -4135,10 +4798,12 @@ const resolvers = {
         );
 
         const documentInfo = {
+          documentId,
           title: docInfo.title,
           fileName: docInfo.file_name,
           createdAt: docInfo.created_at,
           sentAt: sentAtResult3.rows[0]?.sent_at || null,
+          receivedAt: docInfo.created_at,
           uploadedBy: docInfo.uploader_name || 'Sistema',
           documentTypeName: docInfo.document_type_name || null,
           cia: cia
@@ -4453,11 +5118,22 @@ const resolvers = {
             [docId]
           );
 
+          let firmaControlAdministrador = null;
+          let firmaNegociaciones = null;
+
           signersResult.rows.forEach(signer => {
             const nombreFirmante = signer.real_signer_name || signer.name;
             const roles = Array.isArray(signer.role_names) && signer.role_names.length > 0
               ? signer.role_names
               : [signer.role_name].filter(Boolean);
+
+            if (roleMatches(roles, FV_CONTROL_ADMIN_ROLE_NAME, FV_CONTROL_ADMIN_ROLE_CODE)) {
+              firmaControlAdministrador = firmaControlAdministrador || nombreFirmante;
+            }
+
+            if (roleMatches(roles, 'NEGOCIACION', 'RESPONSABLE_NEGOCIACIONES')) {
+              firmaNegociaciones = firmaNegociaciones || nombreFirmante;
+            }
 
             if (roleMatches(roles, 'CUENTA CONTABLE', 'RESP_CUENTA', 'RESPONSABLE_CUENTA')) {
               assignFirmaToControlRows('respCuentaContable', nombreFirmante);
@@ -4475,6 +5151,14 @@ const resolvers = {
               firmasMap[currentTemplateData.nombreNegociador] = nombreFirmante;
             }
           });
+
+          if (firmaControlAdministrador) {
+            firmasMap['_CONTROL_ADMINISTRADOR'] = firmaControlAdministrador;
+          }
+
+          if (firmaNegociaciones) {
+            firmasMap['_NEGOCIACIONES'] = firmaNegociaciones;
+          }
 
           return firmasMap;
         };
@@ -4542,6 +5226,7 @@ const resolvers = {
         const isCuentaContableRole = (roles = []) => roles.some(role => typeof role === 'string' && role.trim().toUpperCase().includes('CUENTA'));
 
         const signedNegociadorRow = signedSignerRows.find(row => isNegociadorRole(Array.isArray(row.role_names) ? row.role_names : [row.role_name]));
+        const signedControlAdminRow = signedSignerRows.find(row => hasFVControlAdminRole(Array.isArray(row.role_names) ? row.role_names : [row.role_name]));
         const signedNegociacionesRow = signedSignerRows.find(row => isNegociacionesRole(Array.isArray(row.role_names) ? row.role_names : [row.role_name]));
         const signedCausacionRow = signedSignerRows.find(row => row.is_causacion_group && row.grupo_codigo);
         const signedResponsableNames = new Set(
@@ -4557,6 +5242,7 @@ const resolvers = {
         const isFirmanteLocked = (firmante) => {
           if (!firmante) return false;
           if (firmante.signingStageKey === 'NEGOCIADOR' && signedNegociadorRow) return true;
+          if ((firmante.signingStageKey === FV_CONTROL_ADMIN_ROLE_CODE || hasFVControlAdminRole(getFirmanteRoleNames(firmante))) && signedControlAdminRow) return true;
           if (firmante.signingStageKey === 'NEGOCIACIONES' && signedNegociacionesRow) return true;
           if ((firmante.signingStageKey === 'CAUSACION' || firmante.grupoCodigo) && signedCausacionRow) {
             return !firmante.grupoCodigo || firmante.grupoCodigo === signedCausacionRow.grupo_codigo;
@@ -4587,7 +5273,8 @@ const resolvers = {
           mergedFirmantes.push(pendingFirmantesQueue.shift());
         }
 
-        parsedTemplateData.firmantes = mergedFirmantes;
+        const controlAdminUser = await getFVControlAdminUser((sql, params) => client.query(sql, params));
+        parsedTemplateData.firmantes = ensureFVControlAdminFirmante(mergedFirmantes, controlAdminUser);
 
         if (signedNegociadorRow) {
           parsedTemplateData.nombreNegociador = currentTemplateData.nombreNegociador;
@@ -4627,13 +5314,20 @@ const resolvers = {
           [parsedTemplateData, documentId]
         );
 
-        // Sincronizar observaciones de planilla a T_Facturas
+        // Sincronizar datos editables de planilla a T_Facturas
         if (doc.consecutivo) {
           await queryFacturas(
             `UPDATE crud_facturas."T_Facturas"
-             SET observaciones = $2
+             SET observaciones = $2,
+                 orden_compra = $3,
+                 nota_credito = COALESCE($4, nota_credito)
              WHERE numero_control = $1`,
-            [String(doc.consecutivo).trim(), parsedTemplateData.observaciones || null]
+            [
+              String(doc.consecutivo).trim(),
+              parsedTemplateData.observaciones || null,
+              parsedTemplateData.ordenCompra ? String(parsedTemplateData.ordenCompra).trim() : null,
+              typeof parsedTemplateData.notaCredito === 'boolean' ? parsedTemplateData.notaCredito : null
+            ]
           );
         }
 
@@ -4647,7 +5341,8 @@ const resolvers = {
 
         // Regenerar PDF con Puppeteer
         console.log('🔄 Regenerando PDF con nueva plantilla...');
-        const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, false, retentionData);
+        const assetData = await obtenerAssetDataDocumento(documentId, client);
+        const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, false, retentionData, assetData);
 
         // Guardar planilla en archivo temporal
         const fs = require('fs').promises;
@@ -4795,47 +5490,72 @@ const resolvers = {
           const allUsers = allUsersResult.rows;
           console.log(`📊 Total usuarios en BD: ${allUsers.length}`);
 
-          // Función de matching flexible - COPIADA EXACTAMENTE de Dashboard.jsx
+          // Función de matching flexible - evita falsos positivos por apellidos repetidos.
           const findUserByNameMatch = (fullName, usersList) => {
             if (!fullName || !usersList || usersList.length === 0) return null;
 
-            // Normalizar el nombre completo: uppercase y separar por palabras
-            const searchWords = fullName.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+            const normalize = (value) => String(value || '')
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .trim()
+              .replace(/\s+/g, ' ')
+              .toUpperCase();
+
+            const normalizedFullName = normalize(fullName);
+            const searchWords = Array.from(new Set(normalizedFullName.split(/\s+/).filter(w => w.length > 0)));
 
             console.log(`  🔎 Buscando: "${fullName}" → Words: [${searchWords.join(', ')}]`);
 
             if (searchWords.length === 0) return null;
 
-            // Buscar usuario que tenga coincidencia de al menos 2 palabras (nombre + apellido)
-            const matched = usersList.find(user => {
-              if (!user.name) return false;
+            const exactMatched = usersList.find(user => normalize(user.name) === normalizedFullName);
+            if (exactMatched) {
+              return exactMatched;
+            }
 
-              const userWords = user.name.trim().toUpperCase().split(/\s+/).filter(w => w.length > 0);
+            const scoredMatches = usersList.map(user => {
+              if (!user.name) return null;
 
-              if (userWords.length === 0) return false;
+              const userWords = normalize(user.name).split(/\s+/).filter(w => w.length > 0);
+              if (userWords.length === 0) return null;
 
-              // Contar cuántas palabras del nombre de búsqueda están en el nombre del usuario
-              let matchCount = 0;
-              searchWords.forEach(searchWord => {
-                if (userWords.some(userWord =>
+              const matchedSearchWords = searchWords.filter(searchWord =>
+                userWords.some(userWord =>
                   userWord === searchWord ||
                   userWord.startsWith(searchWord) ||
                   searchWord.startsWith(userWord)
-                )) {
-                  matchCount++;
-                }
-              });
+                )
+              );
+              const matchedUserWords = userWords.filter(userWord =>
+                searchWords.some(searchWord =>
+                  userWord === searchWord ||
+                  userWord.startsWith(searchWord) ||
+                  searchWord.startsWith(userWord)
+                )
+              );
 
-              const hasMatch = matchCount >= 2 || (userWords.length === 1 && matchCount >= 1);
+              const matchCount = matchedSearchWords.length;
+              const requiredMatches = Math.min(2, userWords.length);
+              if (matchCount < requiredMatches) return null;
 
-              if (hasMatch) {
-                console.log(`    ✅ MATCH: "${user.name}" (matchCount: ${matchCount}/${searchWords.length}, userWords: [${userWords.join(', ')}])`);
-              }
+              console.log(`    ✅ MATCH candidato: "${user.name}" (matchCount: ${matchCount}/${searchWords.length}, userWords: [${userWords.join(', ')}])`);
 
-              // Requerir al menos 2 coincidencias (nombre + apellido)
-              // O si el usuario tiene solo 1 palabra, que esa palabra coincida
-              return hasMatch;
-            });
+              return {
+                user,
+                matchCount,
+                userMatchCount: matchedUserWords.length,
+                coverage: matchCount / searchWords.length,
+                userCoverage: matchedUserWords.length / userWords.length
+              };
+            }).filter(Boolean);
+
+            const matched = scoredMatches
+              .sort((a, b) =>
+                b.userMatchCount - a.userMatchCount ||
+                b.matchCount - a.matchCount ||
+                b.userCoverage - a.userCoverage ||
+                b.coverage - a.coverage
+              )[0]?.user || null;
 
             if (!matched) {
               console.log(`    ❌ No se encontró match`);
@@ -5122,7 +5842,7 @@ const resolvers = {
             );
 
             // Crear notificación (solo para firmantes NUEVOS)
-            const shouldNotifyNewSigner = String(userId) !== String(user.id) && !notifiedNewSignerIds.has(String(userId));
+            const shouldNotifyNewSigner = false;
             const notifResult = shouldNotifyNewSigner ? await client.query(
               `INSERT INTO notifications (user_id, type, document_id, actor_id, document_title)
                SELECT $1, $2::varchar, $3, $4, $5::varchar
@@ -5416,7 +6136,8 @@ const resolvers = {
 
         // Regenerar la planilla con el estado final de firmas luego de actualizar firmantes/autofirma.
         const firmasActualizadas = await obtenerFirmasDocumentoTx(documentId, parsedTemplateData);
-        const pdfBufferFinal = await generateFacturaTemplatePDF(parsedTemplateData, firmasActualizadas, false, retentionData);
+        const assetDataFinal = await obtenerAssetDataDocumento(documentId, client);
+        const pdfBufferFinal = await generateFacturaTemplatePDF(parsedTemplateData, firmasActualizadas, false, retentionData, assetDataFinal);
         await fs.writeFile(tempPlanillaPath, pdfBufferFinal);
 
         const mergeResultFinal = await mergePDFs(filesToMerge, tempMergedPath);
@@ -5472,7 +6193,8 @@ const resolvers = {
           role_names: row.role_names,
           status: row.status,
           is_causacion_group: row.is_causacion_group,
-          grupo_codigo: row.grupo_codigo
+          grupo_codigo: row.grupo_codigo,
+          real_signer_name: row.real_signer_name
         }));
 
         // Preparar información del documento para la portada
@@ -5482,10 +6204,12 @@ const resolvers = {
         );
 
         const documentInfo = {
+          documentId,
           title: doc.title,
           fileName: doc.file_name,
           createdAt: doc.created_at,
           sentAt: sentAtResult4.rows[0]?.sent_at || null,
+          receivedAt: doc.created_at,
           uploadedBy: doc.uploader_name || user.name,
           documentTypeName: doc.document_type_name || 'Factura',
           cia: parsedTemplateData.cia || null
@@ -5894,7 +6618,7 @@ const resolvers = {
                 s.rejected_at,
                 s.rejection_reason,
                 NULL as consecutivo,
-                signer_user.name as real_signer_name,
+                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
                 signer_user.email as signer_email,
                 NULL as retention_percentage,
                 NULL as retention_reason,
@@ -5924,6 +6648,7 @@ const resolvers = {
 
             return {
               name: name,
+              user_id: row.user_id,
               email: row.signer_email || row.email,
               order_position: row.order_position,
               role_name: row.role_name,
@@ -5941,21 +6666,21 @@ const resolvers = {
               retained_at: row.retained_at
             };
           });
+          const signersWithRetentionState = annotateSignersWithRetentionState(signers, docInfo.retention_data);
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
           const sentAtResult = await query(
-            `SELECT COALESCE(
-              (SELECT MAX(signed_at) FROM signatures WHERE document_id = $1 AND status = 'signed'),
-              (SELECT MIN(created_at) FROM document_signers WHERE document_id = $1)
-            ) as sent_at`,
+            `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
             [documentId]
           );
 
           const documentInfo = {
+            documentId,
             title: docInfo.title,
             fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
             sentAt: sentAtResult.rows[0]?.sent_at || null,
+            receivedAt: docInfo.created_at,
             uploadedBy: docInfo.uploader_name || 'Sistema',
             documentTypeName: docInfo.document_type_name || null
           };
@@ -5969,7 +6694,7 @@ const resolvers = {
             console.log('⏭️ Documento tipo FV: Página de firmantes se actualizará después del merge');
           } else {
             // Para otros documentos, actualizar inmediatamente
-            await updateSignersPage(pdfPath, signers, documentInfo);
+            await updateSignersPage(pdfPath, signersWithRetentionState, documentInfo);
 
             // Agregar sello "RECHAZADO" en esquina superior izquierda
             try {
@@ -6072,11 +6797,22 @@ const resolvers = {
                 [documentId]
               );
 
+              let firmaControlAdministrador = null;
+              let firmaNegociaciones = null;
+
               signersResult.rows.forEach(signer => {
                 const nombreFirmante = signer.real_signer_name || signer.name;
                 const roles = Array.isArray(signer.role_names) && signer.role_names.length > 0
                   ? signer.role_names
                   : [signer.role_name].filter(Boolean);
+
+                if (roleMatches(roles, FV_CONTROL_ADMIN_ROLE_NAME, FV_CONTROL_ADMIN_ROLE_CODE)) {
+                  firmaControlAdministrador = firmaControlAdministrador || nombreFirmante;
+                }
+
+                if (roleMatches(roles, 'NEGOCIACION', 'RESPONSABLE_NEGOCIACIONES')) {
+                  firmaNegociaciones = firmaNegociaciones || nombreFirmante;
+                }
 
                 if (roleMatches(roles, 'CUENTA CONTABLE', 'RESP_CUENTA', 'RESPONSABLE_CUENTA')) {
                   assignFirmaToControlRows('respCuentaContable', nombreFirmante);
@@ -6095,6 +6831,14 @@ const resolvers = {
                 }
               });
 
+              if (firmaControlAdministrador) {
+                firmasMap['_CONTROL_ADMINISTRADOR'] = firmaControlAdministrador;
+              }
+
+              if (firmaNegociaciones) {
+                firmasMap['_NEGOCIACIONES'] = firmaNegociaciones;
+              }
+
               return firmasMap;
             };
 
@@ -6106,7 +6850,8 @@ const resolvers = {
               : [];
 
             // Regenerar PDF con marca de agua RECHAZADO
-            const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, true, retentionData);
+            const assetData = await obtenerAssetDataDocumento(documentId);
+            const pdfBuffer = await generateFacturaTemplatePDF(parsedTemplateData, firmasActuales, true, retentionData, assetData);
 
             // Guardar planilla en archivo temporal
             const fs = require('fs').promises;
@@ -6223,12 +6968,13 @@ const resolvers = {
      * @param {number} args.documentId - ID of the document
      * @param {string} args.signatureData - Base64 signature image data
      * @param {string} [args.consecutivo] - Optional consecutive/tracking number
+     * @param {string} [args.assetData] - JSON payload for FV Control Administrativo asset records
      * @param {Object} context - GraphQL context
      * @param {Object} context.user - Authenticated user (must be assigned signer)
      * @returns {Promise<Object>} Signature record
      * @throws {Error} When unauthorized, not in sequence (non-owner), or not assigned to document
      */
-    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentions, causacionData }, { user }) => {
+    signDocument: async (_, { documentId, signatureData, consecutivo, realSignerName, retentions, causacionData, assetData }, { user }) => {
       if (!user) throw new Error('No autenticado');
       const workflowUserIds = await getNegociacionesSharedUserIds(user, realSignerName);
       for (const workflowUserId of workflowUserIds) {
@@ -6386,6 +7132,8 @@ const resolvers = {
 
       const currentSignerRow = orderCheck.rows[0];
       const currentOrder = orderCheck.rows[0].order_position;
+      const isControlAdminSignature = hasFVControlAdminRole(getSignerRowRoleNames(currentSignerRow));
+      const isNegociacionesSignature = hasRoleContaining(currentSignerRow, 'NEGOCIACION');
 
       const docCausacionInfoResult = await query(
         `SELECT d.consecutivo, d.file_path, d.file_name,
@@ -6401,6 +7149,17 @@ const resolvers = {
       const requiresCausacionData = docCausacionInfo.document_type_code === 'FV'
         && (isCausacionGroupMember || (isCausacionTestMode && hasRoleContaining(currentSignerRow, 'CAUSACION')));
       let parsedCausacionData = null;
+      let parsedAssetData = null;
+
+      if (docCausacionInfo.document_type_code === 'FV' && isControlAdminSignature) {
+        parsedAssetData = parseFVAssetData(assetData);
+        if (!parsedAssetData) {
+          throw new Error('Debes indicar si esta factura pertenece a un activo antes de firmar');
+        }
+        if (parsedAssetData.belongsToAsset) {
+          await validateFVAssetCodesAvailable(documentId, parsedAssetData.records);
+        }
+      }
 
       if (requiresCausacionData) {
         try {
@@ -6415,9 +7174,6 @@ const resolvers = {
           throw new Error('Debes ingresar el No. de Causación antes de firmar');
         }
 
-        if (!parsedCausacionData?.observaciones || !String(parsedCausacionData.observaciones).trim()) {
-          throw new Error('Debes ingresar las observaciones de causación antes de firmar');
-        }
       }
 
       // EXCEPCIÓN: Si el usuario es el propietario del documento, puede firmar sin importar el orden
@@ -6485,7 +7241,9 @@ const resolvers = {
       }
 
       // Para grupos de causación, siempre guardar el nombre del firmante real
-      const effectiveRealSignerName = (isCausacionGroupMember || isCausacionTestSignature) ? user.name : (realSignerName || null);
+      const effectiveRealSignerName = (isCausacionGroupMember || isCausacionTestSignature || isNegociacionesSignature)
+        ? (realSignerName || user.name)
+        : (realSignerName || null);
 
       const hasDocumentSignerIdColumn = await checkSignaturesHasDocumentSignerIdColumn();
       const effectiveSignerUserId = isCausacionGroupMember ? user.id : (orderCheck.rows[0]?.user_id || user.id);
@@ -6661,9 +7419,45 @@ const resolvers = {
         throw new Error('Error al registrar la firma');
       }
 
+      if (parsedAssetData) {
+        await query(
+          `DELETE FROM invoice_asset_records
+           WHERE document_id = $1
+             AND created_by = $2
+             AND ($3::uuid IS NULL OR document_signer_id = $3)`,
+          [documentId, user.id, targetDocumentSignerId || null]
+        );
+
+        if (parsedAssetData.belongsToAsset) {
+          for (const assetRecord of parsedAssetData.records) {
+            await query(
+              `INSERT INTO invoice_asset_records (
+                 document_id,
+                 document_signer_id,
+                 signature_id,
+                 asset_type,
+                 codigo,
+                 nombre_activo,
+                 created_by
+               )
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [
+                documentId,
+                targetDocumentSignerId || null,
+                result.rows[0].id,
+                assetRecord.assetType,
+                assetRecord.codigo,
+                assetRecord.nombreActivo,
+                user.id
+              ]
+            );
+          }
+        }
+      }
+
       if (requiresCausacionData && docCausacionInfo.consecutivo) {
         const numeroCausacionValue = String(parsedCausacionData.numeroCausacion).trim();
-        const observacionesCausacionValue = String(parsedCausacionData.observaciones).trim();
+        const observacionesCausacionValue = String(parsedCausacionData.observaciones || '').trim();
         const fechaCausacionValue = new Date().toISOString().slice(0, 10);
 
         const causadoPorValue = effectiveRealSignerName || user.name;
@@ -6760,7 +7554,10 @@ const resolvers = {
             hasRoleContaining(row, 'NEGOCIACION') && !['signed', 'rejected'].includes(row.signature_status)
           );
 
-          if (negociacionesPendingRow) {
+          const negociacionesIsNextImmediateStep = negociacionesPendingRow
+            && Number(negociacionesPendingRow.order_position) === Number(currentOrder) + 1;
+
+          if (negociacionesPendingRow && negociacionesIsNextImmediateStep) {
             const autoTargetDocumentSignerId = negociacionesPendingRow.document_signer_id;
             const existingNegociacionesSignature = (hasDocumentSignerIdColumn && autoTargetDocumentSignerId)
               ? await query(
@@ -6855,6 +7652,8 @@ const resolvers = {
 
             autoSignedNegociacionesUserId = negociacionesUser.id;
             console.log(`Firma automatica de Negociaciones aplicada para ${user.name} en documento ${documentId}`);
+          } else if (negociacionesPendingRow) {
+            console.log(`Firma automatica de Negociaciones omitida: hay un firmante intermedio antes de Negociaciones en documento ${documentId}`);
           }
         }
       }
@@ -6976,7 +7775,8 @@ const resolvers = {
               : [];
 
             // Regenerar plantilla con firmas
-            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, retentionData);
+            const assetData = await obtenerAssetDataDocumento(documentId);
+            const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, retentionData, assetData);
 
             // Guardar en archivo temporal
             const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
@@ -7084,9 +7884,11 @@ const resolvers = {
             });
 
             const documentInfoForCover = {
+              documentId,
               title: docInfo.title || 'Factura',
               fileName: docInfo.file_name || '',
               createdAt: docInfo.created_at,
+              receivedAt: docInfo.created_at,
               uploadedBy: docInfo.uploader_name || 'Sistema',
               documentTypeName: docInfo.document_type_name || 'Factura'
             };
@@ -7475,7 +8277,7 @@ const resolvers = {
                 s.rejected_at,
                 s.rejection_reason,
                 NULL as consecutivo,
-                signer_user.name as real_signer_name,
+                COALESCE(s.real_signer_name, signer_user.name) as real_signer_name,
                 signer_user.email as signer_email,
                 NULL as retention_percentage,
                 NULL as retention_reason,
@@ -7505,6 +8307,7 @@ const resolvers = {
 
             return {
               name: name,
+              user_id: row.user_id,
               email: row.signer_email || row.email,
               order_position: row.order_position,
               role_name: row.role_name,
@@ -7522,26 +8325,26 @@ const resolvers = {
               retained_at: row.retained_at
             };
           });
+          const signersWithRetentionState = annotateSignersWithRetentionState(signers, docInfo.retention_data);
           const pdfPath = path.join(__dirname, '..', docInfo.file_path);
 
           const sentAtResult2 = await query(
-            `SELECT COALESCE(
-              (SELECT MAX(signed_at) FROM signatures WHERE document_id = $1 AND status = 'signed'),
-              (SELECT MIN(created_at) FROM document_signers WHERE document_id = $1)
-            ) as sent_at`,
+            `SELECT MIN(created_at) as sent_at FROM document_signers WHERE document_id = $1`,
             [documentId]
           );
 
           const documentInfo = {
+            documentId,
             title: docInfo.title,
             fileName: docInfo.file_name,
             createdAt: docInfo.created_at,
             sentAt: sentAtResult2.rows[0]?.sent_at || null,
+            receivedAt: docInfo.created_at,
             uploadedBy: docInfo.uploader_name || 'Sistema',
             documentTypeName: docInfo.document_type_name || null
           };
 
-          await updateSignersPage(pdfPath, signers, documentInfo);
+          await updateSignersPage(pdfPath, signersWithRetentionState, documentInfo);
 
 
           // Verificar si tiene retenciones activas (puede haberse perdido el sello al actualizar páginas)
@@ -7867,7 +8670,8 @@ const resolvers = {
                           console.log(`📦 ✅ Retenciones activas después de retener (${activeRetentions.length}):`, activeRetentions);
 
                           // Regenerar PDF con retenciones
-                          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
+                          const assetData = await obtenerAssetDataDocumento(documentId);
+                          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions, assetData);
 
                           // Guardar PDF en archivo temporal
                           const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
@@ -7959,6 +8763,7 @@ const resolvers = {
 
                               return {
                                 name: name,
+                                user_id: row.user_id,
                                 email: row.signer_email || row.email,
                                 order_position: row.order_position,
                                 role_name: row.role_name,
@@ -7973,10 +8778,11 @@ const resolvers = {
                                 real_signer_name: row.real_signer_name
                               };
                             });
+                            const signersWithRetentionState = annotateSignersWithRetentionState(signers, currentRetentions);
 
                             // Obtener información del documento para la portada
                             const docInfoForCover = await query(
-                              `SELECT d.title, d.file_name, d.created_at, u.name as uploader_name, dt.name as document_type_name
+                              `SELECT d.title, d.file_name, d.created_at, d.metadata, u.name as uploader_name, dt.name as document_type_name
                               FROM documents d
                               LEFT JOIN users u ON d.uploaded_by = u.id
                               LEFT JOIN document_types dt ON d.document_type_id = dt.id
@@ -7986,14 +8792,16 @@ const resolvers = {
                             const docData = docInfoForCover.rows[0];
 
                             const documentInfoForCover = {
+                              documentId,
                               title: docData.title || 'Factura',
                               fileName: docData.file_name || '',
                               createdAt: docData.created_at,
+                              receivedAt: docData.created_at,
                               uploadedBy: docData.uploader_name || 'Sistema',
                               documentTypeName: docData.document_type_name || 'Factura'
                             };
 
-                            await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
+                            await addCoverPageWithSigners(tempMergedPath, signersWithRetentionState, documentInfoForCover);
                             console.log(`✅ Informe de firmantes agregado`);
 
                             // Copiar merged PDF sobre el PDF actual
@@ -8340,7 +9148,8 @@ const resolvers = {
           const activeRetentions = currentRetentions.filter(r => r.activa);
 
           // Regenerar plantilla
-          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
+          const assetData = await obtenerAssetDataDocumento(documentId);
+          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions, assetData);
 
           const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
           await fs.mkdir(tempDir, { recursive: true });
@@ -8402,6 +9211,7 @@ const resolvers = {
 
           const signers = signersResult.rows.map(row => ({
             name: row.is_causacion_group ? (row.grupo_nombre || row.grupo_codigo || 'Grupo de Causación') : (row.user_name || 'Sin nombre'),
+            user_id: row.user_id,
             email: row.signer_email || row.email,
             order_position: row.order_position,
             role_name: row.role_name,
@@ -8415,16 +9225,19 @@ const resolvers = {
             grupo_codigo: row.grupo_codigo,
             real_signer_name: row.real_signer_name
           }));
+          const signersWithRetentionState = annotateSignersWithRetentionState(signers, currentRetentions);
 
           const documentInfoForCover = {
+            documentId,
             title: docInfo.title || 'Factura',
             fileName: docInfo.file_name || '',
             createdAt: docInfo.created_at,
+            receivedAt: docInfo.created_at,
             uploadedBy: docInfo.uploader_name || 'Sistema',
             documentTypeName: docInfo.document_type_name || 'Factura'
           };
 
-          await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
+          await addCoverPageWithSigners(tempMergedPath, signersWithRetentionState, documentInfoForCover);
           await fs.copyFile(tempMergedPath, currentPdfPath);
 
           // Agregar sello RETENIDO
@@ -8522,6 +9335,9 @@ const resolvers = {
         console.log('✅ [RELEASE] Retención encontrada en índice:', retentionIndex);
 
         currentRetentions[retentionIndex].activa = false;
+        currentRetentions[retentionIndex].fechaLiberacion = new Date().toISOString();
+        currentRetentions[retentionIndex].liberadoPor = user.name;
+        currentRetentions[retentionIndex].liberadoPorId = user.id;
 
         await client.query(
           'UPDATE documents SET retention_data = $1 WHERE id = $2',
@@ -8544,7 +9360,8 @@ const resolvers = {
           const activeRetentions = currentRetentions.filter(r => r.activa);
 
           // Regenerar plantilla
-          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions);
+          const assetData = await obtenerAssetDataDocumento(documentId);
+          const templatePdfBuffer = await generateFacturaTemplatePDF(templateData, firmasActuales, false, activeRetentions, assetData);
 
           const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
           await fs.mkdir(tempDir, { recursive: true });
@@ -8625,16 +9442,19 @@ const resolvers = {
             grupo_codigo: row.grupo_codigo,
             real_signer_name: row.real_signer_name
           }));
+          const signersWithRetentionState = annotateSignersWithRetentionState(signers, currentRetentions);
 
           const documentInfoForCover = {
+            documentId,
             title: docInfo.title || 'Factura',
             fileName: docInfo.file_name || '',
             createdAt: docInfo.created_at,
+            receivedAt: docInfo.created_at,
             uploadedBy: docInfo.uploader_name || 'Sistema',
             documentTypeName: docInfo.document_type_name || 'Factura'
           };
 
-          await addCoverPageWithSigners(tempMergedPath, signers, documentInfoForCover);
+          await addCoverPageWithSigners(tempMergedPath, signersWithRetentionState, documentInfoForCover);
           await fs.copyFile(tempMergedPath, currentPdfPath);
 
           // Aplicar sello correcto según retenciones activas
@@ -8673,6 +9493,14 @@ const resolvers = {
         // para eliminar backups (esto no debe bloquear la liberación)
         checkAndCleanupBackupsIfComplete(documentId).catch(err => {
           console.error('⚠️ Error al verificar cleanup de backups:', err);
+        });
+
+        notifyTreasuryInvoiceReleased({
+          documentId,
+          actorUserId: user.id,
+          releasedRetention: currentRetentions[retentionIndex]
+        }).catch(err => {
+          console.error('Error notificando liberacion de factura a Tesoreria:', err);
         });
 
         return true;
@@ -9248,3 +10076,4 @@ const resolvers = {
 };
 
 module.exports = resolvers;
+

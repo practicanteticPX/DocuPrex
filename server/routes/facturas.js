@@ -7,10 +7,47 @@ const { queryCuentas } = require('../database/cuentas-db');
 const { query } = require('../database/db');
 const { getUserUploadDir, normalizeFileName } = require('../utils/fileUpload');
 const websocketService = require('../services/websocket');
-const { notificarFacturaCorregida } = require('../services/emailService');
+const { notificarFacturaCorregida, sendEmail, buildDocuPrexEmailTemplate } = require('../services/emailService');
+const serverConfig = require('../config/server');
 const { updateSignersPage } = require('../utils/pdfCoverPage');
 
 const DOCUPREX_INGEST_TOKEN = process.env.DOCUPREX_INGEST_TOKEN || '';
+
+function parseDocumentMetadata(metadata) {
+  if (!metadata) return null;
+  if (typeof metadata === 'object') return metadata;
+
+  try {
+    return JSON.parse(metadata);
+  } catch (error) {
+    return null;
+  }
+}
+
+function getFacturaReceivedAt(metadata) {
+  const parsedMetadata = parseDocumentMetadata(metadata);
+  return parsedMetadata?.fechaRecepcion
+    || parsedMetadata?.fecha_entrega
+    || parsedMetadata?.fechaEntrega
+    || null;
+}
+
+function parseBooleanOption(value) {
+  if (typeof value === 'boolean') return value;
+  if (value === null || value === undefined || value === '') return false;
+
+  const normalized = String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+  return ['si', 's', 'true', '1', 'yes', 'y'].includes(normalized);
+}
+
+function hasBooleanOptionPayload(value) {
+  return value !== null && value !== undefined && value !== '';
+}
 
 /**
  * GET /api/facturas/cuentas-contables
@@ -67,6 +104,31 @@ router.get('/cuentas-contables', async (req, res) => {
  */
 router.get('/centros-costos', async (req, res) => {
   try {
+    const cia = String(req.query.cia || '').trim().toUpperCase();
+    let ciaColumn = null;
+
+    if (cia) {
+      const columnsResult = await queryCuentas(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'v_centros_costos'
+           AND column_name IN ('Cia', 'cia', 'CIA')`,
+        []
+      );
+
+      ciaColumn = columnsResult.rows[0]?.column_name || null;
+    }
+
+    const params = [];
+    const ciaFilter = cia && ciaColumn
+      ? ` AND UPPER(TRIM("${ciaColumn}")) = $1`
+      : '';
+
+    if (ciaFilter) {
+      params.push(cia);
+    }
+
     const result = await queryCuentas(
       `SELECT
         "CCN4" as codigo,
@@ -75,12 +137,13 @@ router.get('/centros-costos', async (req, res) => {
        FROM public.v_centros_costos
        WHERE "activoCCN4" = true
          AND "nombreResponsable" IS NOT NULL
+         ${ciaFilter}
        ORDER BY "CCN4" ASC`,
-      []
+      params
     );
 
     const rows = [...result.rows];
-    if (!rows.some(row => row.codigo === 'PX-JB-PRUEBA')) {
+    if ((!cia || cia === 'PX') && !rows.some(row => row.codigo === 'PX-JB-PRUEBA')) {
       rows.push({
         codigo: 'PX-JB-PRUEBA',
         nombre: 'CENTRO DE COSTOS PRUEBA JESUS BUSTAMANTE',
@@ -155,7 +218,7 @@ router.get('/negociadores', async (req, res) => {
 
 /**
  * GET /api/facturas/validar-responsable/:nombre
- * Valida el nombre del responsable en T_Personas (SERV_QPREX.crud_facturas) y obtiene su cargo
+ * Valida el nombre del responsable en v_info_basica_personal_activos y obtiene su cargo
  */
 router.get('/validar-responsable/:nombre', async (req, res) => {
   try {
@@ -169,12 +232,12 @@ router.get('/validar-responsable/:nombre', async (req, res) => {
       });
     }
 
-    const result = await queryFacturas(
+    const result = await queryCuentas(
       `SELECT
-        "nombre" as nombre,
+        "nombres" as nombre,
         "cargo" as cargo
-       FROM crud_facturas."T_Personas"
-       WHERE UPPER(TRIM("nombre")) = UPPER(TRIM($1))
+       FROM public.v_info_basica_personal_activos
+       WHERE UPPER(TRIM("nombres")) = UPPER(TRIM($1))
        LIMIT 1`,
       [nombre]
     );
@@ -192,7 +255,7 @@ router.get('/validar-responsable/:nombre', async (req, res) => {
 
       return res.status(404).json({
         success: false,
-        message: 'No se encontró información del responsable en T_Personas'
+        message: 'No se encontró información del responsable en v_info_basica_personal_activos'
       });
     }
 
@@ -232,6 +295,8 @@ router.get('/search/:numeroControl', async (req, res) => {
         cia,
         proveedor,
         numero_factura,
+        orden_compra,
+        nota_credito,
         fecha_factura,
         fecha_entrega,
         en_proceso,
@@ -270,6 +335,8 @@ router.get('/search/:numeroControl', async (req, res) => {
       cia: facturaData.cia,
       proveedor: facturaData.proveedor,
       numero_factura: facturaData.numero_factura,
+      orden_compra: facturaData.orden_compra,
+      nota_credito: facturaData.nota_credito,
       fecha_factura: facturaData.fecha_factura,
       fecha_entrega: facturaData.fecha_entrega
     };
@@ -569,7 +636,7 @@ router.post('/marcar-corregida/:numeroControl', async (req, res) => {
           // Regenerar página de firmantes para quitar la marca de agua "RECHAZADO"
           try {
             const docFileResult = await query(
-              `SELECT d.file_path, d.file_name, d.title, d.created_at, d.uploaded_by, d.document_type_id,
+              `SELECT d.file_path, d.file_name, d.title, d.created_at, d.uploaded_by, d.document_type_id, d.metadata,
                       u.name as uploader_name,
                       dt.name as document_type_name
                FROM documents d
@@ -626,9 +693,11 @@ router.post('/marcar-corregida/:numeroControl', async (req, res) => {
               }));
 
               const documentInfo = {
+                documentId,
                 title: docFile.title,
                 fileName: docFile.file_name,
                 createdAt: docFile.created_at,
+                receivedAt: docFile.created_at,
                 uploadedBy: docFile.uploader_name,
                 documentTypeName: docFile.document_type_name
               };
@@ -808,6 +877,9 @@ router.post('/ingest-from-facturacion', async (req, res) => {
       cia,
       proveedor,
       numeroFactura,
+      ordenCompra,
+      notaCredito,
+      nota_credito,
       fechaFactura,
       fechaEntrega,
       entregadaA,
@@ -825,7 +897,7 @@ router.post('/ingest-from-facturacion', async (req, res) => {
     }
 
     const userResult = await query(
-      `SELECT id, name, email
+      `SELECT id, name, email, email_notifications
        FROM users
        WHERE LOWER(email) = LOWER($1)
        LIMIT 1`,
@@ -875,6 +947,11 @@ router.post('/ingest-from-facturacion', async (req, res) => {
       });
     }
 
+    const hasNotaCreditoPayload = hasBooleanOptionPayload(notaCredito) || hasBooleanOptionPayload(nota_credito);
+    const notaCreditoValue = hasNotaCreditoPayload
+      ? parseBooleanOption(notaCredito ?? nota_credito)
+      : null;
+
     const templateData = {
       source: 'facturacion',
       ingestionSource: 'facturacion',
@@ -882,6 +959,8 @@ router.post('/ingest-from-facturacion', async (req, res) => {
       cia: cia || '',
       proveedor: proveedor || '',
       numeroFactura: numeroFactura || '',
+      ordenCompra: ordenCompra || '',
+      notaCredito: notaCreditoValue ?? false,
       fechaFactura: fechaFactura || '',
       fechaRecepcion: fechaEntrega || '',
       legalizaAnticipo: false,
@@ -914,6 +993,18 @@ router.post('/ingest-from-facturacion', async (req, res) => {
       totalPorcentaje: 0,
       firmantes: []
     };
+
+    await queryFacturas(
+      `UPDATE crud_facturas."T_Facturas"
+       SET orden_compra = COALESCE($2, orden_compra),
+           nota_credito = COALESCE($3, nota_credito)
+       WHERE numero_control = $1`,
+      [
+        String(numeroControl).trim(),
+        ordenCompra ? String(ordenCompra).trim() : null,
+        notaCreditoValue
+      ]
+    );
 
     const targetDir = getUserUploadDir(targetUser.name);
     const safeOriginalName = normalizeFileName(originalFileName || `factura_${numeroControl}.pdf`);
@@ -1005,6 +1096,25 @@ router.post('/ingest-from-facturacion', async (req, res) => {
         document_title: insertResult.rows[0].title,
         actor: null
       });
+    }
+
+    if (targetUser.email_notifications) {
+      try {
+        const documentoUrl = `${serverConfig.frontendUrl}/documento/${insertResult.rows[0].id}`;
+        await sendEmail({
+          to: targetUser.email,
+          subject: 'Factura inscrita en DocuPrex',
+          html: buildDocuPrexEmailTemplate({
+            title: 'Factura inscrita en DocuPrex',
+            message: `Te inscribieron la factura "<span style="font-weight:500;color:#374151;">${insertResult.rows[0].title}</span>" desde Recepción de Facturas.`,
+            buttonUrl: documentoUrl,
+            buttonText: 'Ver Factura'
+          }),
+          text: `Hola ${targetUser.name || ''},\n\nTe inscribieron la factura "${insertResult.rows[0].title}" desde Recepción de Facturas.\n\nVer factura: ${documentoUrl}\n\nEste es un correo automático, por favor no responder.`
+        });
+      } catch (emailError) {
+        console.error('Error enviando correo de factura inscrita:', emailError);
+      }
     }
 
     websocketService.emitDocumentUpdated(insertResult.rows[0].id, 'created', {

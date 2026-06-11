@@ -43,6 +43,7 @@ function generateFacturaHTML(data) {
     proveedor = '',
     fechaFactura = '',
     fechaRecepcion = '',
+    ordenCompra = '',
     legalizaAnticipo = false,
     checklistRevision = {},
     nombreNegociador = '',
@@ -55,6 +56,7 @@ function generateFacturaHTML(data) {
     fechaCausacion = '',
     firmas = {}, // Objeto con las firmas: { 'nombre_persona': 'nombre_firmante' }
     retentionData = [], // Array con las retenciones activas del documento
+    assetData = null, // { belongsToAsset: true|false|null }
     isRejected = false // Si el documento fue rechazado
   } = data;
 
@@ -75,6 +77,12 @@ function generateFacturaHTML(data) {
 
   // Usar checklistRevision si existe, si no usar condiciones (compatibilidad)
   const condiciones = data.condiciones || checklistRevision || {};
+  const facturaAfectada = condiciones.facturaAfectada === 'Si';
+  const tipoAfectacionLabel = condiciones.tipoAfectacion === 'nota_credito'
+    ? 'Nota Crédito'
+    : condiciones.tipoAfectacion === 'descuento'
+      ? 'Descuento'
+      : '';
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -293,7 +301,7 @@ function generateFacturaHTML(data) {
 
     .factura-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: 10px;
     }
 
@@ -306,6 +314,12 @@ function generateFacturaHTML(data) {
     .factura-grid-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .factura-grid-4 {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) max-content minmax(0, 1fr) minmax(0, 1fr);
       gap: 10px;
     }
 
@@ -408,6 +422,43 @@ function generateFacturaHTML(data) {
       color: #374151;
     }
 
+    .factura-activo-box {
+      padding: 5px 8px;
+      border: 1px solid #D1D5DB;
+      border-radius: 4px;
+      background: #FFFFFF;
+      min-height: 32px;
+      height: 32px;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: auto;
+      align-self: flex-start;
+    }
+
+    .factura-activo-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #374151;
+      white-space: nowrap;
+    }
+
+    .factura-activo-option .custom-checkbox {
+      width: 14px;
+      height: 14px;
+      border-width: 1.5px;
+    }
+
+    .factura-activo-option .custom-checkbox.checked::after {
+      width: 3px;
+      height: 7px;
+      border-width: 0 1.5px 1.5px 0;
+    }
+
     .factura-checklist-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -440,6 +491,38 @@ function generateFacturaHTML(data) {
       font-weight: 500;
       color: #374151;
       line-height: 1.3;
+    }
+
+    .factura-afectacion-box {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border: 1px solid #E5E7EB;
+      border-radius: 6px;
+      background: #FAFBFC;
+    }
+
+    .factura-afectacion-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .factura-afectacion-field label {
+      display: block;
+      font-size: 8px;
+      font-weight: 600;
+      color: #4B5563;
+      margin-bottom: 3px;
+    }
+
+    .factura-afectacion-value {
+      min-height: 18px;
+      padding: 4px 6px;
+      border: 1px solid #D1D5DB;
+      border-radius: 4px;
+      background: #FFFFFF;
+      font-size: 9px;
+      color: #111827;
     }
 
     .factura-table-wrapper {
@@ -585,6 +668,12 @@ function generateFacturaHTML(data) {
           <label class="factura-label">Proveedor</label>
           <input type="text" value="${proveedor}" class="ui-input" readonly title="${proveedor}" />
         </div>
+        ${ordenCompra ? `
+          <div class="factura-field">
+            <label class="factura-label"># Orden de Compra</label>
+            <input type="text" value="${ordenCompra}" class="ui-input" readonly title="${ordenCompra}" />
+          </div>
+        ` : ''}
         <div class="factura-field">
           <label class="factura-label"># Factura</label>
           <input type="text" value="${numeroFactura}" class="ui-input" readonly />
@@ -653,6 +742,30 @@ function generateFacturaHTML(data) {
           </div>
         </div>
       </div>
+      <div class="factura-afectacion-box">
+        <div class="factura-afectacion-grid">
+          <div class="factura-afectacion-field">
+            <label>¿La factura será afectada?</label>
+            <div class="factura-afectacion-value">${facturaAfectada ? 'Sí' : 'No'}</div>
+          </div>
+          ${facturaAfectada ? `
+            <div class="factura-afectacion-field">
+              <label>Tipo de Afectación</label>
+              <div class="factura-afectacion-value">${tipoAfectacionLabel}</div>
+            </div>
+            <div class="factura-afectacion-field">
+              <label>% Afectación</label>
+              <div class="factura-afectacion-value">${condiciones.porcentajeAfectacion || ''}</div>
+            </div>
+            ${condiciones.tipoAfectacion === 'nota_credito' ? `
+              <div class="factura-afectacion-field">
+                <label># NC</label>
+                <div class="factura-afectacion-value">${condiciones.numeroNotaCredito || ''}</div>
+              </div>
+            ` : ''}
+          ` : ''}
+        </div>
+      </div>
     </div>
 
     <!-- Información del Negociador -->
@@ -676,7 +789,24 @@ function generateFacturaHTML(data) {
 
     <!-- Firmas de Negociaciones y Causación -->
     <div class="factura-section">
-      <div class="factura-grid-2">
+      <div class="factura-grid-4">
+        <div class="factura-field">
+          <label class="factura-label">Firma Control Administrativo</label>
+          <div class="ui-input-firma">${firmas['_CONTROL_ADMINISTRADOR'] || ''}</div>
+        </div>
+        <div class="factura-field">
+          <label class="factura-label">Activo Fijo</label>
+          <div class="factura-activo-box">
+            <span class="factura-activo-option">
+              <span class="custom-checkbox ${assetData?.belongsToAsset === true ? 'checked' : ''}"></span>
+              <span>Si</span>
+            </span>
+            <span class="factura-activo-option">
+              <span class="custom-checkbox ${assetData?.belongsToAsset === false ? 'checked' : ''}"></span>
+              <span>No</span>
+            </span>
+          </div>
+        </div>
         <div class="factura-field">
           <label class="factura-label">Firma Negociaciones</label>
           <div class="ui-input-firma">${firmas['_NEGOCIACIONES'] || ''}</div>

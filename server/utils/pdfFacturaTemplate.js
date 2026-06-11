@@ -51,9 +51,10 @@ function normalizeChecklistRevision(checklistRevision = {}) {
  * @param {Object} firmas - Objeto con firmas: { 'nombre_persona': 'nombre_firmante' }
  * @param {boolean} isRejected - Si el documento fue rechazado (muestra marca de agua)
  * @param {Array} retentionData - Array con las retenciones activas del documento
+ * @param {Object|null} assetData - Estado de activo declarado por Control Administrativo
  * @returns {Promise<Buffer>} PDF generado con el template
  */
-async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected = false, retentionData = []) {
+async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected = false, retentionData = [], assetData = null) {
   let browser = null;
   let page = null;
   const operationId = `pdf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -66,6 +67,7 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
       proveedor: templateData.proveedor || '',
       fechaFactura: templateData.fechaFactura || '',
       fechaRecepcion: templateData.fechaRecepcion || '',
+      ordenCompra: templateData.ordenCompra || '',
       legalizaAnticipo: templateData.legalizaAnticipo || false,
       checklistRevision: normalizeChecklistRevision(templateData.checklistRevision || {}),
       nombreNegociador: templateData.nombreNegociador || '',
@@ -78,6 +80,7 @@ async function generateFacturaTemplatePDF(templateData, firmas = {}, isRejected 
       fechaCausacion: templateData.fechaCausacion ? formatDateForDisplay(templateData.fechaCausacion) : '',
       firmas: firmas,
       retentionData: retentionData,
+      assetData: assetData,
       isRejected: isRejected
     });
 

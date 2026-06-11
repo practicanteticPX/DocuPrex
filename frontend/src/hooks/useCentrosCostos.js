@@ -5,7 +5,7 @@ import { BACKEND_HOST } from '../config/api';
  * Hook para cargar y gestionar centros de costos
  * Consulta la tabla T_CentrosCostos desde SERV_QPREX
  */
-export const useCentrosCostos = () => {
+export const useCentrosCostos = (cia = '') => {
   const [centros, setCentros] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -16,7 +16,9 @@ export const useCentrosCostos = () => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${BACKEND_HOST}/api/facturas/centros-costos`);
+        const ciaParam = String(cia || '').trim();
+        const queryString = ciaParam ? `?cia=${encodeURIComponent(ciaParam)}` : '';
+        const response = await fetch(`${BACKEND_HOST}/api/facturas/centros-costos${queryString}`);
         const result = await response.json();
 
         if (!result.success) {
@@ -34,7 +36,7 @@ export const useCentrosCostos = () => {
     };
 
     fetchCentrosCostos();
-  }, []);
+  }, [cia]);
 
   const getCentroData = (codigo) => {
     return centros.find(c => c.codigo === codigo) || null;

@@ -205,7 +205,7 @@ const typeDefs = gql`
     active: Boolean!
   }
 
-  type VerifyCedulaResponse {
+  type VerifyNegotiationSignerResponse {
     valid: Boolean!
     message: String
   }
@@ -280,7 +280,7 @@ const typeDefs = gql`
 
     # Firmantes de Negociaciones
     negotiationSigners: [NegotiationSigner!]!
-    verifyNegotiationSignerCedula(name: String!, lastFourDigits: String!): VerifyCedulaResponse!
+    verifyNegotiationSignerPassword(name: String!, password: String!): VerifyNegotiationSignerResponse!
 
     # Grupos de Causación
     causacionGrupos: [CausacionGrupo!]!
@@ -313,7 +313,7 @@ const typeDefs = gql`
     updateTreasuryAdvancePaymentStatus(documentId: ID!, paymentStatus: String!): Document!
 
     # Firmas
-    signDocument(documentId: ID!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String, causacionData: String): Signature!
+    signDocument(documentId: ID!, signatureData: String!, consecutivo: String, realSignerName: String, retentions: String, causacionData: String, assetData: String): Signature!
     rejectDocument(documentId: ID!, reason: String, realSignerName: String): Boolean!
 
     # Retenciones

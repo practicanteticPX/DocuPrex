@@ -12,23 +12,21 @@ const GET_NEGOTIATION_SIGNERS = `
   }
 `;
 
-const VERIFY_CEDULA = `
-  query VerifyNegotiationSignerCedula($name: String!, $lastFourDigits: String!) {
-    verifyNegotiationSignerCedula(name: $name, lastFourDigits: $lastFourDigits) {
+const VERIFY_PASSWORD = `
+  query VerifyNegotiationSignerPassword($name: String!, $password: String!) {
+    verifyNegotiationSignerPassword(name: $name, password: $password) {
       valid
       message
     }
   }
 `;
 
-/**
- * Modal para que el usuario "Negociaciones" seleccione quién es la persona real que está firmando
- */
 function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
   const [selectedSigner, setSelectedSigner] = useState('');
-  const [cedulaDigits, setCedulaDigits] = useState(['', '', '', '']);
+  const [password, setPassword] = useState('');
+  const [passwordInputReady, setPasswordInputReady] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState(1); // 1: seleccionar firmante, 2: ingresar cédula
+  const [step, setStep] = useState(1); // 1: seleccionar firmante, 2: autenticar con AD
   const [loading, setLoading] = useState(false);
   const [availableSigners, setAvailableSigners] = useState([]);
   const [loadingSigners, setLoadingSigners] = useState(false);
@@ -74,7 +72,7 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
 
   const handleSelectSigner = () => {
     if (!selectedSigner) {
-      setError('Por favor selecciona quién está firmando');
+      setError('Por favor selecciona quien esta firmando');
       return;
     }
     setError('');
@@ -82,34 +80,27 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
   };
 
   const handleConfirm = async () => {
-    const digits = cedulaDigits.join('');
-    console.log('🔍 Frontend - Dígitos array:', cedulaDigits);
-    console.log('🔍 Frontend - Dígitos unidos:', digits);
-    console.log('🔍 Frontend - Nombre:', selectedSigner);
-
-    if (!digits || digits.length !== 4) {
-      setError('Por favor ingresa los 4 dígitos de la cédula');
+    if (!password) {
+      setError('Por favor ingresa la contraseña del integrante seleccionado');
       return;
     }
 
     try {
       setLoading(true);
-      console.log('📤 Enviando query con:', { name: selectedSigner, lastFourDigits: digits });
-      const data = await graphqlClient.query(VERIFY_CEDULA, {
+      const data = await graphqlClient.query(VERIFY_PASSWORD, {
         name: selectedSigner,
-        lastFourDigits: digits
+        password
       });
-      console.log('📥 Respuesta recibida:', data);
 
-      if (data.verifyNegotiationSignerCedula.valid) {
+      if (data.verifyNegotiationSignerPassword.valid) {
         onConfirm(selectedSigner);
         handleClose();
       } else {
-        setError(data.verifyNegotiationSignerCedula.message || 'Los últimos 4 dígitos no coinciden');
+        setError(data.verifyNegotiationSignerPassword.message || 'No se pudo verificar la identidad');
       }
     } catch (err) {
-      setError('Error al verificar la cédula');
-      console.error('Error verificando cédula:', err);
+      setError('Error al verificar la contraseña');
+      console.error('Error verificando contraseña:', err);
     } finally {
       setLoading(false);
     }
@@ -117,42 +108,19 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
 
   const handleBack = () => {
     setStep(1);
-    setCedulaDigits(['', '', '', '']);
+    setPassword('');
+    setPasswordInputReady(false);
     setError('');
   };
 
   const handleClose = () => {
     setSelectedSigner('');
-    setCedulaDigits(['', '', '', '']);
+    setPassword('');
+    setPasswordInputReady(false);
     setError('');
     setStep(1);
     onClose();
   };
-
-  const handleDigitChange = (index, value) => {
-    // Solo permitir números
-    if (value && !/^\d$/.test(value)) return;
-
-    const newDigits = [...cedulaDigits];
-    newDigits[index] = value;
-    setCedulaDigits(newDigits);
-    setError('');
-
-    // Auto-focus al siguiente input si se ingresó un dígito
-    if (value && index < 3) {
-      const nextInput = document.getElementById(`digit-${index + 1}`);
-      if (nextInput) nextInput.focus();
-    }
-  };
-
-  const handleDigitKeyDown = (index, e) => {
-    // Permitir retroceso al input anterior
-    if (e.key === 'Backspace' && !cedulaDigits[index] && index > 0) {
-      const prevInput = document.getElementById(`digit-${index - 1}`);
-      if (prevInput) prevInput.focus();
-    }
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -162,16 +130,16 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
           <div className="real-signer-header-content">
             {step === 1 ? (
               <>
-                <h2>¿Quién {action === 'firmar' ? 'firma' : 'rechaza'} este documento?</h2>
+                <h2>Quien {action === 'firmar' ? 'firma' : 'rechaza'} este documento?</h2>
                 <p className="real-signer-instruction">
-                  Selecciona el nombre de la persona que está realizando esta acción
+                  Selecciona el nombre de la persona que esta realizando esta accion
                 </p>
               </>
             ) : (
               <>
-                <h2>Verificación de identidad</h2>
+                <h2>Verificacion de identidad</h2>
                 <p className="real-signer-instruction">
-                  Ingresa los últimos 4 dígitos de la cédula de <strong>{selectedSigner}</strong>
+                  Ingresa la contraseña de Directorio Activo de <strong>{selectedSigner}</strong>
                 </p>
               </>
             )}
@@ -208,25 +176,43 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
               ))}
             </div>
           ) : (
-            <div className="real-signer-cedula-input">
-              <div className="cedula-digits-container">
-                {[0, 1, 2, 3].map((index) => (
-                  <input
-                    key={index}
-                    id={`digit-${index}`}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength="1"
-                    value={cedulaDigits[index]}
-                    onChange={(e) => handleDigitChange(index, e.target.value)}
-                    onKeyDown={(e) => handleDigitKeyDown(index, e)}
-                    autoFocus={index === 0}
-                    className="cedula-digit-input"
-                  />
-                ))}
-              </div>
-              <p className="cedula-hint">Ingresa los últimos 4 dígitos de la cédula</p>
+            <div className="real-signer-password-input">
+              <label className="real-signer-password-label" htmlFor="real-signer-password">
+                Contraseña
+              </label>
+              <input
+                type="text"
+                name="negotiation-verification-user"
+                value={selectedSigner}
+                autoComplete="username"
+                readOnly
+                tabIndex="-1"
+                className="real-signer-autofill-decoy"
+              />
+              <input
+                id="real-signer-password"
+                name={`negotiation-ad-verification-${selectedSigner.replace(/\W+/g, '-').toLowerCase()}`}
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError('');
+                }}
+                onFocus={() => setPasswordInputReady(true)}
+                onMouseDown={() => setPasswordInputReady(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && password && !loading) {
+                    handleConfirm();
+                  }
+                }}
+                readOnly={!passwordInputReady}
+                className="real-signer-password-field"
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
+              />
+              <p className="real-signer-password-hint">Usa la contraseña del integrante seleccionado, no la de la cuenta Negociaciones.</p>
             </div>
           )}
 
@@ -243,7 +229,7 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
         <div className="real-signer-modal-footer">
           {step === 2 && (
             <button className="real-signer-btn-back" onClick={handleBack}>
-              ← Volver
+              Volver
             </button>
           )}
           <button className="real-signer-btn-cancel" onClick={handleClose}>
@@ -252,7 +238,7 @@ function RealSignerModal({ isOpen, onClose, onConfirm, action = 'firmar' }) {
           <button
             className={`real-signer-btn-confirm real-signer-btn-${action}`}
             onClick={step === 1 ? handleSelectSigner : handleConfirm}
-            disabled={step === 1 ? (!selectedSigner || loadingSigners) : cedulaDigits.join('').length !== 4 || loading}
+            disabled={step === 1 ? (!selectedSigner || loadingSigners) : !password || loading}
           >
             {loading ? 'Verificando...' : (step === 1 ? 'Continuar' : (action === 'firmar' ? 'Firmar documento' : 'Rechazar documento'))}
           </button>

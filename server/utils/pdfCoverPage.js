@@ -1,6 +1,36 @@
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const fs = require('fs').promises;
 const path = require('path');
+const { query } = require('../database/db');
+
+async function getFixedAssetRecords(documentInfo) {
+  if (Array.isArray(documentInfo?.fixedAssetRecords)) {
+    return documentInfo.fixedAssetRecords;
+  }
+
+  if (!documentInfo?.documentId) {
+    return [];
+  }
+
+  try {
+    const result = await query(
+      `SELECT codigo, nombre_activo, asset_type
+       FROM invoice_asset_records
+       WHERE document_id = $1
+       ORDER BY created_at ASC, id ASC`,
+      [documentInfo.documentId]
+    );
+
+    return result.rows.map(row => ({
+      codigo: row.codigo || '',
+      nombreActivo: row.nombre_activo || '',
+      assetType: row.asset_type || ''
+    }));
+  } catch (error) {
+    console.error('Error obteniendo activos fijos para hoja PDF:', error.message);
+    return [];
+  }
+}
 
 function formatSignerRoleLabel(roleName) {
   const raw = (roleName || '')
@@ -18,6 +48,38 @@ function formatSignerRoleLabel(roleName) {
   if (raw.includes('tesorer')) return 'Tesoreria';
 
   return roleName || '';
+}
+
+function formatAssetTypeLabel(assetType) {
+  const normalized = String(assetType || '').trim().toLowerCase();
+  if (normalized === 'administrativo') return 'Administrativo';
+  if (normalized === 'contable') return 'Contable';
+  return '';
+}
+
+function formatCoverDate(dateSource, includeTime = true) {
+  if (!dateSource) return 'No disponible';
+
+  const value = String(dateSource).trim();
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('es-CO', {
+      timeZone: 'America/Bogota',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+  }
+
+  return new Date(dateSource).toLocaleString('es-CO', {
+    timeZone: 'America/Bogota',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    ...(includeTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {})
+  });
 }
 
 /**
@@ -42,6 +104,157 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     // Ordenar firmantes por order_position PRIMERO para usar en marca de agua
     const sortedSigners = [...signers].sort((a, b) => a.order_position - b.order_position);
+    const fixedAssetRecords = await getFixedAssetRecords(documentInfo);
+    const fixedAssetTitle = 'Activos Fijos';
+    let extraReportPages = 0;
+
+    if (fixedAssetRecords.length > 0) {
+      let assetPage = pdfDoc.addPage([width, height]);
+      extraReportPages++;
+      let assetY = height - 70;
+
+      assetPage.drawRectangle({
+        x: 0,
+        y: 0,
+        width: width,
+        height: height,
+        color: rgb(1, 1, 1),
+      });
+
+      assetPage.drawText(fixedAssetTitle, {
+        x: margin,
+        y: assetY,
+        size: 16,
+        font: fontBold,
+        color: rgb(0.05, 0.05, 0.05),
+      });
+
+      assetY -= 32;
+
+      const tableX = margin;
+      const tableWidth = width - (margin * 2);
+      const typeWidth = 110;
+      const codeWidth = 120;
+      const nameWidth = tableWidth - typeWidth - codeWidth;
+      const rowHeight = 28;
+
+      const drawAssetHeader = () => {
+        assetPage.drawRectangle({
+          x: tableX,
+          y: assetY - rowHeight + 6,
+          width: tableWidth,
+          height: rowHeight,
+          color: rgb(0.95, 0.96, 0.98),
+        });
+
+        assetPage.drawText('Tipo', {
+          x: tableX + 10,
+          y: assetY - 12,
+          size: 9,
+          font: fontBold,
+          color: rgb(0.2, 0.25, 0.35),
+        });
+
+        assetPage.drawText('C\u00f3digo', {
+          x: tableX + typeWidth + 10,
+          y: assetY - 12,
+          size: 9,
+          font: fontBold,
+          color: rgb(0.2, 0.25, 0.35),
+        });
+
+        assetPage.drawText('Nombre de activo fijo', {
+          x: tableX + typeWidth + codeWidth + 10,
+          y: assetY - 12,
+          size: 9,
+          font: fontBold,
+          color: rgb(0.2, 0.25, 0.35),
+        });
+
+        assetY -= rowHeight;
+      };
+
+      drawAssetHeader();
+
+      fixedAssetRecords.forEach((record) => {
+        if (assetY < 70) {
+          assetPage = pdfDoc.addPage([width, height]);
+          extraReportPages++;
+          assetY = height - 70;
+
+          assetPage.drawRectangle({
+            x: 0,
+            y: 0,
+            width: width,
+            height: height,
+            color: rgb(1, 1, 1),
+          });
+
+          assetPage.drawText(fixedAssetTitle, {
+            x: margin,
+            y: assetY,
+            size: 16,
+            font: fontBold,
+            color: rgb(0.05, 0.05, 0.05),
+          });
+
+          assetY -= 32;
+          drawAssetHeader();
+        }
+
+        assetPage.drawRectangle({
+          x: tableX,
+          y: assetY - rowHeight + 6,
+          width: tableWidth,
+          height: rowHeight,
+          color: rgb(1, 1, 1),
+          borderColor: rgb(0.88, 0.9, 0.93),
+          borderWidth: 1,
+        });
+
+        assetPage.drawLine({
+          start: { x: tableX + typeWidth, y: assetY + 6 },
+          end: { x: tableX + typeWidth, y: assetY - rowHeight + 6 },
+          thickness: 1,
+          color: rgb(0.88, 0.9, 0.93),
+        });
+
+        assetPage.drawLine({
+          start: { x: tableX + typeWidth + codeWidth, y: assetY + 6 },
+          end: { x: tableX + typeWidth + codeWidth, y: assetY - rowHeight + 6 },
+          thickness: 1,
+          color: rgb(0.88, 0.9, 0.93),
+        });
+
+        assetPage.drawText(formatAssetTypeLabel(record.assetType) || '-', {
+          x: tableX + 10,
+          y: assetY - 12,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.15, 0.18, 0.24),
+          maxWidth: typeWidth - 20,
+        });
+
+        assetPage.drawText(String(record.codigo || '-').slice(0, 28), {
+          x: tableX + typeWidth + 10,
+          y: assetY - 12,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.15, 0.18, 0.24),
+        });
+
+        assetPage.drawText(String(record.nombreActivo || '-').slice(0, 68), {
+          x: tableX + typeWidth + codeWidth + 10,
+          y: assetY - 12,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.15, 0.18, 0.24),
+          maxWidth: nameWidth - 20,
+        });
+
+        assetY -= rowHeight;
+      });
+    }
 
     let coverPage = pdfDoc.addPage([width, height]);
     let yPosition = height - 70;
@@ -149,8 +362,13 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     // ========== INFORMACIÓN DEL DOCUMENTO - ESTILO ZAPSIGN (SIN CAJA) ==========
     // 1. Fecha de envío / creación
-    const dateLabel = documentInfo.sentAt ? 'Fecha de recepción:' : 'Fecha de creación:';
-    const dateSource = documentInfo.sentAt || documentInfo.createdAt;
+    const receivedAt = documentInfo.receivedAt || documentInfo.fechaRecepcion || null;
+    const dateLabel = receivedAt
+      ? 'Fecha de recepción:'
+      : (documentInfo.sentAt ? 'Fecha de recepción:' : 'Fecha de creación:');
+    const dateSource = receivedAt || documentInfo.sentAt || documentInfo.createdAt;
+    const receivedAtIsDateOnly = receivedAt && /^\d{4}-\d{2}-\d{2}$/.test(String(receivedAt).trim());
+    const includeTime = receivedAt ? !receivedAtIsDateOnly : true;
 
     coverPage.drawText(dateLabel, {
       x: margin,
@@ -162,17 +380,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
 
     yPosition -= 16;
 
-    const createdDate = dateSource
-      ? new Date(dateSource).toLocaleString('es-CO', {
-          timeZone: 'America/Bogota',
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        })
-      : 'No disponible';
+    const createdDate = formatCoverDate(dateSource, includeTime);
 
     // Construir texto con la fecha y el nombre del creador
     const createdBy = documentInfo.uploadedBy || 'Sistema';
@@ -407,7 +615,7 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
     let signersInCurrentPage = 0;
     const SIGNER_HEIGHT = 80; // Altura aproximada por firmante (nombre + email + fecha + espacios)
     const MIN_MARGIN_BOTTOM = 60; // Margen mínimo inferior
-    let totalSignerPages = 1;
+    let totalSignerPages = 1 + extraReportPages;
 
     for (let i = 0; i < sortedSigners.length; i++) {
       const signer = sortedSigners[i];
@@ -457,7 +665,15 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       let statusBadgeColor = rgb(0.95, 0.95, 0.95);
       let statusTextColor = rgb(0.4, 0.4, 0.4);
 
-      if (signer.status === 'signed') {
+      if (signer.retention_status === 'retained') {
+        statusText = 'Retenida';
+        statusBadgeColor = rgb(0.99, 0.91, 0.68);
+        statusTextColor = rgb(0.57, 0.32, 0.04);
+      } else if (signer.retention_status === 'released') {
+        statusText = 'Liberada';
+        statusBadgeColor = rgb(0.82, 0.95, 0.84);
+        statusTextColor = rgb(0.13, 0.59, 0.25);
+      } else if (signer.status === 'signed') {
         // Verificar si el firmante tiene retención activa
         if (signer.retention_percentage) {
           statusText = `Firmado, y retenido por ${signer.retention_percentage}%`;
@@ -635,13 +851,34 @@ async function addCoverPageWithSigners(pdfPath, signers, documentInfo) {
       }
 
       // Motivo de retención (si existe)
-      if (signer.status === 'signed' && signer.retention_reason) {
+      if (signer.retention_reason) {
         currentPage.drawText(`Motivo de retención: ${signer.retention_reason}`, {
           x: margin,
           y: yPosition,
           size: 9,
           font: fontRegular,
           color: rgb(0.6, 0.3, 0.0),
+        });
+        yPosition -= 18;
+      }
+
+      if (signer.retention_status === 'released' && signer.released_at) {
+        const releasedDate = new Date(signer.released_at);
+        currentPage.drawText(`Fecha y hora de liberación: ${releasedDate.toLocaleString('es-CO', {
+          timeZone: 'America/Bogota',
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        })}`, {
+          x: margin,
+          y: yPosition,
+          size: 9,
+          font: fontRegular,
+          color: rgb(0.13, 0.47, 0.25),
         });
         yPosition -= 18;
       }

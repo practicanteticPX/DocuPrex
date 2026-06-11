@@ -84,8 +84,12 @@ const getNotificationMessage = (notification) => {
       return `Nueva factura por pagar disponible: ${documentTitle}`;
     case 'payable_invoice_paid':
       return `Tu factura fue marcada como pagada: ${documentTitle}`;
+    case 'payable_invoice_partially_paid':
+      return `Tu factura fue marcada como pagada parcialmente: ${documentTitle}`;
     case 'treasury_advance_paid':
       return `Tu anticipo fue marcado como pagado: ${documentTitle}`;
+    case 'invoice_released':
+      return `Factura liberada para Tesorería: ${documentTitle}`;
     case 'signature_request':
       return `${actorName} te asignó como firmante del documento: ${documentTitle}`;
     case 'document_signed':
@@ -114,8 +118,12 @@ const getNotificationType = (type) => {
       return 'Factura por pagar';
     case 'payable_invoice_paid':
       return 'Factura pagada';
+    case 'payable_invoice_partially_paid':
+      return 'Factura pagada parcialmente';
     case 'treasury_advance_paid':
       return 'Anticipo pagado';
+    case 'invoice_released':
+      return 'Factura liberada';
     case 'signature_request':
       return 'Solicitud de firma recibida';
     case 'document_signed':
